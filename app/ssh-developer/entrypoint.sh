@@ -49,6 +49,15 @@ alias exec-redis='docker exec -it dockfra-redis redis-cli'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 alias dlogs='docker logs -f'
 
+# source code workspace (bind mount of app/ folder)
+alias app='cd /workspace/app'
+alias edit-backend='cd /workspace/app/backend'
+alias edit-frontend='cd /workspace/app/frontend'
+alias edit-mobile='cd /workspace/app/mobile-backend'
+alias rebuild='docker compose -f /workspace/app/docker-compose.yml up --build -d'
+alias rebuild-backend='docker compose -f /workspace/app/docker-compose.yml up --build -d backend'
+alias rebuild-frontend='docker compose -f /workspace/app/docker-compose.yml up --build -d frontend'
+
 # volume data shortcuts
 alias backend-data='ls -lah /mnt/backend-data/'
 alias frontend-data='ls -lah /mnt/frontend-data/'

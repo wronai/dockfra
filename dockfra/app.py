@@ -101,30 +101,9 @@ def on_action(data):
     try:
         value = data.get("value","")
         form  = data.get("form", {})
-        if value.startswith("logs::"):
-            step_show_logs(value.split("::",1)[1]); return
-        if value.startswith("fix_container::"):
-            step_fix_container(value.split("::",1)[1]); return
-        if value.startswith("fix_network_overlap::"):
-            fix_network_overlap(value.split("::",1)[1]); return
-        if value.startswith("fix_readonly_volume::"):
-            fix_readonly_volume(value.split("::",1)[1]); return
-        if value.startswith("ssh_info::"):
-            _step_ssh_info(value); return
-        if value.startswith("ssh_console::"):
-            step_ssh_console(value); return
-        if value.startswith("run_ssh_cmd::"):
-            run_ssh_cmd(value, form); return
-        if value.startswith("suggest_commands::"):
-            step_suggest_commands(value.split("::",1)[1]); return
-        if value.startswith("run_suggested_cmd::"):
-            _run_suggested_cmd(value.split("::",1)[1]); return
-        if value.startswith("restart_container::"):
-            _do_restart_container(value.split("::",1)[1]); return
-        if value.startswith("diag_port::"):
-            diag_port(value.split("::",1)[1]); return
-        if value.startswith("show_missing_env::"):
-            show_missing_env(value.split("::",1)[1]); return
+        if _dispatch(value, form):
+            return
+        # Async-only actions (need threading for SocketIO mode)
         if value.startswith("ai_analyze::"):
             cname = value.split("::",1)[1]
             _tl_sid = getattr(_tl, 'sid', None)
@@ -151,31 +130,7 @@ def on_action(data):
                 _tl.sid = None
             threading.Thread(target=_ai_analyze_thread, daemon=True).start()
             return
-        if value.startswith("logs_stack::"):
-            step_show_logs(value.split("::",1)[1]); return
-        if value.startswith("fix_compose::"):
-            msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
-            buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"← Wróć","value":"back"}]); return
-        if value.startswith("settings_group::"):
-            step_settings(value.split("::",1)[1]); return
-        if value.startswith("save_settings::"):
-            step_save_settings(value.split("::",1)[1], form); return
-        if value.startswith("preflight_save_launch::"):
-            env_updates: dict[str, str] = {}
-            for k, v in form.items():
-                if k in _ENV_TO_STATE:
-                    _state[_ENV_TO_STATE[k]] = str(v).strip()
-                    env_updates[k] = str(v).strip()
-            if env_updates:
-                save_env(env_updates)
-            stacks_str = value.split("::",1)[1]
-            _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(","))==1 else "all"
-            step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment","local")})
-            return
-        handler = STEPS.get(value)
-        if handler:
-            handler(form)
-        elif value.strip():
+        if value.strip():
             # Free-text → route to LLM
             _tl_sid = getattr(_tl, 'sid', None)
             user_text = value.strip()
@@ -191,7 +146,7 @@ def on_action(data):
                            if m.get("text") and m["role"] in ("user","bot")]
                 reply = _llm_chat(user_text,
                                   system_prompt=_WIZARD_SYSTEM_PROMPT,
-                                  history=history[:-1])  # last is current msg
+                                  history=history[:-1])
                 progress("🧠 LLM", done=True)
                 msg(reply)
                 _tl.sid = None
@@ -450,30 +405,60 @@ def api_process_action(action, process_name):
     except Exception as e:
         return json.dumps({"success": False, "message": str(e)})
 
+def _dispatch(value: str, form: dict):
+    """Shared dispatch logic for both SocketIO and REST actions."""
+    if value.startswith("logs::"):          step_show_logs(value.split("::",1)[1]); return True
+    if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
+    if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
+    if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
+    if value.startswith("ssh_info::"):      _step_ssh_info(value); return True
+    if value.startswith("ssh_console::"):   step_ssh_console(value); return True
+    if value.startswith("run_ssh_cmd::"):   run_ssh_cmd(value, form); return True
+    if value.startswith("suggest_commands::"): step_suggest_commands(value.split("::",1)[1]); return True
+    if value.startswith("run_suggested_cmd::"): _run_suggested_cmd(value.split("::",1)[1]); return True
+    if value.startswith("restart_container::"): _do_restart_container(value.split("::",1)[1]); return True
+    if value.startswith("diag_port::"):     diag_port(value.split("::",1)[1]); return True
+    if value.startswith("show_missing_env::"): show_missing_env(value.split("::",1)[1]); return True
+    if value.startswith("logs_stack::"):    step_show_logs(value.split("::",1)[1]); return True
+    if value.startswith("fix_compose::"):
+        msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
+        buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"← Wróć","value":"back"}])
+        return True
+    if value.startswith("settings_group::"): step_settings(value.split("::",1)[1]); return True
+    if value.startswith("save_settings::"):  step_save_settings(value.split("::",1)[1], form); return True
+    if value.startswith("preflight_save_launch::"):
+        env_updates: dict[str, str] = {}
+        for k, v in form.items():
+            if k in _ENV_TO_STATE:
+                _state[_ENV_TO_STATE[k]] = str(v).strip()
+                env_updates[k] = str(v).strip()
+        if env_updates:
+            save_env(env_updates)
+        stacks_str = value.split("::",1)[1]
+        _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(","))==1 else "all"
+        step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment","local")})
+        return True
+    handler = STEPS.get(value)
+    if handler:
+        handler(form); return True
+    return False
+
 def _run_action_sync(value: str, form: dict, timeout: float = 30.0) -> list[dict]:
     """Run a wizard action synchronously (for REST API). Returns collected events."""
     _tl.collector = []
     _tl.sid = None
     try:
-        # Inline the same dispatch logic as on_action
-        if value.startswith("logs::"):        step_show_logs(value.split("::",1)[1])
-        elif value.startswith("diag_port::"): diag_port(value.split("::",1)[1])
-        elif value.startswith("settings_group::"): step_settings(value.split("::",1)[1])
-        elif value.startswith("save_settings::"): step_save_settings(value.split("::",1)[1], form)
-        elif value.startswith("ai_analyze::"):
-            name = value.split("::",1)[1]
-            try:
-                out = subprocess.check_output(["docker","logs","--tail","60",name],
-                                              text=True, stderr=subprocess.STDOUT)
-            except Exception as e:
-                msg(f"❌ {e}"); out = ""
-            if out:
-                reply = _llm_chat(out[-3000:], system_prompt=_WIZARD_SYSTEM_PROMPT)
-                msg(f"### 🧠 AI: `{name}`\n{reply}")
-        else:
-            handler = STEPS.get(value)
-            if handler:
-                handler(form)
+        if not _dispatch(value, form):
+            if value.startswith("ai_analyze::"):
+                name = value.split("::",1)[1]
+                try:
+                    out = subprocess.check_output(["docker","logs","--tail","60",name],
+                                                  text=True, stderr=subprocess.STDOUT)
+                except Exception as e:
+                    msg(f"❌ {e}"); out = ""
+                if out:
+                    reply = _llm_chat(out[-3000:], system_prompt=_WIZARD_SYSTEM_PROMPT)
+                    msg(f"### 🧠 AI: `{name}`\n{reply}")
             elif value.strip():
                 reply = _llm_chat(value, system_prompt=_WIZARD_SYSTEM_PROMPT)
                 msg(reply)

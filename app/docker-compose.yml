@@ -11,6 +11,12 @@
 #   redis         (:6379) — Redis cache
 #   traefik       (:80/:443/:8080) — Reverse proxy
 #
+# SSH Developer access (edycja kodu):
+#   ssh developer@localhost -p 2200
+#   /workspace/app/          — cały folder app/ (backend/, frontend/, itp.)
+#   exec-backend             — wejście do kontenera backend
+#   docker compose up --build <service> — przebudowa po zmianach kodu
+#
 # NOTE: ssh-frontend, ssh-backend, ssh-rpi3, vnc-rpi3 removed.
 # - backend/frontend access: ssh developer@:2200, then: docker exec -it dockfra-backend bash
 # - RPi3/VNC: see devices/ stack
@@ -240,6 +246,7 @@ services:
     volumes:
       - ./ssh-developer/keys:/home/developer/.ssh/extra:ro
       - ssh-keys:/keys:ro
+      - .:/workspace/app
       - developer-workspace:/home/developer/workspace
       - git-repo:/repo
       - shared-tickets:/shared/tickets

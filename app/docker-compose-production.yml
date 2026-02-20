@@ -2,6 +2,11 @@
 # DOCKFRA APP — Production Environment
 #
 # No external network — management connects via SSH tunneling
+#
+# SSH Developer access:
+#   ssh developer@<host> -p 2200
+#   /workspace/app/ — cały folder app/ (edycja kodu)
+#   docker compose up --build <service> — przebudowa po zmianach
 ##############################################################
 
 networks:
@@ -12,6 +17,8 @@ networks:
   backend-net:
     driver: bridge
   mobile-net:
+    driver: bridge
+  desktop-net:
     driver: bridge
   dev-net:
     driver: bridge
@@ -231,10 +238,11 @@ services:
     volumes:
       - ./ssh-developer/keys:/home/developer/.ssh/extra:ro
       - ssh-keys:/keys:ro
+      - .:/workspace/app
       - developer-workspace:/home/developer/workspace
       - git-repo:/repo
       - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
+      - ../shared/lib:/shared/lib:ro
       - backend-data:/mnt/backend-data:ro
       - frontend-data:/mnt/frontend-data:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

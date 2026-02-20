@@ -1,3 +1,17 @@
+## [1.0.18] - 2026-02-20
+
+### Summary
+
+fix(docs): deep code analysis engine with 3 supporting modules
+
+### Other
+
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- scripts: update entrypoint.sh
+- update dockfra/app.py
+
+
 ## [1.0.17] - 2026-02-20
 
 ### Summary
