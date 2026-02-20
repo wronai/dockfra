@@ -610,6 +610,18 @@ def _dispatch(value: str, form: dict):
         run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
         run_ssh_cmd(run_value_, synth_form)
         return True
+    if value == "ticket_create_wizard":
+        _step_ticket_create_wizard(form); return True
+    if value == "ticket_create_do":
+        _step_ticket_create_do(form); return True
+    if value == "integrations_setup":
+        _step_integrations_setup(); return True
+    if value == "integrations_save":
+        _step_integrations_save(form); return True
+    if value == "ticket_sync":
+        _step_ticket_sync(); return True
+    if value == "project_stats":
+        _step_project_stats(); return True
     if value.startswith("suggest_commands::"): step_suggest_commands(value.split("::",1)[1]); return True
     if value.startswith("run_suggested_cmd::"): _run_suggested_cmd(value.split("::",1)[1]); return True
     if value.startswith("restart_container::"): _do_restart_container(value.split("::",1)[1]); return True
@@ -723,6 +735,234 @@ def api_health():
         "containers": containers,
         "findings": findings,
     })
+
+# ── Ticket CRUD API (wizard-side, bypasses container permissions) ──────────────
+import sys as _sys, os as _os
+
+def _tickets_dir():
+    """Return tickets directory, ensuring it exists with proper permissions."""
+    d = ROOT / "shared" / "tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.chmod(0o1777)
+    except OSError:
+        pass
+    return d
+
+def _ticket_path(ticket_id):
+    return _tickets_dir() / f"{ticket_id}.json"
+
+def _next_ticket_id():
+    d = _tickets_dir()
+    import glob as _g
+    nums = []
+    for f in _g.glob(str(d / "T-*.json")):
+        try:
+            nums.append(int(_os.path.basename(f).replace(".json", "").split("-")[1]))
+        except (IndexError, ValueError):
+            pass
+    return f"T-{max(nums, default=0) + 1:04d}"
+
+@app.route("/api/tickets")
+def api_tickets():
+    """List all tickets with optional filters."""
+    status_f = request.args.get("status")
+    assigned_f = request.args.get("assigned_to")
+    d = _tickets_dir()
+    tickets = []
+    for p in sorted(d.glob("T-*.json")):
+        try:
+            t = json.loads(p.read_text())
+            if status_f and t.get("status") != status_f:
+                continue
+            if assigned_f and t.get("assigned_to") != assigned_f:
+                continue
+            tickets.append(t)
+        except Exception:
+            pass
+    return json.dumps(tickets)
+
+@app.route("/api/tickets", methods=["POST"])
+def api_tickets_create():
+    """Create a ticket directly from the wizard (bypasses SSH container perms)."""
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return json.dumps({"ok": False, "error": "Title required"}), 400
+    from datetime import datetime, timezone
+    ticket_id = _next_ticket_id()
+    ticket = {
+        "id": ticket_id,
+        "title": title,
+        "description": data.get("description", ""),
+        "status": "open",
+        "priority": data.get("priority", "normal"),
+        "assigned_to": data.get("assigned_to", "developer"),
+        "labels": data.get("labels", []),
+        "created_by": data.get("created_by", "manager"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "comments": [],
+        "github_issue_number": None,
+    }
+    try:
+        _ticket_path(ticket_id).write_text(json.dumps(ticket, indent=2))
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}), 500
+    return json.dumps({"ok": True, "ticket": ticket})
+
+@app.route("/api/tickets/<ticket_id>")
+def api_ticket_get(ticket_id):
+    """Get a single ticket by ID."""
+    p = _ticket_path(ticket_id)
+    if not p.exists():
+        return json.dumps({"ok": False, "error": "Not found"}), 404
+    return json.dumps(json.loads(p.read_text()))
+
+@app.route("/api/tickets/<ticket_id>", methods=["PUT"])
+def api_ticket_update(ticket_id):
+    """Update ticket fields."""
+    p = _ticket_path(ticket_id)
+    if not p.exists():
+        return json.dumps({"ok": False, "error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    from datetime import datetime, timezone
+    ticket = json.loads(p.read_text())
+    for k, v in data.items():
+        if k not in ("id", "created_at", "created_by"):
+            ticket[k] = v
+    ticket["updated_at"] = datetime.now(timezone.utc).isoformat()
+    p.write_text(json.dumps(ticket, indent=2))
+    return json.dumps({"ok": True, "ticket": ticket})
+
+@app.route("/api/tickets/<ticket_id>/comment", methods=["POST"])
+def api_ticket_comment(ticket_id):
+    """Add a comment to a ticket."""
+    p = _ticket_path(ticket_id)
+    if not p.exists():
+        return json.dumps({"ok": False, "error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return json.dumps({"ok": False, "error": "Text required"}), 400
+    from datetime import datetime, timezone
+    ticket = json.loads(p.read_text())
+    ticket.setdefault("comments", []).append({
+        "author": data.get("author", "wizard"),
+        "text": text,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    ticket["updated_at"] = datetime.now(timezone.utc).isoformat()
+    p.write_text(json.dumps(ticket, indent=2))
+    return json.dumps({"ok": True, "ticket": ticket})
+
+@app.route("/api/stats")
+def api_stats():
+    """Project statistics: tickets, containers, git, integrations."""
+    # Tickets
+    d = _tickets_dir()
+    tickets = []
+    for p in sorted(d.glob("T-*.json")):
+        try:
+            tickets.append(json.loads(p.read_text()))
+        except Exception:
+            pass
+    by_status = {}
+    by_priority = {}
+    by_assignee = {}
+    for t in tickets:
+        by_status[t["status"]] = by_status.get(t["status"], 0) + 1
+        by_priority[t["priority"]] = by_priority.get(t["priority"], 0) + 1
+        by_assignee[t["assigned_to"]] = by_assignee.get(t["assigned_to"], 0) + 1
+
+    # Containers
+    containers = docker_ps()
+    running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
+    failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
+
+    # Git stats
+    git_stats = {}
+    try:
+        app_dir = ROOT / "app"
+        git_dir = app_dir if (app_dir / ".git").exists() else ROOT
+        commits_today = subprocess.check_output(
+            ["git", "-C", str(git_dir), "log", "--oneline", "--since=midnight"],
+            text=True, stderr=subprocess.DEVNULL).strip().count("\n") + (1 if subprocess.check_output(
+            ["git", "-C", str(git_dir), "log", "--oneline", "--since=midnight"],
+            text=True, stderr=subprocess.DEVNULL).strip() else 0)
+        branch = subprocess.check_output(
+            ["git", "-C", str(git_dir), "branch", "--show-current"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        last_commit = subprocess.check_output(
+            ["git", "-C", str(git_dir), "log", "-1", "--format=%h %s"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        git_stats = {"branch": branch, "commits_today": commits_today, "last_commit": last_commit}
+    except Exception:
+        pass
+
+    # Integrations check (via env vars)
+    env = load_env()
+    integrations = {
+        "github": bool(env.get("GITHUB_TOKEN") and env.get("GITHUB_REPO")),
+        "jira": bool(env.get("JIRA_URL") and env.get("JIRA_EMAIL") and env.get("JIRA_TOKEN")),
+        "trello": bool(env.get("TRELLO_KEY") and env.get("TRELLO_TOKEN")),
+        "linear": bool(env.get("LINEAR_TOKEN")),
+    }
+
+    # Suggestions
+    suggestions = []
+    if not tickets:
+        suggestions.append({"icon": "📝", "text": "Utwórz pierwszy ticket", "action": "ticket_create_wizard"})
+    if failing:
+        suggestions.append({"icon": "🔧", "text": f"Napraw {len(failing)} kontener(ów)", "action": "status"})
+    if not any(integrations.values()):
+        suggestions.append({"icon": "🔗", "text": "Podłącz system zadań (GitHub/Jira/Trello/Linear)", "action": "integrations_setup"})
+    if not git_stats.get("commits_today"):
+        suggestions.append({"icon": "💻", "text": "Zacznij kodować — otwórz SSH Developer", "action": "ssh_info::developer::2200"})
+    open_tickets = by_status.get("open", 0)
+    if open_tickets > 0:
+        suggestions.append({"icon": "▶️", "text": f"Rozpocznij pracę nad {open_tickets} otwartym ticketem", "action": "ssh_cmd::developer::my-tickets::"})
+    if len(running) > 0 and not failing:
+        suggestions.append({"icon": "📊", "text": "Sprawdź status infrastruktury", "action": "status"})
+
+    return json.dumps({
+        "tickets": {
+            "total": len(tickets),
+            "by_status": by_status,
+            "by_priority": by_priority,
+            "by_assignee": by_assignee,
+        },
+        "containers": {
+            "total": len(containers),
+            "running": len(running),
+            "failing": len(failing),
+        },
+        "git": git_stats,
+        "integrations": integrations,
+        "suggestions": suggestions,
+    })
+
+@app.route("/api/tickets/sync", methods=["POST"])
+def api_tickets_sync():
+    """Sync tickets with external services (GitHub, Jira, Trello, Linear)."""
+    env = load_env()
+    results = {}
+    # Set env vars for ticket_system imports
+    for k in ("GITHUB_TOKEN", "GITHUB_REPO", "JIRA_URL", "JIRA_EMAIL", "JIRA_TOKEN",
+              "JIRA_PROJECT", "TRELLO_KEY", "TRELLO_TOKEN", "TRELLO_BOARD", "TRELLO_LIST",
+              "LINEAR_TOKEN", "LINEAR_TEAM"):
+        val = env.get(k, "") or _os.environ.get(k, "")
+        if val:
+            _os.environ[k] = val
+    try:
+        _sys.path.insert(0, str(ROOT / "shared" / "lib"))
+        import importlib
+        ts = importlib.import_module("ticket_system")
+        importlib.reload(ts)  # pick up new env vars
+        results = ts.sync_all()
+    except Exception as e:
+        results["error"] = str(e)
+    return json.dumps({"ok": True, "results": results})
 
 if __name__ == "__main__":
     print("🧙 Dockfra Wizard → http://localhost:5050")

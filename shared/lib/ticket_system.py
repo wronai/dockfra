@@ -20,6 +20,10 @@ GITHUB_REPO = os.environ.get("GITHUB_REPO", "")  # "owner/repo"
 
 def _ensure_dir():
     os.makedirs(TICKETS_DIR, exist_ok=True)
+    try:
+        os.chmod(TICKETS_DIR, 0o1777)
+    except OSError:
+        pass
 
 
 def _now():
@@ -218,6 +222,300 @@ def pull_from_github():
         created.append(ticket)
 
     return created
+
+
+# ── Jira Integration ─────────────────────────────────
+
+JIRA_URL = os.environ.get("JIRA_URL", "")         # https://your-org.atlassian.net
+JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
+JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
+JIRA_PROJECT = os.environ.get("JIRA_PROJECT", "")  # project key, e.g. "PROJ"
+
+
+def _jira_api(method, endpoint, data=None):
+    """Make a Jira Cloud REST API request."""
+    import urllib.request
+    import urllib.error
+    import base64
+
+    if not all([JIRA_URL, JIRA_EMAIL, JIRA_TOKEN]):
+        return None
+
+    url = f"{JIRA_URL.rstrip('/')}/rest/api/3{endpoint}"
+    cred = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_TOKEN}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {cred}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    body = json.dumps(data).encode() if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error(f"Jira API error: {e}")
+        return None
+
+
+def push_to_jira(ticket_id):
+    """Create a Jira issue from a local ticket."""
+    ticket = get(ticket_id)
+    if not ticket or not JIRA_PROJECT:
+        return None
+    if ticket.get("jira_key"):
+        return ticket
+    prio_map = {"critical": "Highest", "high": "High", "normal": "Medium", "low": "Low"}
+    result = _jira_api("POST", "/issue", {
+        "fields": {
+            "project": {"key": JIRA_PROJECT},
+            "summary": f"[{ticket_id}] {ticket['title']}",
+            "description": {"type": "doc", "version": 1, "content": [
+                {"type": "paragraph", "content": [
+                    {"type": "text", "text": ticket.get("description", "") or ticket["title"]}
+                ]}
+            ]},
+            "issuetype": {"name": "Task"},
+            "priority": {"name": prio_map.get(ticket.get("priority", "normal"), "Medium")},
+        }
+    })
+    if result and "key" in result:
+        update(ticket_id, jira_key=result["key"])
+        logger.info(f"Pushed {ticket_id} → Jira {result['key']}")
+        return get(ticket_id)
+    return None
+
+
+def pull_from_jira():
+    """Pull open Jira issues and create local tickets."""
+    if not JIRA_PROJECT:
+        return []
+    result = _jira_api("GET", f"/search?jql=project={JIRA_PROJECT}+AND+status!=Done&maxResults=50")
+    if not result or "issues" not in result:
+        return []
+    existing_keys = {t.get("jira_key") for t in list_tickets() if t.get("jira_key")}
+    created = []
+    for issue in result["issues"]:
+        if issue["key"] in existing_keys:
+            continue
+        ticket = create(
+            title=issue["fields"]["summary"],
+            description=issue["fields"].get("description", {}).get("content", [{}])[0].get("content", [{}])[0].get("text", "") if isinstance(issue["fields"].get("description"), dict) else "",
+            created_by="jira",
+        )
+        update(ticket["id"], jira_key=issue["key"])
+        created.append(ticket)
+    return created
+
+
+# ── Trello Integration ───────────────────────────────
+
+TRELLO_KEY = os.environ.get("TRELLO_KEY", "")
+TRELLO_TOKEN_ENV = os.environ.get("TRELLO_TOKEN", "")
+TRELLO_BOARD = os.environ.get("TRELLO_BOARD", "")    # board ID
+TRELLO_LIST = os.environ.get("TRELLO_LIST", "")       # list ID for new cards
+
+
+def _trello_api(method, endpoint, params=None, data=None):
+    """Make a Trello REST API request."""
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+
+    if not all([TRELLO_KEY, TRELLO_TOKEN_ENV]):
+        return None
+
+    base_params = {"key": TRELLO_KEY, "token": TRELLO_TOKEN_ENV}
+    if params:
+        base_params.update(params)
+    qs = urllib.parse.urlencode(base_params)
+    url = f"https://api.trello.com/1{endpoint}?{qs}"
+    body = json.dumps(data).encode() if data else None
+    headers = {"Content-Type": "application/json"} if data else {}
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error(f"Trello API error: {e}")
+        return None
+
+
+def push_to_trello(ticket_id):
+    """Create a Trello card from a local ticket."""
+    ticket = get(ticket_id)
+    if not ticket or not TRELLO_LIST:
+        return None
+    if ticket.get("trello_card_id"):
+        return ticket
+    result = _trello_api("POST", "/cards", params={
+        "idList": TRELLO_LIST,
+        "name": f"[{ticket_id}] {ticket['title']}",
+        "desc": ticket.get("description", ""),
+    })
+    if result and "id" in result:
+        update(ticket_id, trello_card_id=result["id"])
+        logger.info(f"Pushed {ticket_id} → Trello card {result['id']}")
+        return get(ticket_id)
+    return None
+
+
+def pull_from_trello():
+    """Pull cards from Trello board and create local tickets."""
+    if not TRELLO_BOARD:
+        return []
+    result = _trello_api("GET", f"/boards/{TRELLO_BOARD}/cards")
+    if not result:
+        return []
+    existing_ids = {t.get("trello_card_id") for t in list_tickets() if t.get("trello_card_id")}
+    created = []
+    for card in result:
+        if card["id"] in existing_ids or card.get("closed"):
+            continue
+        ticket = create(title=card["name"], description=card.get("desc", ""), created_by="trello")
+        update(ticket["id"], trello_card_id=card["id"])
+        created.append(ticket)
+    return created
+
+
+# ── Linear Integration ───────────────────────────────
+
+LINEAR_TOKEN = os.environ.get("LINEAR_TOKEN", "")
+LINEAR_TEAM = os.environ.get("LINEAR_TEAM", "")
+
+
+def _linear_api(query, variables=None):
+    """Make a Linear GraphQL API request."""
+    import urllib.request
+    import urllib.error
+
+    if not LINEAR_TOKEN:
+        return None
+    url = "https://api.linear.app/graphql"
+    headers = {
+        "Authorization": LINEAR_TOKEN,
+        "Content-Type": "application/json",
+    }
+    body = json.dumps({"query": query, "variables": variables or {}}).encode()
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error(f"Linear API error: {e}")
+        return None
+
+
+def push_to_linear(ticket_id):
+    """Create a Linear issue from a local ticket."""
+    ticket = get(ticket_id)
+    if not ticket or not LINEAR_TEAM:
+        return None
+    if ticket.get("linear_id"):
+        return ticket
+    prio_map = {"critical": 1, "high": 2, "normal": 3, "low": 4}
+    result = _linear_api("""
+        mutation($title: String!, $teamId: String!, $description: String, $priority: Int) {
+            issueCreate(input: {title: $title, teamId: $teamId, description: $description, priority: $priority}) {
+                issue { id identifier url }
+            }
+        }""", {
+        "title": f"[{ticket_id}] {ticket['title']}",
+        "teamId": LINEAR_TEAM,
+        "description": ticket.get("description", ""),
+        "priority": prio_map.get(ticket.get("priority", "normal"), 3),
+    })
+    if result and "data" in result:
+        issue = result["data"].get("issueCreate", {}).get("issue", {})
+        if issue:
+            update(ticket_id, linear_id=issue["identifier"], linear_url=issue.get("url", ""))
+            logger.info(f"Pushed {ticket_id} → Linear {issue['identifier']}")
+            return get(ticket_id)
+    return None
+
+
+def pull_from_linear():
+    """Pull open Linear issues and create local tickets."""
+    if not LINEAR_TEAM:
+        return []
+    result = _linear_api("""
+        query($teamId: String!) {
+            team(id: $teamId) {
+                issues(filter: {state: {type: {nin: ["completed","canceled"]}}}, first: 50) {
+                    nodes { id identifier title description priority }
+                }
+            }
+        }""", {"teamId": LINEAR_TEAM})
+    if not result or "data" not in result:
+        return []
+    issues = result["data"].get("team", {}).get("issues", {}).get("nodes", [])
+    existing_ids = {t.get("linear_id") for t in list_tickets() if t.get("linear_id")}
+    created = []
+    for issue in issues:
+        if issue["identifier"] in existing_ids:
+            continue
+        ticket = create(title=issue["title"], description=issue.get("description", ""), created_by="linear")
+        update(ticket["id"], linear_id=issue["identifier"])
+        created.append(ticket)
+    return created
+
+
+# ── Statistics ───────────────────────────────────────
+
+def stats():
+    """Return ticket statistics summary."""
+    tickets = list_tickets()
+    total = len(tickets)
+    by_status = {}
+    by_priority = {}
+    by_assignee = {}
+    for t in tickets:
+        by_status[t["status"]] = by_status.get(t["status"], 0) + 1
+        by_priority[t["priority"]] = by_priority.get(t["priority"], 0) + 1
+        by_assignee[t["assigned_to"]] = by_assignee.get(t["assigned_to"], 0) + 1
+    integrations = {
+        "github": bool(GITHUB_TOKEN and GITHUB_REPO),
+        "jira": bool(JIRA_URL and JIRA_EMAIL and JIRA_TOKEN),
+        "trello": bool(TRELLO_KEY and TRELLO_TOKEN_ENV),
+        "linear": bool(LINEAR_TOKEN),
+    }
+    return {
+        "total": total,
+        "by_status": by_status,
+        "by_priority": by_priority,
+        "by_assignee": by_assignee,
+        "integrations": integrations,
+    }
+
+
+def sync_all():
+    """Sync tickets with all configured external services. Returns summary."""
+    results = {}
+    if GITHUB_TOKEN and GITHUB_REPO:
+        try:
+            pulled = pull_from_github()
+            results["github"] = {"pulled": len(pulled), "ok": True}
+        except Exception as e:
+            results["github"] = {"error": str(e), "ok": False}
+    if JIRA_URL and JIRA_EMAIL and JIRA_TOKEN and JIRA_PROJECT:
+        try:
+            pulled = pull_from_jira()
+            results["jira"] = {"pulled": len(pulled), "ok": True}
+        except Exception as e:
+            results["jira"] = {"error": str(e), "ok": False}
+    if TRELLO_KEY and TRELLO_TOKEN_ENV and TRELLO_BOARD:
+        try:
+            pulled = pull_from_trello()
+            results["trello"] = {"pulled": len(pulled), "ok": True}
+        except Exception as e:
+            results["trello"] = {"error": str(e), "ok": False}
+    if LINEAR_TOKEN and LINEAR_TEAM:
+        try:
+            pulled = pull_from_linear()
+            results["linear"] = {"pulled": len(pulled), "ok": True}
+        except Exception as e:
+            results["linear"] = {"error": str(e), "ok": False}
+    return results
 
 
 # ── CLI ───────────────────────────────────────────────

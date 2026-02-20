@@ -11,6 +11,8 @@ UH="/home/$SSH_USER"
 
 echo "[ssh-$ROLE_LABEL] Initializing..."
 mkdir -p "$UH/.ssh" /shared/tickets
+# Ensure tickets dir is writable by all roles (shared volume)
+chmod 1777 /shared/tickets 2>/dev/null || chown "$SSH_USER:$SSH_USER" /shared/tickets 2>/dev/null || true
 
 # ── SSH keys ──────────────────────────────────────────────────
 [ -f /keys/deployer.pub ] && cp /keys/deployer.pub "$UH/.ssh/authorized_keys" && chmod 600 "$UH/.ssh/authorized_keys"
