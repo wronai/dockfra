@@ -1,3 +1,14 @@
+## [1.0.32] - 2026-02-21
+
+### Summary
+
+refactor(tests): test module improvements
+
+### Test
+
+- update tests/test_e2e.py
+
+
 ## [1.0.31] - 2026-02-21
 
 ### Summary
