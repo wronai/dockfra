@@ -327,14 +327,29 @@ def run_ssh_cmd(value: str, form: dict):
                     f"if [ -x '{script}' ]; then {inner}; "
                     f"else source ~/.bashrc 2>/dev/null; {cmd_str}; fi"
                 )
+                # Pass LLM key from wizard state into container env
+                llm_key = _state.get("openrouter_api_key", "") or _state.get("developer_llm_api_key", "")
+                llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
+                extra_env = []
+                if llm_key:
+                    extra_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                                 "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                                 "-e", f"LLM_MODEL={llm_model}"]
                 rc, out = run_cmd(
-                    ["docker", "exec", "-u", user, container, "bash", "-lc", shell],
+                    ["docker", "exec"] + extra_env + ["-u", user, container, "bash", "-lc", shell],
                 )
             if not tty:
+                out_trimmed = (out or "").strip()
                 if rc == 0:
-                    msg(f"✅ `{cmd_str}` — zakończono.")
+                    if out_trimmed:
+                        msg(f"✅ `{cmd_str}`\n```\n{out_trimmed[:3000]}\n```")
+                    else:
+                        msg(f"✅ `{cmd_str}` — zakończono.")
                 else:
-                    msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
+                    if out_trimmed:
+                        msg(f"⚠️ `{cmd_str}` (kod {rc}):\n```\n{out_trimmed[:2000]}\n```")
+                    else:
+                        msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
         except Exception as e:
             msg(f"❌ Błąd: {e}")
         port = _state.get(f"SSH_{role.upper()}_PORT", _get_role(role)["port"])

@@ -662,6 +662,59 @@ async function executeProcessAction(action, processName, data = {}) {
 setInterval(updateProcesses, 5000);
 updateProcesses();
 
+// ── Services tab ───────────────────────────────────────────────────────────────
+const servicesList = document.getElementById('services-list');
+
+async function updateServices() {
+  if (!servicesList || servicesList.style.display === 'none') return;
+  try {
+    const containers = await fetch('/api/containers').then(r => r.json());
+    servicesList.innerHTML = '';
+    // App-stack containers: those NOT matching management role names
+    const mgmtNames = ['manager','monitor','autopilot','desktop'];
+    const appContainers = containers.filter(c => {
+      const n = c.name.toLowerCase();
+      return !mgmtNames.some(m => n.includes(m)) && !n.includes('wizard');
+    });
+    if (appContainers.length === 0) {
+      servicesList.innerHTML = '<div style="color:var(--muted);font-size:.7rem;padding:8px 0">Brak uruchomionych serwisów app.<br>Kliknij 🔧 SSH Developer → Sklonuj i uruchom app.</div>';
+      return;
+    }
+    appContainers.forEach(c => {
+      const up = c.status && (c.status.includes('Up') || c.status.includes('healthy'));
+      const icon = up ? '🟢' : '🔴';
+      const item = document.createElement('div');
+      item.className = 'service-item';
+      const ports = (c.ports || '').replace(/0\.0\.0\.0:/g,'').replace(/:::/g,'') || '';
+      item.innerHTML = `
+        <span style="font-size:.8rem">${icon}</span>
+        <span class="service-name" title="${c.name}">${c.name.replace(/^dockfra-/,'')}</span>
+        <span class="service-ports">${ports.slice(0,20)}</span>
+        <div class="service-actions">
+          <button class="process-icon-btn" title="Logi" onclick="sendAction('logs::${c.name}','📋 Logi: ${c.name}')">📋</button>
+          ${!up ? `<button class="process-icon-btn fix-btn" title="Napraw" onclick="sendAction('fix_container::${c.name}','🔧 Napraw: ${c.name}')">🔧</button>` : ''}
+        </div>`;
+      servicesList.appendChild(item);
+    });
+  } catch {
+    servicesList.innerHTML = '<div style="color:var(--red);font-size:.7rem;">Błąd ładowania serwisów</div>';
+  }
+}
+
+// ── Panel tab switching ────────────────────────────────────────────────────────
+document.querySelectorAll('.panel-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.dataset.tab;
+    processesList.style.display = target === 'processes' ? '' : 'none';
+    servicesList.style.display  = target === 'services'  ? '' : 'none';
+    if (target === 'services') updateServices();
+  });
+});
+
+setInterval(() => { if (servicesList.style.display !== 'none') updateServices(); }, 8000);
+
 // ── Copy buttons ──────────────────────────────────────────────────────────────
 function flashCopyBtn(btn, originalText) {
   btn.textContent = '✅ Copied!';
