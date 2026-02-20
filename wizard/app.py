@@ -242,7 +242,7 @@ def msg(text, role="bot"):
     _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
-def text_input(n,l,ph="",v="",sec=False,hint=""): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint})
+def text_input(n,l,ph="",v="",sec=False,hint="",chips=None): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or []})
 def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":l,"options":opts,"value":v})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
@@ -262,52 +262,126 @@ def _env_status_summary() -> str:
     return "✅ Konfiguracja kompletna"
 
 
+def _arp_devices() -> list[dict]:
+    """Return [{ip, mac, iface}] from ARP cache / ip-neigh."""
+    import re
+    devices = []
+    seen: set[str] = set()
+    # ip neigh (Linux)
+    try:
+        out = subprocess.check_output(["ip","neigh"], text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            m = re.match(r'^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+).*lladdr\s+(\S+)', line)
+            if m and m.group(1) not in seen:
+                devices.append({"ip": m.group(1), "iface": m.group(2), "mac": m.group(3)})
+                seen.add(m.group(1))
+    except: pass
+    # arp -a fallback
+    if not devices:
+        try:
+            out = subprocess.check_output(["arp","-a"], text=True, stderr=subprocess.DEVNULL)
+            for line in out.splitlines():
+                m = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+                if m and m.group(1) not in seen and m.group(1) != "0.0.0.0":
+                    devices.append({"ip": m.group(1), "iface": "", "mac": ""})
+                    seen.add(m.group(1))
+        except: pass
+    return devices[:12]
+
+def _local_interfaces() -> list[str]:
+    """Return host IPs (non-loopback)."""
+    import re
+    ips = []
+    try:
+        out = subprocess.check_output(["ip","addr"], text=True, stderr=subprocess.DEVNULL)
+        for m in re.finditer(r'inet (\d+\.\d+\.\d+\.\d+)/\d+.*scope global', out):
+            ips.append(m.group(1))
+    except: pass
+    return ips
+
 def _detect_suggestions() -> dict:
-    """Auto-detect suggested values for form fields."""
+    """Auto-detect suggested values for form fields. Returns {key: {value, hint, chips}}."""
     s: dict[str, dict] = {}
-    # Git config
-    for key, cmd in [("GIT_NAME",["git","config","--global","user.name"]),
-                     ("GIT_EMAIL",["git","config","--global","user.email"])]:
+
+    # ── Git config ────────────────────────────────────────────────────────────
+    for key, cmd in [("GIT_NAME",  ["git","config","--global","user.name"]),
+                     ("GIT_EMAIL", ["git","config","--global","user.email"])]:
         try:
             v = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
-            if v: s[key] = {"value": v, "hint": f"z ~/.gitconfig: {v}"}
+            if v: s[key] = {"value": v, "hint": f"z ~/.gitconfig"}
         except: pass
-    # SSH keys in ~/.ssh/
+
+    # ── SSH keys ──────────────────────────────────────────────────────────────
     ssh_dir = Path.home() / ".ssh"
     if ssh_dir.exists():
         keys = sorted(f for f in ssh_dir.iterdir()
                       if f.is_file() and not f.suffix and f.stem.startswith("id_"))
         if keys:
-            s["GITHUB_SSH_KEY"] = {"value": str(keys[0]),
-                                    "hint": "znaleziono: " + ", ".join(f.name for f in keys[:4])}
-    # OpenRouter key from host env
+            s["GITHUB_SSH_KEY"] = {
+                "value": str(keys[0]),
+                "hint": f"znaleziono {len(keys)} klucz(e) w ~/.ssh",
+                "chips": [{"label": f.name, "value": str(f)} for f in keys[:6]],
+            }
+
+    # ── OpenRouter key ────────────────────────────────────────────────────────
     or_key = os.environ.get("OPENROUTER_API_KEY", "")
     if or_key:
         s["OPENROUTER_API_KEY"] = {"value": or_key, "hint": "z zmiennej środowiskowej"}
-    # Random secrets (show as placeholder suggestion, not pre-filled)
-    s["POSTGRES_PASSWORD"] = {"value": "", "hint": "np. " + _secrets.token_urlsafe(12)}
-    s["REDIS_PASSWORD"]    = {"value": "", "hint": "np. " + _secrets.token_urlsafe(12)}
-    s["SECRET_KEY"]        = {"value": "", "hint": "np. " + _secrets.token_urlsafe(32)}
-    # Docker networks → subnet hint for DEVICE_IP
+
+    # ── Random secrets ────────────────────────────────────────────────────────
+    for key, n in [("POSTGRES_PASSWORD", 12), ("REDIS_PASSWORD", 12), ("SECRET_KEY", 32)]:
+        gens = [_secrets.token_urlsafe(n) for _ in range(3)]
+        s[key] = {"value": "", "hint": "kliknij chip aby wstawić",
+                  "chips": [{"label": g, "value": g} for g in gens]}
+
+    # ── Device IP ─────────────────────────────────────────────────────────────
+    devices = _arp_devices()
+    local_ips = set(_local_interfaces())
+    # exclude own IPs and docker bridge 172.17.x.x from chips
+    dev_chips = [{"label": f"{d['ip']}  {('— '+d['iface']) if d['iface'] else ''}".strip(),
+                  "value": d["ip"]}
+                 for d in devices if d["ip"] not in local_ips and not d["ip"].startswith("172.17.")]
+    # Docker network subnets as hint
+    docker_subnets: list[str] = []
     try:
         nets = subprocess.check_output(
             ["docker","network","ls","--format","{{.Name}}"],
             text=True, stderr=subprocess.DEVNULL).strip().splitlines()
-        subnets = []
         for net in nets:
             if net in ("bridge","host","none"): continue
             try:
                 sub = subprocess.check_output(
-                    ["docker","network","inspect",net,
+                    ["docker","network","inspect", net,
                      "--format","{{range .IPAM.Config}}{{.Subnet}} {{end}}"],
                     text=True, stderr=subprocess.DEVNULL).strip()
-                if sub: subnets.extend(sub.split())
+                if sub: docker_subnets.extend(sub.split())
             except: pass
-        if subnets:
-            s["DEVICE_IP"] = {"value": "", "hint": "Docker sieci: " + ", ".join(subnets[:4])}
     except: pass
-    # Free-port suggestions
-    def _free(port, stop=20):
+    hint_parts = []
+    if dev_chips:    hint_parts.append(f"znaleziono {len(dev_chips)} urządzeń w ARP")
+    if docker_subnets: hint_parts.append("Docker: " + ", ".join(docker_subnets[:3]))
+    s["DEVICE_IP"] = {
+        "value": "",
+        "hint": " · ".join(hint_parts) if hint_parts else "wpisz IP urządzenia docelowego",
+        "chips": dev_chips[:8],
+    }
+
+    # ── App name from project path ────────────────────────────────────────────
+    project_name = ROOT.name.lower().replace("-","_")
+    s["APP_NAME"]     = {"value": project_name, "hint": f"z nazwy katalogu: {ROOT.name}"}
+    s["POSTGRES_DB"]  = {"value": project_name, "hint": "zwykle = APP_NAME"}
+    s["POSTGRES_USER"]= {"value": project_name, "hint": "zwykle = APP_NAME"}
+
+    # ── App version from git tag ──────────────────────────────────────────────
+    try:
+        tag = subprocess.check_output(
+            ["git","describe","--tags","--abbrev=0"],
+            text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip().lstrip("v")
+        if tag: s["APP_VERSION"] = {"value": tag, "hint": f"ostatni git tag: v{tag}"}
+    except: pass
+
+    # ── Free port suggestions ─────────────────────────────────────────────────
+    def _free(port: int, stop: int = 20) -> int:
         for p in range(port, port + stop):
             try:
                 with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
@@ -316,7 +390,9 @@ def _detect_suggestions() -> dict:
         return port
     for key, dflt in [("VNC_RPI3_PORT",6080),("DESKTOP_VNC_PORT",6081),("WIZARD_PORT",5050)]:
         p = _free(dflt)
-        s[key] = {"value": str(p), "hint": f"wolny port (sprawdzono {p})" if p != dflt else ""}
+        if p != dflt:
+            s[key] = {"value": str(p), "hint": f"port {dflt} zajęty → wolny: {p}",
+                      "chips": [{"label": str(p), "value": str(p)}]}
     return s
 
 def _emit_missing_fields(missing: list[dict]):
@@ -329,14 +405,15 @@ def _emit_missing_fields(missing: list[dict]):
         # Pre-fill with suggestion only when field is still empty
         if not cur and sug.get("value"):
             cur = sug["value"]
-        hint = sug.get("hint", "")
+        hint  = sug.get("hint", "")
+        chips = sug.get("chips", [])
         if e["type"] == "select":
             opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
             select(e["key"], e["label"], opts, cur)
         else:
             text_input(e["key"], e["label"],
                        e.get("placeholder", ""), cur,
-                       sec=(e["type"] == "password"), hint=hint)
+                       sec=(e["type"] == "password"), hint=hint, chips=chips)
 
 def step_welcome():
     _state["step"] = "welcome"
@@ -406,18 +483,14 @@ def step_settings(group: str = ""):
     if not group:
         msg("## ⚙️ Ustawienia — wybierz sekcję")
         msg("Kliknij sekcję aby edytować jej zmienne. Wszystko zapisywane do `wizard/.env`.")
-        # Show status for each group
-        rows = []
+        btn_items = []
         for g in groups:
             g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
             missing = [e for e in g_entries
                        if e.get("required_for") and not _state.get(_ENV_TO_STATE.get(e["key"],e["key"].lower()))]
-            rows.append({"name": g, "ok": len(missing)==0,
-                         "detail": f"{len(missing)} brakujących" if missing else "OK"})
-        status_row(rows)
-        buttons(
-            [{"label": f"✏️ {g}", "value": f"settings_group::{g}"} for g in groups]
-        )
+            icon = "✅" if not missing else f"🔴{len(missing)}"
+            btn_items.append({"label": f"{icon} {g}", "value": f"settings_group::{g}"})
+        buttons(btn_items)
     else:
         entries = [e for e in ENV_SCHEMA if e["group"] == group]
         msg(f"## ⚙️ {group}")

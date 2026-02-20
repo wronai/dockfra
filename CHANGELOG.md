@@ -1,3 +1,16 @@
+## [1.0.12] - 2026-02-20
+
+### Summary
+
+feat(wizard): configuration management system
+
+### Other
+
+- update wizard/app.py
+- update wizard/static/wizard.css
+- update wizard/static/wizard.js
+
+
 ## [1.0.11] - 2026-02-20
 
 ### Summary

@@ -182,23 +182,59 @@ function renderInput(d){
   inp.value = d.value || '';
   inp.dataset.name = d.name;
   inp.id = 'field_'+d.name;
-  field.appendChild(inp);
+  // ── Eye toggle for password fields ───────────────────────────────────────
+  if(d.secret){
+    const wrap = document.createElement('div');
+    wrap.className = 'field-input-wrap';
+    wrap.appendChild(inp);
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'eye-btn';
+    eye.innerHTML = '👁';
+    eye.title = 'Pokaż/ukryj';
+    let visible = false;
+    eye.addEventListener('click', () => {
+      visible = !visible;
+      inp.type = visible ? 'text' : 'password';
+      eye.classList.toggle('active', visible);
+    });
+    eye.addEventListener('mousedown', e => e.preventDefault()); // no focus steal
+    wrap.appendChild(eye);
+    field.appendChild(wrap);
+  } else {
+    field.appendChild(inp);
+  }
+
+  // ── Chips (clickable suggestions) ────────────────────────────────────────
+  if(d.chips && d.chips.length){
+    const row = document.createElement('div');
+    row.className = 'field-chips';
+    d.chips.forEach(chip => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip';
+      btn.textContent = chip.label;
+      btn.title = chip.value !== chip.label ? chip.value : '';
+      btn.addEventListener('click', () => {
+        inp.value = chip.value;
+        if(d.secret) inp.type = 'text'; // reveal password on select
+        inp.dispatchEvent(new Event('input'));
+        row.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      row.appendChild(btn);
+    });
+    field.appendChild(row);
+  }
+
+  // ── Hint text ─────────────────────────────────────────────────────────────
   if(d.hint){
     const hint = document.createElement('div');
     hint.className = 'field-hint';
-    const m = d.hint.match(/^(np\. )(.+)$/);
-    if(m){
-      hint.innerHTML = `${m[1]}<code title="Kliknij aby użyć">${m[2]}</code>`;
-      hint.querySelector('code').addEventListener('click', () => {
-        inp.value = m[2];
-        inp.type = d.secret ? 'text' : inp.type;
-        inp.dispatchEvent(new Event('input'));
-      });
-    } else {
-      hint.textContent = d.hint;
-    }
+    hint.textContent = d.hint;
     field.appendChild(hint);
   }
+
   form.appendChild(field);
 }
 
