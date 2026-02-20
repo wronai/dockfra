@@ -8,16 +8,10 @@ mkdir -p "$MH/.ssh" /shared/tickets
 [ -f /keys/deployer.pub ] && { cp /keys/deployer.pub "$MH/.ssh/authorized_keys"; chmod 600 "$MH/.ssh/authorized_keys"; }
 
 cat > "$MH/.ssh/config" << EOF
-Host ssh-frontend
-    HostName ${SSH_FRONTEND_HOST:-ssh-frontend}
-    Port ${SSH_FRONTEND_PORT:-2222}
-    User ${SSH_DEPLOY_USER:-deployer}
-    StrictHostKeyChecking no
-    UserKnownHostsFile /dev/null
-Host ssh-backend
-    HostName ${SSH_BACKEND_HOST:-ssh-backend}
-    Port ${SSH_BACKEND_PORT:-2222}
-    User ${SSH_DEPLOY_USER:-deployer}
+Host ssh-developer
+    HostName ${SSH_DEVELOPER_HOST:-ssh-developer}
+    Port ${SSH_DEVELOPER_PORT:-2222}
+    User developer
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
 Host ssh-rpi3
@@ -50,6 +44,15 @@ echo "none" > "$MH/.last-deployed-commit"
 chown monitor:monitor "$MH/.last-deployed-commit"
 
 touch /var/log/monitor-daemon.log && chown monitor:monitor /var/log/monitor-daemon.log
+
+# Structured logging — startup event
+mkdir -p /var/log/dockfra
+python3 -c "
+import json,os; from datetime import datetime,timezone
+entry=json.dumps({'timestamp':datetime.now(timezone.utc).isoformat(),'service':'monitor','level':'ACTION','message':'ssh-monitor started','data':{'env':os.environ.get('ENVIRONMENT','local')}})
+open('/var/log/dockfra/decisions.jsonl','a').write(entry+'\n')
+" 2>/dev/null || true
+
 echo "[ssh-monitor] Starting monitor daemon..."
 su - monitor -c "nohup /home/monitor/monitor-daemon.sh >> /var/log/monitor-daemon.log 2>&1 &"
 

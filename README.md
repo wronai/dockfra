@@ -385,7 +385,7 @@ dockfra/
 │   │   └── generate-developer-keys.sh     # Developer key generation
 │   ├── ssh-developer/                      # Developer role
 │   │   ├── .env / Dockerfile / entrypoint.sh / motd
-│   │   ├── dev-scripts/                   # 9 scripts
+│   │   ├── scripts/                       # 9 scripts
 │   │   └── keys/                          # authorized_keys from management
 │   ├── frontend/ backend/ mobile-backend/ desktop-app/
 │   ├── ssh-rpi3/ vnc-rpi3/

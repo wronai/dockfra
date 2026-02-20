@@ -5,6 +5,7 @@
 #   ssh-manager   (:2202) — Create tickets, configure services, strategic decisions
 #   ssh-autopilot (:2203) — Autonomous orchestration, LLM-driven decisions
 #   ssh-monitor   (:2201) — Deploy orchestrator, health monitoring, LLM analysis
+#   desktop       (:6081) — noVNC browser desktop (opens dashboard)
 #
 # Network: dockfra-shared (external, connects to app stack)
 ##############################################################
@@ -24,6 +25,7 @@ volumes:
   manager-workspace:
   autopilot-workspace:
   monitor-workspace:
+  decision-logs:
 
 services:
 
@@ -122,10 +124,6 @@ services:
       - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
       - SSH_DEVELOPER_HOST=${DEVELOPER_HOST:-ssh-developer}
       - SSH_DEVELOPER_PORT=${DEVELOPER_PORT:-2222}
-      - SSH_FRONTEND_HOST=ssh-frontend
-      - SSH_FRONTEND_PORT=2222
-      - SSH_BACKEND_HOST=ssh-backend
-      - SSH_BACKEND_PORT=2222
       - SSH_RPI3_HOST=ssh-rpi3
       - SSH_RPI3_PORT=2222
       - OPENROUTER_API_KEY=${MONITOR_LLM_API_KEY}
@@ -137,6 +135,7 @@ services:
       - ./shared/lib:/shared/lib:ro
       - monitor-workspace:/home/monitor/workspace
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - decision-logs:/var/log/dockfra
     depends_on:
       - ssh-manager
     healthcheck:
@@ -149,3 +148,27 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  desktop:
+    build: { context: ./desktop }
+    container_name: dockfra-desktop
+    hostname: desktop
+    restart: unless-stopped
+    networks: [management, dockfra-shared]
+    ports:
+      - "${DESKTOP_VNC_PORT:-6081}:6081"
+    environment:
+      - VNC_PASSWORD=${DESKTOP_VNC_PASSWORD:-dockfra}
+      - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1280}
+      - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-720}
+      - DASHBOARD_URL=${DASHBOARD_URL:-http://host.docker.internal:5050/dashboard}
+    volumes:
+      - ssh-keys:/keys:ro
+      - decision-logs:/var/log/dockfra:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

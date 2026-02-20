@@ -15,7 +15,7 @@ RUN useradd -m -s /bin/bash -G sudo developer && \
     echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/developer
 COPY entrypoint.sh /entrypoint.sh
 COPY motd /etc/motd
-COPY dev-scripts/ /home/developer/scripts/
+COPY scripts/ /home/developer/scripts/
 RUN chmod +x /entrypoint.sh /home/developer/scripts/*.sh 2>/dev/null; \
     chown -R developer:developer /home/developer
 EXPOSE 2222

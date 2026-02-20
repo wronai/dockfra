@@ -282,6 +282,28 @@ clean-keys: ## Remove generated SSH keys
 	@echo "✅ Keys removed (regenerate with: make init)"
 
 # ═══════════════════════════════════════════════════════════════
+# WIZARD
+# ═══════════════════════════════════════════════════════════════
+
+.PHONY: wizard
+wizard: ## Start interactive setup wizard at http://localhost:5050
+	@bash $(ROOT)/wizard/run.sh
+
+.PHONY: wizard-bg
+wizard-bg: ## Start wizard in background
+	@bash $(ROOT)/wizard/run.sh &
+	@sleep 1 && xdg-open http://localhost:5050 2>/dev/null || open http://localhost:5050 2>/dev/null || echo "Open: http://localhost:5050"
+
+.PHONY: dashboard
+dashboard: ## Open management dashboard in browser (requires wizard running)
+	@xdg-open http://localhost:5050/dashboard 2>/dev/null || open http://localhost:5050/dashboard 2>/dev/null || echo "Open: http://localhost:5050/dashboard"
+
+.PHONY: desktop
+desktop: ## Open management desktop (noVNC) in browser
+	@echo "Open: http://localhost:6081"
+	@xdg-open http://localhost:6081 2>/dev/null || open http://localhost:6081 2>/dev/null || true
+
+# ═══════════════════════════════════════════════════════════════
 # HELP
 # ═══════════════════════════════════════════════════════════════
 

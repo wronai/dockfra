@@ -1,5 +1,5 @@
 # goal.yaml - Goal configuration file
-# Generated: 2026-02-20 16:53:12
+# Generated: 2026-02-20 17:53:36
 # Documentation: https://github.com/wronai/goal#configuration
 #
 # This file configures Goal's behavior for:
@@ -20,6 +20,7 @@ versioning:
   strategy: semver
   files:
   - VERSION
+  - wizard/.venv/lib/python3.13/site-packages/flask/__init__.py:__version__
   bump_rules:
     patch: 10
     minor: 50

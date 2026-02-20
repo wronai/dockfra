@@ -59,7 +59,7 @@ else s "Backend unit tests (3)" "flask/psycopg2 not installed (run inside contai
 # ═══ 4. COMPOSE VALIDATION ═══
 echo ""; echo "  4. DOCKER-COMPOSE VALIDATION"
 t "management compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$MGMT/docker-compose.yml'))\""
-t "management compose: 3 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml')); assert len(d['services'])==3, len(d['services'])\""
+t "management compose: 4 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml')); assert len(d['services'])==4, len(d['services'])\""
 t "management prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$MGMT/docker-compose-production.yml'))\""
 t "app compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose.yml'))\""
 t "app compose: 8 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml')); assert len(d['services'])==8, len(d['services'])\""
@@ -105,6 +105,7 @@ t "mobile-backend Dockerfile" "test -f '$APP/mobile-backend/Dockerfile'"
 t "desktop-app Dockerfile" "test -f '$APP/desktop-app/Dockerfile'"
 t "ssh-rpi3 Dockerfile" "test -f '$PROJECT/devices/ssh-rpi3/Dockerfile'"
 t "vnc-rpi3 Dockerfile" "test -f '$PROJECT/devices/vnc-rpi3/Dockerfile'"
+t "desktop Dockerfile" "test -f '$MGMT/desktop/Dockerfile'"
 
 # ═══ 7. PER-SERVICE .ENV ═══
 echo ""; echo "  7. PER-SERVICE ENV FILES"

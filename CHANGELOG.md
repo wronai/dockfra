@@ -1,3 +1,37 @@
+## [1.0.5] - 2026-02-20
+
+### Summary
+
+refactor(docs): commit message generator
+
+### Docs
+
+- docs: update README
+- docs: update hybrid.md
+
+### Test
+
+- scripts: update run-tests.sh
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- build: update Makefile
+- docker: update Dockerfile
+- update app/ssh-developer/motd
+- scripts: update ask.sh
+- scripts: update check-services.sh
+- scripts: update commit-push.sh
+- scripts: update implement.sh
+- scripts: update my-tickets.sh
+- scripts: update review.sh
+- scripts: update test-local.sh
+- ... and 15 more
+
+
 ## [1.0.4] - 2026-02-20
 
 ### Summary
