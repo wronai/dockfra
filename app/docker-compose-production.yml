@@ -1,0 +1,345 @@
+##############################################################
+# DOCKFRA APP — Production Environment
+#
+# No external network — management connects via SSH tunneling
+##############################################################
+
+networks:
+  proxy-net:
+    driver: bridge
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+  mobile-net:
+    driver: bridge
+  desktop-net:
+    driver: bridge
+  ssh-net:
+    driver: bridge
+  rpi3-net:
+    driver: bridge
+  dev-net:
+    driver: bridge
+
+volumes:
+  frontend-data:
+  backend-data:
+  mobile-backend-data:
+  desktop-app-data:
+  db-data:
+  redis-data:
+  traefik-certs:
+  ssh-keys:
+  vnc-data:
+  developer-workspace:
+  git-repo:
+  shared-tickets:
+
+services:
+
+  traefik:
+    image: traefik:v2.11
+    container_name: dockfra-traefik-prod
+    restart: always
+    command:
+      - "--api.insecure=false"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=${ACME_STORAGE}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+    networks:
+      - proxy-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+
+  frontend:
+    build: { context: ./frontend, args: { APP_NAME: "${APP_NAME}", APP_VERSION: "${APP_VERSION}" } }
+    container_name: dockfra-frontend-prod
+    hostname: frontend
+    restart: always
+    networks: [frontend-net, proxy-net]
+    volumes: [frontend-data:/usr/share/nginx/html]
+    environment:
+      - APP_NAME=${APP_NAME}
+      - DEPLOY_MODE=production
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_HOST}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  backend:
+    build: { context: ./backend, args: { APP_VERSION: "${APP_VERSION}" } }
+    container_name: dockfra-backend-prod
+    hostname: backend
+    restart: always
+    networks: [backend-net, proxy-net]
+    volumes: [backend-data:/app/data]
+    environment:
+      - APP_NAME=${APP_NAME}
+      - APP_VERSION=${APP_VERSION}
+      - APP_DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_HOST=db
+      - DB_PORT=${POSTGRES_PORT:-5432}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DEPLOY_MODE=production
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${BACKEND_HOST}`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-8081}"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  mobile-backend:
+    build: { context: ./mobile-backend, args: { APP_VERSION: "${APP_VERSION}" } }
+    container_name: dockfra-mobile-backend-prod
+    hostname: mobile-backend
+    restart: always
+    networks: [mobile-net, proxy-net, backend-net]
+    volumes: [mobile-backend-data:/app/data]
+    environment:
+      - APP_NAME=${APP_NAME}
+      - APP_VERSION=${APP_VERSION}
+      - SECRET_KEY=${SECRET_KEY}
+      - BACKEND_URL=http://backend:${BACKEND_PORT:-8081}
+      - DEPLOY_MODE=production
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mobile.rule=Host(`${MOBILE_HOST}`)"
+      - "traefik.http.routers.mobile.entrypoints=websecure"
+      - "traefik.http.routers.mobile.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mobile.loadbalancer.server.port=${MOBILE_BACKEND_PORT:-8082}"
+    depends_on: [backend]
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  desktop-app:
+    build: { context: ./desktop-app, args: { APP_NAME: "${APP_NAME}", APP_VERSION: "${APP_VERSION}" } }
+    container_name: dockfra-desktop-app-prod
+    hostname: desktop-app
+    restart: always
+    networks: [desktop-net, proxy-net, backend-net]
+    volumes:
+      - desktop-app-data:/app/dist
+      - frontend-data:/output/frontend
+    environment:
+      - APP_NAME=${APP_NAME}
+      - APP_VERSION=${APP_VERSION}
+      - DEPLOY_MODE=production
+      - DISPLAY=:99
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  db:
+    image: postgres:15-alpine
+    container_name: dockfra-db-prod
+    hostname: db
+    restart: always
+    networks: [backend-net]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - /data/dockfra/postgres:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dockfra-redis-prod
+    hostname: redis
+    restart: always
+    networks: [backend-net]
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - /data/dockfra/redis:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ssh-developer:
+    build: { context: ./ssh-developer }
+    container_name: dockfra-ssh-developer-prod
+    hostname: ssh-developer
+    restart: always
+    networks: [dev-net, frontend-net, backend-net]
+    ports:
+      - "${SSH_DEVELOPER_PORT:-2200}:2222"
+    env_file: ./ssh-developer/.env
+    environment:
+      - ENVIRONMENT=production
+      - APP_NAME=${APP_NAME}
+      - APP_VERSION=${APP_VERSION}
+      - DEPLOY_MODE=production
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_BRANCH=${GIT_BRANCH:-main}
+      - BACKEND_PORT=${BACKEND_PORT:-8081}
+      - MOBILE_BACKEND_PORT=${MOBILE_BACKEND_PORT:-8082}
+      - DEVELOPER_LLM_API_KEY=${DEVELOPER_LLM_API_KEY}
+      - LLM_MODEL=${DEVELOPER_LLM_MODEL}
+    volumes:
+      - ./ssh-developer/keys:/home/developer/.ssh/extra:ro
+      - ssh-keys:/keys:ro
+      - developer-workspace:/home/developer/workspace
+      - git-repo:/repo
+      - shared-tickets:/shared/tickets
+      - ./shared/lib:/shared/lib:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  ssh-frontend:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: dockfra-ssh-frontend-prod
+    hostname: ssh-frontend
+    restart: always
+    networks: [frontend-net, ssh-net]
+    ports:
+      - "${SSH_FRONTEND_PORT:-2222}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - USER_NAME=${SSH_DEPLOY_USER:-deployer}
+      - PUBLIC_KEY_FILE=/keys/deployer.pub
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=false
+      - LISTEN_PORT=2222
+    volumes:
+      - ssh-keys:/keys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  ssh-backend:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: dockfra-ssh-backend-prod
+    hostname: ssh-backend
+    restart: always
+    networks: [backend-net, ssh-net]
+    ports:
+      - "${SSH_BACKEND_PORT:-2223}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - USER_NAME=${SSH_DEPLOY_USER:-deployer}
+      - PUBLIC_KEY_FILE=/keys/deployer.pub
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=false
+      - LISTEN_PORT=2222
+    volumes:
+      - ssh-keys:/keys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  ssh-rpi3:
+    build: { context: ./ssh-rpi3 }
+    container_name: dockfra-ssh-rpi3-prod
+    hostname: ssh-rpi3
+    restart: always
+    networks: [rpi3-net, ssh-net, desktop-net]
+    ports:
+      - "${SSH_RPI3_PORT:-2224}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - RPI3_HOST=${RPI3_HOST}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+      - APP_NAME=${APP_NAME}
+      - DEPLOY_MODE=production
+    volumes:
+      - ssh-keys:/keys
+      - desktop-app-data:/artifacts:ro
+
+  vnc-rpi3:
+    build: { context: ./vnc-rpi3 }
+    container_name: dockfra-vnc-rpi3-prod
+    hostname: vnc-rpi3
+    restart: always
+    networks: [rpi3-net, proxy-net]
+    ports:
+      - "${VNC_RPI3_PORT:-6080}:6080"
+    environment:
+      - VNC_PASSWORD=${RPI3_VNC_PASSWORD:-rpi3vnc}
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - RPI3_HOST=${RPI3_HOST}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+    volumes:
+      - vnc-data:/root/.vnc
+      - ssh-keys:/keys:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vnc.rule=Host(`vnc.${DOMAIN}`)"
+      - "traefik.http.routers.vnc.entrypoints=websecure"
+      - "traefik.http.routers.vnc.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vnc.loadbalancer.server.port=6080"

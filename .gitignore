@@ -6,12 +6,25 @@ fixPI/.venv/
 logs/
 .zip
 backups/
-frontend/playwright-report/
-frontend/test-results/
 venv
-frontend/.lint-backup
 node_modules
 package-lock.json
+
+# Hybrid structure
+management/keys/
+app/ssh-developer/keys/
+management/.env.local
+management/.env.production
+app/.env.local
+app/.env.production
+management/shared/tickets/
+management/shared/logs/
+management/shared/backups/
+app/shared/tickets/
+app/shared/logs/
+app/frontend/playwright-report/
+app/frontend/test-results/
+app/frontend/.lint-backup
 # package-lock.json is committed for reproducible Docker builds (npm ci)
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -29,8 +42,13 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ — disabled, conflicts with shared/lib
+# lib/
 lib64/
+
+# Re-include shared/lib in both stacks
+!management/shared/lib/
+!app/shared/lib/
 parts/
 sdist/
 var/

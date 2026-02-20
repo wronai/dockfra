@@ -1,47 +1,42 @@
-# Infra-Deploy: LLM-Powered Role-Based Infrastructure
+# Dockfra: LLM-Powered Role-Based Infrastructure
 
-Multi-service Docker infrastructure with strict role separation, LLM integration via OpenRouter,
-ticket-driven workflows, and autonomous orchestration.
+Multi-service Docker infrastructure with **hybrid architecture** (local + production),
+strict role separation, LLM integration via OpenRouter, ticket-driven workflows,
+and autonomous orchestration.
 
-## Architecture
+## Hybrid Architecture
+
+The project is split into two independent stacks that communicate via a shared Docker
+network (local) or SSH tunneling (production):
 
 ```
-  ┌─────────────────────────────────────────────────────────────────────────┐
-  │  YOU (Human)                                                            │
-  │  ssh manager@localhost -p 2202   │   ssh autopilot@localhost -p 2203    │
-  └────────┬─────────────────────────┴──────────┬───────────────────────────┘
-           │                                    │
-           ▼                                    ▼
-  ┌──────────────────┐              ┌────────────────────┐
-  │   SSH-MANAGER    │   tickets    │   SSH-AUTOPILOT    │
-  │   :2202          │◄────────────►│   :2203            │
-  │                  │              │                    │
-  │ • Create tickets │   SSH cmds   │ • LLM decisions    │
-  │ • Config LLM     ├─────────────►│ • Auto-orchestrate │
-  │ • Push to GitHub │              │ • Monitor cycles   │
-  │ • Update .env    │              │ • Create tickets   │
-  │   via SSH        │              │   autonomously     │
-  └───────┬──────────┘              └────────┬───────────┘
-          │ SSH config updates                │ SSH orchestration
-          │ + ticket creation                 │ + health monitoring
-          ▼                                   ▼
-  ┌──────────────────┐              ┌────────────────────┐
-  │  SSH-DEVELOPER   │   tickets    │   SSH-MONITOR      │
-  │  :2200           │◄────────────►│   :2201            │
-  │                  │  (shared     │                    │
-  │ • Work on tickets│   volume)    │ • Deploy via SSH   │
-  │ • LLM code help  │              │ • Health checks    │
-  │ • Git commit/push│              │ • LLM log analysis │
-  │ • Run tests      │              │ • Auto-poll git    │
-  └──────────────────┘              └────────┬───────────┘
-                                             │ SSH deploy
-                                    ┌────────┼────────┐
-                                    ▼        ▼        ▼
-                              ssh-front  ssh-back  ssh-rpi3
-                              (:2222)    (:2223)   (:2224)
-                                 │          │         │
-                              frontend   backend    vnc-rpi3
-                              mobile     db/redis   desktop
+┌────────────────────────────────────────────────────────────────┐
+│ LOCAL: Single host (dockfra-shared network bridge)             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  management/                        app/                       │
+│  ┌──────────────────────────┐      ┌───────────────────────┐  │
+│  │ docker-compose.yml       │      │ docker-compose.yml    │  │
+│  │ • ssh-manager   :2202    │      │ • ssh-developer :2200 │  │
+│  │ • ssh-autopilot :2203    │◄────►│ • frontend      :80   │  │
+│  │ • ssh-monitor   :2201    │shared│ • backend       :8081 │  │
+│  │ └─ keys/ (auto-generated)│ net  │ • db, redis, etc      │  │
+│  │ └─ shared/ (tickets,logs)│      │ • ssh-rpi3, vnc-rpi3  │  │
+│  └──────────────────────────┘      └───────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│ PRODUCTION: Separate servers (SSH tunneling)                   │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│ SERVER 1: dockfra-management       SERVER 2: your-app          │
+│ ├─ ssh-manager   :2202             ├─ ssh-developer :2200 ◄─┐ │
+│ ├─ ssh-autopilot :2203 ────────────┤ ├─ frontend    :443    │ │
+│ ├─ ssh-monitor   :2201    SSH      │ ├─ backend     :8081   │ │
+│ └─ keys/ (auto-generated) tunnel   │ └─ db, redis, rpi3    │ │
+│                                     └───────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ## Role Separation
@@ -93,36 +88,57 @@ Supported models (via OpenRouter):
 
 ## Quick Start
 
+### One-command setup (local)
+
 ```bash
-# 1. Setup
-git clone <repo> infra-deploy && cd infra-deploy
-chmod +x scripts/*.sh
-./scripts/setup.sh local
+git clone <repo> dockfra && cd dockfra
+./init.sh local
+```
 
-# 2. Configure LLM (edit API keys)
-nano ssh-developer/.env      # Set OPENROUTER_API_KEY
-nano ssh-monitor/.env        # Set OPENROUTER_API_KEY
-nano ssh-manager/.env        # Set OPENROUTER_API_KEY
-nano ssh-autopilot/.env      # Set OPENROUTER_API_KEY
+### Step-by-step (local)
 
-# 3. Build & start
-docker compose build && docker compose up -d
+```bash
+# 1. Initialize both stacks
+cd app && bash scripts/init.sh local
+cd ../management && bash scripts/init.sh local
 
-# 4. Login as Manager
+# 2. Configure LLM API keys
+nano management/ssh-manager/.env       # Set OPENROUTER_API_KEY
+nano management/ssh-autopilot/.env     # Set OPENROUTER_API_KEY
+nano management/ssh-monitor/.env       # Set OPENROUTER_API_KEY
+nano app/ssh-developer/.env            # Set OPENROUTER_API_KEY
+
+# 3. Start app first (developer needs to be up)
+cd app && docker compose up -d
+
+# 4. Start management
+cd ../management && docker compose up -d
+
+# 5. Test connectivity
+docker exec dockfra-ssh-autopilot ssh developer@ssh-developer -p 2222 "id"
+
+# 6. Login as Manager
 ssh manager@localhost -p 2202
-
-# 5. Create tickets for developer
 ticket-create "Add user auth" --priority=high --desc="Implement JWT auth"
-ticket-create "Write tests" --priority=normal
 
-# 6. Check developer workspace
+# 7. Check developer workspace
 ssh developer@localhost -p 2200
-my-tickets                     # See assigned tickets
-implement T-0001               # AI-assisted implementation
-ticket-done T-0001
+my-tickets
+```
 
-# 7. Run E2E tests
-./scripts/run-tests.sh
+### Production setup
+
+```bash
+# SERVER 1: Management
+cd management && bash scripts/init.sh production
+nano .env.production  # Set DEVELOPER_HOST, API keys
+docker compose -f docker-compose-production.yml up -d
+
+# SERVER 2: App
+cd app && bash scripts/init.sh production
+nano .env.production  # Set DB password, API keys, domain
+# Copy management public keys to ssh-developer/keys/authorized_keys
+docker compose -f docker-compose-production.yml up -d
 ```
 
 ## Ticket-Driven Workflow
@@ -223,37 +239,58 @@ pilot-plan "goal"   # Generate plan via LLM
 ## Project Structure
 
 ```
-infra-deploy/
-├── .env / .env.local / .env.production    # Global config
-├── docker-compose.yml                      # 15 services
-├── shared/
-│   └── lib/
-│       ├── llm_client.py                   # OpenRouter LLM client
-│       └── ticket_system.py                # Local + GitHub tickets
-├── ssh-manager/                            # Manager role
-│   ├── .env                                # Manager LLM config
-│   ├── Dockerfile / entrypoint.sh / motd
-│   └── manager-scripts/                    # 12 scripts
-├── ssh-autopilot/                          # Autopilot role
-│   ├── .env                                # Autopilot LLM config
-│   ├── Dockerfile / entrypoint.sh / motd
-│   ├── autopilot-daemon.sh                 # Autonomous loop
-│   └── autopilot-scripts/                  # 4 scripts
-├── ssh-developer/                          # Developer role
-│   ├── .env                                # Developer LLM config
-│   ├── Dockerfile / entrypoint.sh / motd
-│   └── dev-scripts/                        # 9 scripts
-├── ssh-monitor/                            # Monitor role (ex-agent)
-│   ├── .env                                # Monitor LLM config
-│   ├── Dockerfile / entrypoint.sh / motd
-│   ├── monitor-daemon.sh                   # Auto-poll + deploy
-│   └── deploy-scripts/                     # 8 scripts
-├── frontend/ backend/ mobile-backend/ desktop-app/
-├── ssh-rpi3/ vnc-rpi3/
-├── scripts/
-│   ├── setup.sh
-│   └── run-tests.sh                        # E2E (33 tests)
-└── keys/                                   # SSH keys (gitignored)
+dockfra/
+├── init.sh                                 # One-command setup (both stacks)
+├── README.md / LICENSE / CHANGELOG.md
+├── management/                             # ══ MANAGEMENT STACK ══
+│   ├── docker-compose.yml                  # Local (3 services)
+│   ├── docker-compose-production.yml       # Production
+│   ├── .env.local / .env.production        # Auto-generated by init
+│   ├── scripts/
+│   │   ├── init.sh                         # Management setup
+│   │   ├── generate-keys.sh               # ED25519 key generation
+│   │   ├── setup-local.sh                 # Local env config
+│   │   ├── setup-production.sh            # Production env config
+│   │   └── sync-keys-to-developer.sh      # Copy pubkeys to app
+│   ├── ssh-manager/                        # Manager role
+│   │   ├── .env / Dockerfile / entrypoint.sh / motd
+│   │   └── manager-scripts/               # 12 scripts
+│   ├── ssh-autopilot/                      # Autopilot role
+│   │   ├── .env / Dockerfile / entrypoint.sh / motd
+│   │   ├── autopilot-daemon.sh            # Autonomous loop
+│   │   └── autopilot-scripts/             # 4 scripts
+│   ├── ssh-monitor/                        # Monitor role
+│   │   ├── .env / Dockerfile / entrypoint.sh / motd
+│   │   ├── monitor-daemon.sh              # Auto-poll + deploy
+│   │   └── deploy-scripts/                # 8 scripts
+│   ├── shared/                             # Shared volume (tickets, logs, lib)
+│   │   └── lib/                            # llm_client.py, ticket_system.py
+│   └── keys/                               # Auto-generated (gitignored)
+│       ├── manager/id_ed25519{,.pub}
+│       ├── autopilot/id_ed25519{,.pub}
+│       └── monitor/id_ed25519{,.pub}
+│
+├── app/                                    # ══ APPLICATION STACK ══
+│   ├── docker-compose.yml                  # Local (12 services)
+│   ├── docker-compose-production.yml       # Production
+│   ├── .env.local / .env.production        # Auto-generated by init
+│   ├── scripts/
+│   │   ├── init.sh                         # App setup
+│   │   └── generate-developer-keys.sh     # Developer key generation
+│   ├── ssh-developer/                      # Developer role
+│   │   ├── .env / Dockerfile / entrypoint.sh / motd
+│   │   ├── dev-scripts/                   # 9 scripts
+│   │   └── keys/                          # authorized_keys from management
+│   ├── frontend/ backend/ mobile-backend/ desktop-app/
+│   ├── ssh-rpi3/ vnc-rpi3/
+│   └── shared/
+│       └── lib/                            # llm_client.py, ticket_system.py
+│
+├── scripts/                                # Legacy scripts
+│   ├── setup.sh                            # Legacy setup
+│   └── run-tests.sh                        # E2E tests
+├── docker-compose.yml                      # Legacy (monolithic)
+└── TODO/                                   # Architecture notes
 ```
 
 ## License

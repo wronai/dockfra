@@ -3,7 +3,7 @@
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  INFRA-DEPLOY E2E TEST SUITE                                 ║"
+echo "║  DOCKFRA E2E TEST SUITE                                      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJECT"

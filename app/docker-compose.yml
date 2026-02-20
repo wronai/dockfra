@@ -1,23 +1,26 @@
 ##############################################################
-# DOCKFRA — Role-Based Infrastructure (LEGACY — see management/ and app/)
+# DOCKFRA APP — Local Environment
 #
-# Human roles:
-#   ssh-manager   (:2202) — Create tickets, configure services, strategic decisions
-#   ssh-autopilot (:2203) — Autonomous orchestration, LLM-driven decisions
-#
-# Service roles:
+# Services:
 #   ssh-developer (:2200) — Ticket-driven development, LLM code assist
-#   ssh-monitor   (:2201) — Deploy orchestrator, health monitoring, LLM analysis
-#
-# Infrastructure bastions:
+#   frontend      (:80)   — Web frontend (nginx)
+#   backend       (:8081) — API backend
+#   mobile-backend(:8082) — Mobile API
+#   desktop-app   (:8083) — Desktop app builder
+#   db            (:5432) — PostgreSQL
+#   redis         (:6379) — Redis cache
+#   traefik       (:80/:443/:8080) — Reverse proxy
 #   ssh-frontend  (:2222) — Frontend network bastion
 #   ssh-backend   (:2223) — Backend network bastion
 #   ssh-rpi3      (:2224) — RPi3 deploy channel
+#   vnc-rpi3      (:6080) — VNC access to RPi3
 #
-# Communication: Manager → Autopilot → Monitor/Developer (via SSH + tickets)
+# Network: dockfra-shared (external, connects to management stack)
 ##############################################################
 
 networks:
+  dockfra-shared:
+    external: true
   proxy-net:
     driver: bridge
   frontend-net:
@@ -34,8 +37,6 @@ networks:
     driver: bridge
   dev-net:
     driver: bridge
-  mgmt-net:
-    driver: bridge
 
 volumes:
   frontend-data:
@@ -48,9 +49,6 @@ volumes:
   ssh-keys:
   vnc-data:
   developer-workspace:
-  monitor-workspace:
-  manager-workspace:
-  autopilot-workspace:
   git-repo:
   shared-tickets:
 
@@ -62,7 +60,7 @@ services:
 
   traefik:
     image: traefik:v2.11
-    container_name: ${APP_NAME:-infra}-traefik
+    container_name: dockfra-traefik
     restart: unless-stopped
     command:
       - "--api.insecure=true"
@@ -86,7 +84,7 @@ services:
 
   frontend:
     build: { context: ./frontend, args: { APP_NAME: "${APP_NAME}", APP_VERSION: "${APP_VERSION}" } }
-    container_name: ${APP_NAME:-infra}-frontend
+    container_name: dockfra-frontend
     hostname: frontend
     restart: unless-stopped
     networks: [frontend-net, proxy-net]
@@ -107,7 +105,7 @@ services:
 
   backend:
     build: { context: ./backend, args: { APP_VERSION: "${APP_VERSION}" } }
-    container_name: ${APP_NAME:-infra}-backend
+    container_name: dockfra-backend
     hostname: backend
     restart: unless-stopped
     networks: [backend-net, proxy-net]
@@ -142,7 +140,7 @@ services:
 
   mobile-backend:
     build: { context: ./mobile-backend, args: { APP_VERSION: "${APP_VERSION}" } }
-    container_name: ${APP_NAME:-infra}-mobile-backend
+    container_name: dockfra-mobile-backend
     hostname: mobile-backend
     restart: unless-stopped
     networks: [mobile-net, proxy-net, backend-net]
@@ -167,7 +165,7 @@ services:
 
   desktop-app:
     build: { context: ./desktop-app, args: { APP_NAME: "${APP_NAME}", APP_VERSION: "${APP_VERSION}" } }
-    container_name: ${APP_NAME:-infra}-desktop-app
+    container_name: dockfra-desktop-app
     hostname: desktop-app
     restart: unless-stopped
     networks: [desktop-net, proxy-net, backend-net]
@@ -192,7 +190,7 @@ services:
 
   db:
     image: postgres:15-alpine
-    container_name: ${APP_NAME:-infra}-db
+    container_name: dockfra-db
     hostname: db
     restart: unless-stopped
     networks: [backend-net]
@@ -209,7 +207,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ${APP_NAME:-infra}-redis
+    container_name: dockfra-redis
     hostname: redis
     restart: unless-stopped
     networks: [backend-net]
@@ -222,74 +220,20 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════
-  # ROLE SERVICES (with LLM + Tickets)
+  # SSH DEVELOPER (connected to management via dockfra-shared)
   # ═══════════════════════════════════════════
-
-  ssh-manager:
-    build: { context: ./ssh-manager }
-    container_name: ${APP_NAME:-infra}-ssh-manager
-    hostname: ssh-manager
-    restart: unless-stopped
-    networks: [mgmt-net, ssh-net]
-    ports:
-      - "${SSH_MANAGER_PORT:-2202}:2222"
-    env_file: ./ssh-manager/.env
-    environment:
-      - APP_NAME=${APP_NAME}
-      - APP_VERSION=${APP_VERSION}
-      - DEPLOY_MODE=${DEPLOY_MODE}
-      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
-      - SSH_DEVELOPER_HOST=ssh-developer
-      - SSH_DEVELOPER_PORT=2222
-      - SSH_MONITOR_HOST=ssh-monitor
-      - SSH_MONITOR_PORT=2222
-      - SSH_AUTOPILOT_HOST=ssh-autopilot
-      - SSH_AUTOPILOT_PORT=2222
-    volumes:
-      - ssh-keys:/keys
-      - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
-      - manager-workspace:/home/manager/workspace
-
-  ssh-autopilot:
-    build: { context: ./ssh-autopilot }
-    container_name: ${APP_NAME:-infra}-ssh-autopilot
-    hostname: ssh-autopilot
-    restart: unless-stopped
-    networks: [mgmt-net, ssh-net]
-    ports:
-      - "${SSH_AUTOPILOT_PORT:-2203}:2222"
-    env_file: ./ssh-autopilot/.env
-    environment:
-      - APP_NAME=${APP_NAME}
-      - APP_VERSION=${APP_VERSION}
-      - DEPLOY_MODE=${DEPLOY_MODE}
-      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
-      - SSH_DEVELOPER_HOST=ssh-developer
-      - SSH_DEVELOPER_PORT=2222
-      - SSH_MONITOR_HOST=ssh-monitor
-      - SSH_MONITOR_PORT=2222
-      - SSH_MANAGER_HOST=ssh-manager
-      - SSH_MANAGER_PORT=2222
-      - BACKEND_PORT=${BACKEND_PORT:-8081}
-      - MOBILE_BACKEND_PORT=${MOBILE_BACKEND_PORT:-8082}
-      - DESKTOP_APP_PORT=${DESKTOP_APP_PORT:-8083}
-    volumes:
-      - ssh-keys:/keys
-      - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
-      - autopilot-workspace:/home/autopilot/workspace
 
   ssh-developer:
     build: { context: ./ssh-developer }
-    container_name: ${APP_NAME:-infra}-ssh-developer
+    container_name: dockfra-ssh-developer
     hostname: ssh-developer
     restart: unless-stopped
-    networks: [dev-net, frontend-net, backend-net]
+    networks: [dockfra-shared, dev-net, frontend-net, backend-net]
     ports:
       - "${SSH_DEVELOPER_PORT:-2200}:2222"
     env_file: ./ssh-developer/.env
     environment:
+      - ENVIRONMENT=${ENVIRONMENT:-local}
       - APP_NAME=${APP_NAME}
       - APP_VERSION=${APP_VERSION}
       - DEPLOY_MODE=${DEPLOY_MODE}
@@ -298,51 +242,25 @@ services:
       - GIT_BRANCH=${GIT_BRANCH:-main}
       - BACKEND_PORT=${BACKEND_PORT:-8081}
       - MOBILE_BACKEND_PORT=${MOBILE_BACKEND_PORT:-8082}
+      - DEVELOPER_LLM_API_KEY=${DEVELOPER_LLM_API_KEY}
+      - LLM_MODEL=${DEVELOPER_LLM_MODEL:-gpt-4o-mini}
     volumes:
+      - ./ssh-developer/keys:/home/developer/.ssh/extra:ro
       - ssh-keys:/keys:ro
       - developer-workspace:/home/developer/workspace
       - git-repo:/repo
       - shared-tickets:/shared/tickets
       - ./shared/lib:/shared/lib:ro
-
-  ssh-monitor:
-    build: { context: ./ssh-monitor }
-    container_name: ${APP_NAME:-infra}-ssh-monitor
-    hostname: ssh-monitor
-    restart: unless-stopped
-    networks: [ssh-net, proxy-net, rpi3-net, frontend-net, backend-net]
-    ports:
-      - "${SSH_MONITOR_PORT:-2201}:2222"
-    env_file: ./ssh-monitor/.env
-    environment:
-      - APP_NAME=${APP_NAME}
-      - APP_VERSION=${APP_VERSION}
-      - DEPLOY_MODE=${DEPLOY_MODE}
-      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
-      - GIT_REPO_URL=${GIT_REPO_URL}
-      - GIT_BRANCH=${GIT_BRANCH:-main}
-      - MONITOR_POLL_INTERVAL=${MONITOR_POLL_INTERVAL:-60}
-      - MONITOR_AUTO_DEPLOY=${MONITOR_AUTO_DEPLOY:-true}
-      - RPI3_HOST=${RPI3_HOST}
-      - RPI3_USER=${RPI3_USER:-pi}
-      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
-      - SSH_FRONTEND_HOST=ssh-frontend
-      - SSH_FRONTEND_PORT=2222
-      - SSH_BACKEND_HOST=ssh-backend
-      - SSH_BACKEND_PORT=2222
-      - SSH_RPI3_HOST=ssh-rpi3
-      - SSH_RPI3_PORT=2222
-      - BACKEND_PORT=${BACKEND_PORT:-8081}
-      - MOBILE_BACKEND_PORT=${MOBILE_BACKEND_PORT:-8082}
-      - DESKTOP_APP_PORT=${DESKTOP_APP_PORT:-8083}
-    volumes:
-      - ssh-keys:/keys
-      - monitor-workspace:/home/monitor/workspace
-      - git-repo:/repo:ro
-      - desktop-app-data:/artifacts:ro
-      - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ═══════════════════════════════════════════
   # SSH BASTIONS
@@ -350,7 +268,7 @@ services:
 
   ssh-frontend:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: ${APP_NAME:-infra}-ssh-frontend
+    container_name: dockfra-ssh-frontend
     hostname: ssh-frontend
     restart: unless-stopped
     networks: [frontend-net, ssh-net]
@@ -370,7 +288,7 @@ services:
 
   ssh-backend:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: ${APP_NAME:-infra}-ssh-backend
+    container_name: dockfra-ssh-backend
     hostname: ssh-backend
     restart: unless-stopped
     networks: [backend-net, ssh-net]
@@ -390,7 +308,7 @@ services:
 
   ssh-rpi3:
     build: { context: ./ssh-rpi3 }
-    container_name: ${APP_NAME:-infra}-ssh-rpi3
+    container_name: dockfra-ssh-rpi3
     hostname: ssh-rpi3
     restart: unless-stopped
     networks: [rpi3-net, ssh-net, desktop-net]
@@ -411,7 +329,7 @@ services:
 
   vnc-rpi3:
     build: { context: ./vnc-rpi3 }
-    container_name: ${APP_NAME:-infra}-vnc-rpi3
+    container_name: dockfra-vnc-rpi3
     hostname: vnc-rpi3
     restart: unless-stopped
     networks: [rpi3-net, proxy-net]

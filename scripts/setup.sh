@@ -4,12 +4,12 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 KEYS_DIR="${PROJECT_DIR}/keys"
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  INFRA-DEPLOY SETUP                      ║"
+echo "║  DOCKFRA SETUP (LEGACY)                  ║"
 echo "╚══════════════════════════════════════════╝"
 
 mkdir -p "$KEYS_DIR"
 [ ! -f "${KEYS_DIR}/deployer" ] && {
-    ssh-keygen -t ed25519 -f "${KEYS_DIR}/deployer" -N "" -C "infra-deploy"
+    ssh-keygen -t ed25519 -f "${KEYS_DIR}/deployer" -N "" -C "dockfra"
     echo "[✓] SSH keys generated"
 } || echo "[✓] SSH keys exist"
 

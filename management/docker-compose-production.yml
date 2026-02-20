@@ -1,0 +1,167 @@
+##############################################################
+# DOCKFRA MANAGEMENT — Production Environment
+#
+# Services:
+#   ssh-manager   (:2202) — Create tickets, configure services, strategic decisions
+#   ssh-autopilot (:2203) — Autonomous orchestration, LLM-driven decisions
+#   ssh-monitor   (:2201) — Deploy orchestrator, health monitoring, LLM analysis
+#
+# No external network — uses SSH tunneling to reach app server
+##############################################################
+
+networks:
+  management:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  ssh-keys:
+  shared-tickets:
+  manager-workspace:
+  autopilot-workspace:
+  monitor-workspace:
+
+services:
+
+  ssh-manager:
+    build: { context: ./ssh-manager }
+    container_name: dockfra-ssh-manager-prod
+    hostname: ssh-manager
+    restart: always
+    networks: [management]
+    ports:
+      - "${SSH_MANAGER_PORT:-2202}:2222"
+    env_file: ./ssh-manager/.env
+    environment:
+      - ENVIRONMENT=production
+      - DEVELOPER_HOST=${DEVELOPER_HOST}
+      - DEVELOPER_PORT=${DEVELOPER_PORT:-2200}
+      - DEVELOPER_SSH_KEY=/root/.ssh/id_ed25519
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - SSH_DEVELOPER_HOST=${DEVELOPER_HOST}
+      - SSH_DEVELOPER_PORT=${DEVELOPER_PORT:-2222}
+      - SSH_MONITOR_HOST=ssh-monitor
+      - SSH_MONITOR_PORT=2222
+      - SSH_AUTOPILOT_HOST=ssh-autopilot
+      - SSH_AUTOPILOT_PORT=2222
+    volumes:
+      - ./keys/manager:/root/.ssh:ro
+      - ssh-keys:/keys
+      - shared-tickets:/shared/tickets
+      - ./shared/lib:/shared/lib:ro
+      - manager-workspace:/home/manager/workspace
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  ssh-autopilot:
+    build: { context: ./ssh-autopilot }
+    container_name: dockfra-ssh-autopilot-prod
+    hostname: ssh-autopilot
+    restart: always
+    networks: [management]
+    ports:
+      - "${SSH_AUTOPILOT_PORT:-2203}:2222"
+    env_file: ./ssh-autopilot/.env
+    environment:
+      - ENVIRONMENT=production
+      - DEVELOPER_HOST=${DEVELOPER_HOST}
+      - DEVELOPER_PORT=${DEVELOPER_PORT:-2200}
+      - DEVELOPER_SSH_KEY=/root/.ssh/id_ed25519
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - SSH_DEVELOPER_HOST=${DEVELOPER_HOST}
+      - SSH_DEVELOPER_PORT=${DEVELOPER_PORT:-2222}
+      - SSH_MONITOR_HOST=ssh-monitor
+      - SSH_MONITOR_PORT=2222
+      - SSH_MANAGER_HOST=ssh-manager
+      - SSH_MANAGER_PORT=2222
+      - AUTOPILOT_INTERVAL=${AUTOPILOT_INTERVAL:-300}
+      - OPENROUTER_API_KEY=${AUTOPILOT_LLM_API_KEY}
+      - LLM_MODEL=${AUTOPILOT_LLM_MODEL}
+    volumes:
+      - ./keys/autopilot:/root/.ssh:ro
+      - ssh-keys:/keys
+      - shared-tickets:/shared/tickets
+      - ./shared/lib:/shared/lib:ro
+      - autopilot-workspace:/home/autopilot/workspace
+    depends_on:
+      - ssh-manager
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep sshd && test -f /shared/.autopilot-heartbeat"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  ssh-monitor:
+    build: { context: ./ssh-monitor }
+    container_name: dockfra-ssh-monitor-prod
+    hostname: ssh-monitor
+    restart: always
+    networks: [management]
+    ports:
+      - "${SSH_MONITOR_PORT:-2201}:2222"
+    env_file: ./ssh-monitor/.env
+    environment:
+      - ENVIRONMENT=production
+      - DEVELOPER_HOST=${DEVELOPER_HOST}
+      - DEVELOPER_PORT=${DEVELOPER_PORT:-2200}
+      - DEVELOPER_SSH_KEY=/root/.ssh/id_ed25519
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - SSH_DEVELOPER_HOST=${DEVELOPER_HOST}
+      - SSH_DEVELOPER_PORT=${DEVELOPER_PORT:-2222}
+      - SSH_FRONTEND_HOST=ssh-frontend
+      - SSH_FRONTEND_PORT=2222
+      - SSH_BACKEND_HOST=ssh-backend
+      - SSH_BACKEND_PORT=2222
+      - SSH_RPI3_HOST=ssh-rpi3
+      - SSH_RPI3_PORT=2222
+      - OPENROUTER_API_KEY=${MONITOR_LLM_API_KEY}
+      - LLM_MODEL=${MONITOR_LLM_MODEL}
+    volumes:
+      - ./keys/monitor:/root/.ssh:ro
+      - ssh-keys:/keys
+      - shared-tickets:/shared/tickets
+      - ./shared/lib:/shared/lib:ro
+      - monitor-workspace:/home/monitor/workspace
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - ssh-manager
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
