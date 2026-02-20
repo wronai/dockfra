@@ -11,6 +11,45 @@ feat(wizard): configuration management system
 - update wizard/app.py
 
 
+## [1.0.13] - 2026-02-20
+
+### Summary
+
+feat(wizard): full interactive setup wizard — multilanguage, smart suggestions, ARP discovery, static file split
+
+### Wizard — Backend (`wizard/app.py`, 64 functions)
+
+- feat: `step_welcome()` now renders inline form fields for missing env vars instead of a text warning
+- feat: `_detect_suggestions()` — auto-detects git config, SSH keys, OpenRouter env var, free ports, app version from git tag, app name from project directory
+- feat: `_arp_devices()` — ARP cache scan via `ip neigh` with state detection (REACHABLE/STALE/DELAY/FAILED/UNKNOWN), sorted REACHABLE-first
+- feat: `_devices_env_ip()` — reads `RPI3_HOST` from `devices/.env.local` / `devices/.env`
+- feat: `_docker_container_env()` — extracts env vars from running Docker containers (`dockfra-ssh-rpi3`)
+- feat: `_local_interfaces()` — detects host IPs to exclude from device suggestions
+- feat: DEVICE_IP priority chain: `devices/.env` → `docker inspect ssh-rpi3` → ARP REACHABLE → ARP STALE
+- feat: `text_input()` extended with `hint` and `chips` parameters
+- feat: `_emit_missing_fields()` passes chips + hints to every field widget
+- feat: `step_settings()` — removed separate `status_row`, merged ✅/🔴N status icons into section buttons
+- feat: random secret generation (3 chips per secret field, clickable to insert)
+- feat: SSH key chips (all `~/.ssh/id_*` keys as clickable chips)
+
+### Wizard — Frontend
+
+- feat(`wizard/static/wizard.js`): extracted from inline `<script>` — 20 JS functions
+- feat(`wizard/static/wizard.css`): extracted from inline `<style>` — all styling
+- refactor(`wizard/templates/index.html`): reduced to pure HTML shell (54 lines) with `<link>` + `<script src>`
+- feat: `renderInput()` — eye 👁 toggle button for password fields (show/hide)
+- feat: `renderInput()` — clickable suggestion chips (`.chip`) below each input
+- feat: i18n support — `TRANSLATIONS` object with 10 European languages (pl, en, de, fr, es, it, pt, cs, ro, nl)
+- feat: language selector dropdown in header, persisted to `localStorage`
+- feat: `applyLang()` updates all static UI strings on language change
+- feat: connection status uses translated strings
+
+### CSS (`wizard/static/wizard.css`)
+
+- feat: `.field-input-wrap` + `.eye-btn` — password reveal toggle styling
+- feat: `.field-chips` + `.chip` + `.chip.active` — suggestion chip row styling
+- feat: `.field-hint` — italic hint text below inputs
+
 ## [1.0.12] - 2026-02-20
 
 ### Summary

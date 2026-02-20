@@ -2,7 +2,7 @@
 
 Multi-service Docker infrastructure with **hybrid architecture** (local + production),
 strict role separation, LLM integration via OpenRouter, ticket-driven workflows,
-and autonomous orchestration.
+autonomous orchestration, and an **interactive web setup wizard**.
 
 ## Hybrid Architecture
 
@@ -86,9 +86,55 @@ Supported models (via OpenRouter):
 - `meta-llama/llama-3.1-70b-instruct`
 - `deepseek/deepseek-chat-v3-0324`
 
+## Setup Wizard
+
+The fastest way to configure and launch Dockfra is the **interactive web wizard**:
+
+```bash
+make wizard          # Start wizard at http://localhost:5050
+```
+
+The wizard provides a **chat-based UI** with three panels:
+
+| Panel | Description |
+|---|---|
+| 💬 **Chat** | Interactive step-by-step configuration assistant |
+| ⚙️ **Processes** | Real-time container / launch progress |
+| 📋 **Logs** | Streaming Docker Compose output |
+
+### Wizard Features
+
+- **Inline missing-field forms** — missing env vars appear as input fields immediately, no separate settings screen
+- **Smart suggestions + clickable chips** — auto-detects git config, SSH keys, ARP devices, Docker networks, free ports; generates random secrets
+- **DEVICE_IP auto-discovery** — priority chain: `devices/.env` → running container → ARP REACHABLE → ARP STALE (color-coded: 🟢/🟡/🟠)
+- **Eye toggle** on all password/API-key fields
+- **10 European languages** — selector in header, persisted to `localStorage` (pl, en, de, fr, es, it, pt, cs, ro, nl)
+- **Settings sections** — ✅/🔴N status icons on each section button show completeness at a glance
+- **Error analysis** — Docker Compose failures are parsed and presented as interactive solution buttons
+- **Dashboard** at `http://localhost:5050/dashboard` — real-time container status + decision log
+
+### Wizard API
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/env` | GET | Read current config (secrets masked) |
+| `/api/env` | POST | Update env vars |
+| `/api/containers` | GET | Running container list |
+| `/api/processes` | GET | Wizard-managed process list |
+| `/api/history` | GET | Conversation + log history |
+| `/api/events` | GET | Decision event log |
+
 ## Quick Start
 
-### Makefile (recommended)
+### Option A — Web Wizard (recommended)
+
+```bash
+git clone <repo> dockfra && cd dockfra
+make wizard          # Opens http://localhost:5050
+                     # Fill in the form fields, click "Save & Launch"
+```
+
+### Option B — Makefile (manual)
 
 ```bash
 git clone <repo> dockfra && cd dockfra
@@ -307,7 +353,25 @@ rpi3-net ──────── ssh-rpi3, vnc-rpi3, monitor
 desktop-net ───── desktop-app, ssh-rpi3
 ```
 
-## Services (15 total)
+## Services (17 total)
+
+### Wizard (host process)
+
+| Service | Port | Description |
+|---|---|---|
+| **wizard** | **5050** | Setup wizard chat UI + REST API |
+| wizard dashboard | 5050/dashboard | Container status + decision log |
+
+### Management Stack
+
+| Service | Port | Role | LLM |
+|---|---|---|:---:|
+| **ssh-manager** | **2202** | Ticket mgmt, config | ✓ |
+| **ssh-autopilot** | **2203** | Autonomous orchestration | ✓ |
+| **ssh-monitor** | **2201** | Deploy, health | ✓ |
+| desktop | 6081 | noVNC + Chromium GUI | — |
+
+### App Stack
 
 | Service | Port | Role | LLM |
 |---|---|---|:---:|
@@ -318,14 +382,16 @@ desktop-net ───── desktop-app, ssh-rpi3
 | desktop-app | 8083 | Build artifacts | — |
 | db | 5432 | PostgreSQL | — |
 | redis | 6379 | Cache | — |
-| **ssh-manager** | **2202** | **Ticket mgmt, config** | **✓** |
-| **ssh-autopilot** | **2203** | **Autonomous orchestration** | **✓** |
-| **ssh-developer** | **2200** | **Code, tests, git** | **✓** |
-| **ssh-monitor** | **2201** | **Deploy, health** | **✓** |
-| ssh-frontend | 2222 | Frontend bastion | — |
-| ssh-backend | 2223 | Backend bastion | — |
-| ssh-rpi3 | 2224 | RPi3 channel | — |
-| vnc-rpi3 | 6080 | Web VNC | — |
+| **ssh-developer** | **2200** | Code, tests, git | ✓ |
+
+### Devices Stack
+
+| Service | Port | Role |
+|---|---|---|
+| ssh-rpi3 | 2224 | RPi3 SSH channel |
+| vnc-rpi3 | 6080 | Web VNC |
+
+> RPi3 target IP configured via `DEVICE_IP` — auto-detected from ARP cache or `devices/.env`
 
 ## Autopilot Autonomous Mode
 
@@ -347,7 +413,19 @@ pilot-plan "goal"   # Generate plan via LLM
 ```
 dockfra/
 ├── init.sh                                 # One-command setup (both stacks)
-├── README.md / LICENSE / CHANGELOG.md
+├── README.md / LICENSE / CHANGELOG.md / TODO.md
+├── project.functions.toon                  # Auto-generated function index (158 functions, 14 modules)
+├── wizard/                                 # ══ SETUP WIZARD ══
+│   ├── app.py                              # Flask+SocketIO backend (64 functions)
+│   ├── run.sh                              # Start script
+│   ├── requirements.txt                    # Flask, flask-socketio, gevent, psutil
+│   ├── .env / .env.example                 # Wizard config (auto-created)
+│   ├── templates/
+│   │   ├── index.html                      # Chat UI shell (54 lines)
+│   │   └── dashboard.html                  # Container status + logs dashboard
+│   └── static/
+│       ├── wizard.css                      # All styles (~120 lines)
+│       └── wizard.js                       # All JS (20 functions, ~280 lines)
 ├── management/                             # ══ MANAGEMENT STACK ══
 │   ├── docker-compose.yml                  # Local (3 services)
 │   ├── docker-compose-production.yml       # Production
