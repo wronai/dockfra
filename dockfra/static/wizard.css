@@ -131,6 +131,8 @@ header .sub{color:var(--muted);font-size:.85rem}
 .ticket-btn{padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:.75rem;cursor:pointer;transition:all .15s}
 .ticket-btn:hover{border-color:var(--accent);color:var(--accent)}
 .ticket-btn-done:hover{border-color:var(--green);color:var(--green)}
+.ticket-btn-gh{border-color:rgba(124,131,245,.3);color:var(--muted)}
+.ticket-btn-gh:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,131,245,.08)}
 .field input,.field select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;width:100%}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field-input-wrap{position:relative;display:flex;align-items:center}

@@ -882,6 +882,26 @@ def _dispatch(value: str, form: dict):
             _step_project_stats()
         threading.Thread(target=_pstats, daemon=True).start()
         return True
+    if value.startswith("ticket_push_github::"):
+        ticket_id = value.split("::", 1)[1]
+        _tl_sid = getattr(_tl, 'sid', None)
+        def _push_gh(tid=ticket_id):
+            _tl.sid = _tl_sid
+            _load_integration_env()
+            if not os.environ.get("GITHUB_TOKEN") or not os.environ.get("GITHUB_REPO"):
+                msg("❌ Brak konfiguracji GitHub.\n"
+                    "[[🔗 Konfiguruj integracje|integrations_setup]]")
+                return
+            progress(f"🔗 Wysyłam {tid} do GitHub Issues…")
+            result = _tickets.push_to_github(tid)
+            if result and result.get("github_issue_number"):
+                repo = os.environ.get("GITHUB_REPO", "")
+                num = result["github_issue_number"]
+                msg(f"✅ **{tid}** → [GitHub Issue #{num}](https://github.com/{repo}/issues/{num})")
+            else:
+                msg(f"❌ Nie udało się wypchnąć {tid} do GitHub. Sprawdź `GITHUB_TOKEN` i `GITHUB_REPO`.")
+        threading.Thread(target=_push_gh, daemon=True).start()
+        return True
     if value.startswith("suggest_commands::"): step_suggest_commands(value.split("::",1)[1]); return True
     if value.startswith("run_suggested_cmd::"): _run_suggested_cmd(value.split("::",1)[1]); return True
     if value.startswith("restart_container::"): _do_restart_container(value.split("::",1)[1]); return True

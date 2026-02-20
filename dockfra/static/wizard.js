@@ -158,7 +158,7 @@ socket.on('message', d => {
   chat.scrollTop = chat.scrollHeight;
 });
 
-// Delegate ticket card button clicks
+// Delegate ticket card button clicks (in chat bubbles)
 chat.addEventListener('click', e => {
   const btn = e.target.closest('.ticket-btn');
   if (!btn) return;
@@ -166,6 +166,13 @@ chat.addEventListener('click', e => {
   if (!value) return;
   const label = btn.closest('.ticket-card').querySelector('.ticket-id').textContent + ' — ' + btn.textContent.trim();
   sendAction(value, label);
+});
+
+// Auto-refresh Stats tab when a ticket is created/updated
+socket.on('message', d => {
+  if (d.role === 'bot' && d.text && /Ticket (utworzony|zaktualizowany|zamknięty)/i.test(d.text)) {
+    setTimeout(updateStats, 800);
+  }
 });
 
 function copyMessage(button) {
@@ -802,6 +809,7 @@ async function updateStats() {
             <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
             <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}">🤖 Impl</button>
             <button class="ticket-btn ticket-btn-done" data-action="ssh_cmd::developer::ticket-done::${tk.id}">✅ Done</button>
+            ${!tk.github_issue_number ? `<button class="ticket-btn ticket-btn-gh" data-action="ticket_push_github::${tk.id}" title="Wypchnij do GitHub Issues">🔗 GitHub</button>` : ''}
           </div>
         </div>`;
       });
@@ -1145,6 +1153,17 @@ function submitChatInput() {
   const text = chatInput.value.trim();
   if (!text) return;
   chatInput.value = '';
+  // Shortcut: "nowy ticket <title>" or "create ticket <title>" → ticket_create_do directly
+  const ticketShortcut = text.match(/^(?:nowy ticket|create ticket|ticket|dodaj ticket)\s+(.+)/i);
+  if (ticketShortcut) {
+    const title = ticketShortcut[1].trim();
+    const div = document.createElement('div');
+    div.className = 'msg user';
+    div.innerHTML = `<div class="avatar">👤</div><div class="bubble">📝 Nowy ticket: ${title}</div>`;
+    chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+    socket.emit('action', {value: 'ticket_create_do', form: {ticket_title: title, ticket_priority: 'normal', ticket_assigned: 'developer'}});
+    return;
+  }
   sendAction(text);
 }
 chatSend.addEventListener('click', submitChatInput);
