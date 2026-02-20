@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Dockfra Setup Wizard — http://localhost:5050"""
-import os, json, subprocess, threading, time
+import os, json, subprocess, threading, time, socket as _socket, secrets as _secrets
 from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
@@ -242,7 +242,7 @@ def msg(text, role="bot"):
     _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
-def text_input(n,l,ph="",v="",sec=False): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec})
+def text_input(n,l,ph="",v="",sec=False,hint=""): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint})
 def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":l,"options":opts,"value":v})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
@@ -262,18 +262,106 @@ def _env_status_summary() -> str:
     return "✅ Konfiguracja kompletna"
 
 
+def _detect_suggestions() -> dict:
+    """Auto-detect suggested values for form fields."""
+    s: dict[str, dict] = {}
+    # Git config
+    for key, cmd in [("GIT_NAME",["git","config","--global","user.name"]),
+                     ("GIT_EMAIL",["git","config","--global","user.email"])]:
+        try:
+            v = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+            if v: s[key] = {"value": v, "hint": f"z ~/.gitconfig: {v}"}
+        except: pass
+    # SSH keys in ~/.ssh/
+    ssh_dir = Path.home() / ".ssh"
+    if ssh_dir.exists():
+        keys = sorted(f for f in ssh_dir.iterdir()
+                      if f.is_file() and not f.suffix and f.stem.startswith("id_"))
+        if keys:
+            s["GITHUB_SSH_KEY"] = {"value": str(keys[0]),
+                                    "hint": "znaleziono: " + ", ".join(f.name for f in keys[:4])}
+    # OpenRouter key from host env
+    or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if or_key:
+        s["OPENROUTER_API_KEY"] = {"value": or_key, "hint": "z zmiennej środowiskowej"}
+    # Random secrets (show as placeholder suggestion, not pre-filled)
+    s["POSTGRES_PASSWORD"] = {"value": "", "hint": "np. " + _secrets.token_urlsafe(12)}
+    s["REDIS_PASSWORD"]    = {"value": "", "hint": "np. " + _secrets.token_urlsafe(12)}
+    s["SECRET_KEY"]        = {"value": "", "hint": "np. " + _secrets.token_urlsafe(32)}
+    # Docker networks → subnet hint for DEVICE_IP
+    try:
+        nets = subprocess.check_output(
+            ["docker","network","ls","--format","{{.Name}}"],
+            text=True, stderr=subprocess.DEVNULL).strip().splitlines()
+        subnets = []
+        for net in nets:
+            if net in ("bridge","host","none"): continue
+            try:
+                sub = subprocess.check_output(
+                    ["docker","network","inspect",net,
+                     "--format","{{range .IPAM.Config}}{{.Subnet}} {{end}}"],
+                    text=True, stderr=subprocess.DEVNULL).strip()
+                if sub: subnets.extend(sub.split())
+            except: pass
+        if subnets:
+            s["DEVICE_IP"] = {"value": "", "hint": "Docker sieci: " + ", ".join(subnets[:4])}
+    except: pass
+    # Free-port suggestions
+    def _free(port, stop=20):
+        for p in range(port, port + stop):
+            try:
+                with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
+                    sock.bind(('0.0.0.0', p)); return p
+            except: pass
+        return port
+    for key, dflt in [("VNC_RPI3_PORT",6080),("DESKTOP_VNC_PORT",6081),("WIZARD_PORT",5050)]:
+        p = _free(dflt)
+        s[key] = {"value": str(p), "hint": f"wolny port (sprawdzono {p})" if p != dflt else ""}
+    return s
+
+def _emit_missing_fields(missing: list[dict]):
+    """Emit input/select widgets for each missing env var, with smart suggestions."""
+    suggestions = _detect_suggestions()
+    for e in missing:
+        sk  = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+        cur = _state.get(sk, e.get("default", ""))
+        sug = suggestions.get(e["key"], {})
+        # Pre-fill with suggestion only when field is still empty
+        if not cur and sug.get("value"):
+            cur = sug["value"]
+        hint = sug.get("hint", "")
+        if e["type"] == "select":
+            opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
+            select(e["key"], e["label"], opts, cur)
+        else:
+            text_input(e["key"], e["label"],
+                       e.get("placeholder", ""), cur,
+                       sec=(e["type"] == "password"), hint=hint)
+
 def step_welcome():
     _state["step"] = "welcome"
     cfg = detect_config()
     _state.update({k:v for k,v in cfg.items() if v})
     msg("# 👋 Dockfra Setup Wizard")
-    msg("Jestem Twoim asystentem konfiguracji. Co chcesz zrobić?")
-    msg(_env_status_summary())
-    buttons([
-        {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
-        {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-        {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
-    ])
+    all_missing = [e for e in ENV_SCHEMA
+                   if e.get("required_for")
+                   and not _state.get(_ENV_TO_STATE.get(e["key"], e["key"].lower()))]
+    if all_missing:
+        msg(f"Uzupełnij **{len(all_missing)}** brakujące ustawienia:")
+        _emit_missing_fields(all_missing)
+        buttons([
+            {"label": "✅ Zapisz i uruchom",    "value": "preflight_save_launch::all"},
+            {"label": "⚙️ Wszystkie ustawienia", "value": "settings"},
+            {"label": "📊 Status",               "value": "status"},
+        ])
+    else:
+        msg("✅ Konfiguracja kompletna. Co chcesz zrobić?")
+        buttons([
+            {"label": "🚀 Uruchom infrastrukturę", "value": "launch_all"},
+            {"label": "📦 Wdróż na urządzenie",     "value": "deploy_device"},
+            {"label": "⚙️ Ustawienia (.env)",        "value": "settings"},
+            {"label": "📊 Status",                   "value": "status"},
+        ])
 
 def step_status():
     _state["step"] = "status"
@@ -835,11 +923,10 @@ def on_connect():
                     {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
                     {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
                     {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
-                    {"label":"📊 Status kontenerów",         "value":"status"},
                 ])
-            elif step == "status":    step_status()
-            elif step == "settings":  step_settings()
-            elif step == "setup_creds": step_setup_creds()
+            else:
+                # For other steps, just replay messages, don't re-execute step logic
+                pass
     finally:
         _tl.sid = None
 

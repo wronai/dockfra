@@ -91,6 +91,9 @@ header .sub{color:var(--muted);font-size:.85rem}
 .field input,.field select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;width:100%}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field select option{background:var(--bg3)}
+.field-hint{font-size:.72rem;color:var(--muted);margin-top:3px;padding-left:2px;font-style:italic}
+.field-hint code{background:var(--bg3);padding:1px 4px;border-radius:3px;font-style:normal;color:var(--accent);cursor:pointer}
+.field-hint code:hover{background:var(--accent);color:#fff}
 
 .w-code{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.8rem;color:#6ee7b7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto}
 
@@ -120,7 +123,21 @@ header .sub{color:var(--muted);font-size:.85rem}
 <header>
   <div class="logo">🏗 Dockfra</div>
   <div class="sub">Setup Wizard</div>
-  <div class="status-bar"><div class="dot"></div><span id="conn-status">Connecting...</span></div>
+  <div class="status-bar">
+    <div class="dot"></div><span id="conn-status">Connecting...</span>
+    <select id="lang-select" style="margin-left:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 8px;font-size:.78rem;cursor:pointer">
+      <option value="pl">🇵🇱 Polski</option>
+      <option value="en">🇬🇧 English</option>
+      <option value="de">🇩🇪 Deutsch</option>
+      <option value="fr">🇫🇷 Français</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="it">🇮🇹 Italiano</option>
+      <option value="pt">🇵🇹 Português</option>
+      <option value="cs">🇨🇿 Čeština</option>
+      <option value="ro">🇷🇴 Română</option>
+      <option value="nl">🇳🇱 Nederlands</option>
+    </select>
+  </div>
 </header>
 
 <div class="main">
@@ -154,10 +171,50 @@ const logOut  = document.getElementById('log-output');
 const connEl  = document.getElementById('conn-status');
 const processesList = document.getElementById('processes-list');
 
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  pl:{ chat:'💬 Chat', processes:'⚙️ Procesy', logs:'📋 Logi', copy:'📋 Kopiuj',
+       connecting:'Łączenie...', connected:'Połączono', disconnected:'Rozłączono', sub:'Kreator konfiguracji' },
+  en:{ chat:'💬 Chat', processes:'⚙️ Processes', logs:'📋 Logs', copy:'📋 Copy',
+       connecting:'Connecting...', connected:'Connected', disconnected:'Disconnected', sub:'Setup Wizard' },
+  de:{ chat:'💬 Chat', processes:'⚙️ Prozesse', logs:'📋 Protokolle', copy:'📋 Kopieren',
+       connecting:'Verbinde...', connected:'Verbunden', disconnected:'Getrennt', sub:'Einrichtungsassistent' },
+  fr:{ chat:'💬 Chat', processes:'⚙️ Processus', logs:'📋 Journaux', copy:'📋 Copier',
+       connecting:'Connexion...', connected:'Connecté', disconnected:'Déconnecté', sub:'Assistant de configuration' },
+  es:{ chat:'💬 Chat', processes:'⚙️ Procesos', logs:'📋 Registros', copy:'📋 Copiar',
+       connecting:'Conectando...', connected:'Conectado', disconnected:'Desconectado', sub:'Asistente de configuración' },
+  it:{ chat:'💬 Chat', processes:'⚙️ Processi', logs:'📋 Log', copy:'📋 Copia',
+       connecting:'Connessione...', connected:'Connesso', disconnected:'Disconnesso', sub:'Procedura guidata' },
+  pt:{ chat:'💬 Chat', processes:'⚙️ Processos', logs:'📋 Registos', copy:'📋 Copiar',
+       connecting:'A ligar...', connected:'Ligado', disconnected:'Desligado', sub:'Assistente de configuração' },
+  cs:{ chat:'💬 Chat', processes:'⚙️ Procesy', logs:'📋 Logy', copy:'📋 Kopírovat',
+       connecting:'Připojování...', connected:'Připojeno', disconnected:'Odpojeno', sub:'Průvodce nastavením' },
+  ro:{ chat:'💬 Chat', processes:'⚙️ Procese', logs:'📋 Jurnale', copy:'📋 Copiați',
+       connecting:'Se conectează...', connected:'Conectat', disconnected:'Deconectat', sub:'Expert configurare' },
+  nl:{ chat:'💬 Chat', processes:'⚙️ Processen', logs:'📋 Logboek', copy:'📋 Kopiëren',
+       connecting:'Verbinden...', connected:'Verbonden', disconnected:'Verbroken', sub:'Installatiewizard' },
+};
+let _lang = localStorage.getItem('wizard_lang') || 'pl';
+function t(k){ return (TRANSLATIONS[_lang]||TRANSLATIONS.pl)[k]||k; }
+function applyLang(){
+  document.documentElement.lang = _lang;
+  const sel = document.getElementById('lang-select'); if(sel) sel.value = _lang;
+  const sub = document.querySelector('.sub'); if(sub) sub.textContent = t('sub');
+  const ch = document.querySelector('.chat-header span'); if(ch) ch.textContent = t('chat');
+  const cpChat = document.getElementById('copy-chat'); if(cpChat) cpChat.textContent = t('copy');
+  const prSpan = document.querySelector('.processes-panel h3 span'); if(prSpan) prSpan.textContent = t('processes');
+  const cpProc = document.querySelector('.processes-panel h3 .copy-btn'); if(cpProc) cpProc.textContent = t('copy');
+  const logH = document.querySelector('.log-panel h3'); if(logH) logH.firstChild.textContent = t('logs')+' ';
+}
+document.getElementById('lang-select').addEventListener('change', e => {
+  _lang = e.target.value; localStorage.setItem('wizard_lang', _lang); applyLang();
+});
+applyLang();
+
 const socket = io({transports:['websocket','polling']});
 
-socket.on('connect',    () => { connEl.textContent = 'Connected'; });
-socket.on('disconnect', () => { connEl.textContent = 'Disconnected'; });
+socket.on('connect',    () => { connEl._state='connected';    connEl.textContent = t('connected'); });
+socket.on('disconnect', () => { connEl._state='disconnected'; connEl.textContent = t('disconnected'); });
 
 // ── Markdown-lite renderer ─────────────────────────────────────────────────
 function renderMd(text){
@@ -315,6 +372,23 @@ function renderInput(d){
   inp.dataset.name = d.name;
   inp.id = 'field_'+d.name;
   field.appendChild(inp);
+  if(d.hint){
+    const hint = document.createElement('div');
+    hint.className = 'field-hint';
+    // If hint contains a value suggestion (starts with 'np.'), make it clickable
+    const m = d.hint.match(/^(np\. )(.+)$/);
+    if(m){
+      hint.innerHTML = `${m[1]}<code title="Kliknij aby użyć">${m[2]}</code>`;
+      hint.querySelector('code').addEventListener('click', () => {
+        inp.value = m[2];
+        inp.type = d.secret ? 'text' : inp.type; // reveal on click
+        inp.dispatchEvent(new Event('input'));
+      });
+    } else {
+      hint.textContent = d.hint;
+    }
+    field.appendChild(hint);
+  }
   form.appendChild(field);
 }
 
