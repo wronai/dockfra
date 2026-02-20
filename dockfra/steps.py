@@ -342,11 +342,6 @@ def step_do_launch(form):
                          {"label":"🏠 Menu","value":"back"}])
                 return
             msg(f"✅ Sklonowano do `{app_dir}`")
-            for stub in ["ssh-developer/.env"]:
-                p = app_dir / stub
-                if not p.exists():
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.touch()
             _refresh_ssh_roles()
         elif (app_dir / ".git").exists():
             progress("🔄 Aktualizuję app/ (git pull)…")
@@ -404,6 +399,43 @@ def step_do_launch(form):
                 progress(PROJECT["ssh_base_image"], done=True)
             else:
                 progress(f"{PROJECT['ssh_base_image']} (cached)", done=True)
+
+        # ── Create missing env_file stubs for every stack ─────────────────────
+        # Scans docker-compose*.yml for `env_file:` entries and touches missing
+        # files so docker-compose doesn't abort on "not found".
+        def _ensure_env_stubs(stack_path: Path):
+            """Touch any env_file paths referenced in compose files that don't exist."""
+            import re as _re2
+            # Matches: env_file: ./path  OR  - ./path  OR  - path: ./path
+            _pat = _re2.compile(
+                r'(?:env_file:\s*([^\n\[{#]+))'      # scalar: env_file: ./foo/.env
+                r'|(?:-\s*path:\s*([^\n#]+))'         # list path: - path: ./foo/.env
+                r'|(?:-\s*(\.{0,2}/[^\n#{]+\.env))'   # list bare: - ./foo/.env
+            )
+            for cf_name in ("docker-compose.yml", "docker-compose.yaml",
+                            "docker-compose-production.yml"):
+                cf = stack_path / cf_name
+                if not cf.exists():
+                    continue
+                for m in _pat.finditer(cf.read_text(errors="replace")):
+                    raw = (m.group(1) or m.group(2) or m.group(3) or "").strip().strip('"\'')
+                    if not raw:
+                        continue
+                    p = (stack_path / raw).resolve()
+                    # Only create stubs inside the stack directory (safety check)
+                    try:
+                        p.relative_to(stack_path)
+                    except ValueError:
+                        continue
+                    if not p.exists():
+                        try:
+                            p.parent.mkdir(parents=True, exist_ok=True)
+                            p.touch()
+                        except Exception:
+                            pass
+
+        for _, path in targets:
+            _ensure_env_stubs(path)
 
         env_file_args = ["--env-file", str(WIZARD_ENV)] if WIZARD_ENV.exists() else []
         failed = []

@@ -1,3 +1,20 @@
+## [1.0.26] - 2026-02-20
+
+### Summary
+
+docs(docs): deep code analysis engine with 3 supporting modules
+
+### Docs
+
+- docs: update GETTING-STARTED.md
+- docs: update SSH-ROLES.md
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/steps.py
+
+
 ## [1.0.25] - 2026-02-20
 
 ### Summary
