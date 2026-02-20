@@ -22,20 +22,13 @@ management/keys/autopilot/*
 !management/keys/monitor/
 management/keys/monitor/*
 !management/keys/monitor/.gitkeep
-app/ssh-developer/keys/*
-!app/ssh-developer/keys/.gitkeep
+# app/ is now a separate repo: git@github.com:wronai/dockfra-app.git
+app/
 management/.env.local
 management/.env.production
-app/.env.local
-app/.env.production
 management/shared/tickets/
 management/shared/logs/
 management/shared/backups/
-app/shared/tickets/
-app/shared/logs/
-app/frontend/playwright-report/
-app/frontend/test-results/
-app/frontend/.lint-backup
 # package-lock.json is committed for reproducible Docker builds (npm ci)
 # Byte-compiled / optimized / DLL files
 __pycache__/
