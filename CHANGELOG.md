@@ -1,3 +1,16 @@
+## [1.0.27] - 2026-02-20
+
+### Summary
+
+docs(docs): deep code analysis engine with 6 supporting modules
+
+### Docs
+
+- docs: update README
+- docs: update vs-kamal.md
+- docs: update WIZARD-API.md
+
+
 ## [1.0.26] - 2026-02-20
 
 ### Summary
