@@ -94,18 +94,69 @@ async function loadLogs() {
   } catch(e) { console.warn('loadLogs:', e); }
 }
 
+// ── Ticket card renderer ──────────────────────────────────────────────────────
+function tryRenderTickets(text) {
+  // Match lines like: ○ T-0001 — Fix login bug  or  ◐ T-0002 — ...
+  const ticketRe = /([○◐●]?)\s*(T-\d+)\s*[—\-]+\s*(.+)/g;
+  const tickets = [];
+  let m;
+  while ((m = ticketRe.exec(text)) !== null) {
+    tickets.push({ icon: m[1]||'○', id: m[2], title: m[3].trim() });
+  }
+  if (tickets.length === 0) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'ticket-cards';
+  tickets.forEach(tk => {
+    const statusMap = {'○':'open','◐':'in_progress','●':'closed'};
+    const status = statusMap[tk.icon] || 'open';
+    const colorMap = {'open':'var(--accent)','in_progress':'var(--yellow)','closed':'var(--muted)'};
+    const card = document.createElement('div');
+    card.className = 'ticket-card';
+    card.innerHTML = `
+      <div class="ticket-card-header">
+        <span class="ticket-id" style="color:${colorMap[status]}">${tk.icon} ${tk.id}</span>
+        <span class="ticket-status">${status.replace('_',' ')}</span>
+      </div>
+      <div class="ticket-title">${tk.title}</div>
+      <div class="ticket-actions">
+        <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Zacznij pracę">▶ Pracuj</button>
+        <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}" title="AI implementacja">🤖 Implement</button>
+        <button class="ticket-btn ticket-btn-done" data-action="ssh_cmd::developer::ticket-done::${tk.id}" title="Oznacz jako done">✅ Done</button>
+      </div>`;
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 socket.on('message', d => {
   if (d.id && document.querySelector(`[data-msg-id="${d.id}"]`)) return;
   const div = document.createElement('div');
   div.className = `msg ${d.role}`;
   if (d.id) div.setAttribute('data-msg-id', d.id);
-  div.innerHTML = `
-    <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
-    <div class="bubble">${renderMd(d.text)}</div>
-    <div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
+  // Try to render ticket cards for my-tickets output
+  const ticketCards = d.role === 'bot' ? tryRenderTickets(d.text) : null;
+  if (ticketCards) {
+    div.innerHTML = `<div class="avatar">🤖</div><div class="bubble"></div><div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
+    div.querySelector('.bubble').appendChild(ticketCards);
+  } else {
+    div.innerHTML = `
+      <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
+      <div class="bubble">${renderMd(d.text)}</div>
+      <div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
+  }
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
+});
+
+// Delegate ticket card button clicks
+chat.addEventListener('click', e => {
+  const btn = e.target.closest('.ticket-btn');
+  if (!btn) return;
+  const value = btn.dataset.action;
+  if (!value) return;
+  const label = btn.closest('.ticket-card').querySelector('.ticket-id').textContent + ' — ' + btn.textContent.trim();
+  sendAction(value, label);
 });
 
 function copyMessage(button) {

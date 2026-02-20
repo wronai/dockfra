@@ -109,6 +109,8 @@ def on_action(data):
             _tl_sid = getattr(_tl, 'sid', None)
             def _ai_analyze_thread(name=cname):
                 _tl.sid = _tl_sid
+                key = _state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
+                if key: os.environ["OPENROUTER_API_KEY"] = key
                 if not _LLM_AVAILABLE or not _llm_config().get("api_key"):
                     _prompt_api_key(return_action=f"ai_analyze::{name}")
                     return
@@ -136,6 +138,10 @@ def on_action(data):
             user_text = value.strip()
             def _llm_thread():
                 _tl.sid = _tl_sid
+                # Inject API key from wizard state into env so llm_client finds it
+                key = _state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
+                if key:
+                    os.environ["OPENROUTER_API_KEY"] = key
                 if not _LLM_AVAILABLE or not _llm_config().get("api_key"):
                     _prompt_api_key()
                     return
@@ -593,6 +599,17 @@ def _dispatch(value: str, form: dict):
     if value.startswith("ssh_info::"):      _step_ssh_info(value); return True
     if value.startswith("ssh_console::"):   step_ssh_console(value); return True
     if value.startswith("run_ssh_cmd::"):   run_ssh_cmd(value, form); return True
+    if value.startswith("ssh_cmd::"):
+        # ssh_cmd::role::cmd_name::arg — shortcut from ticket cards / inline buttons
+        parts = value.split("::", 3)
+        role_  = parts[1] if len(parts) > 1 else "developer"
+        cmd_   = parts[2] if len(parts) > 2 else ""
+        arg_   = parts[3] if len(parts) > 3 else ""
+        ri_    = _get_role(role_)
+        synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
+        run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
+        run_ssh_cmd(run_value_, synth_form)
+        return True
     if value.startswith("suggest_commands::"): step_suggest_commands(value.split("::",1)[1]); return True
     if value.startswith("run_suggested_cmd::"): _run_suggested_cmd(value.split("::",1)[1]); return True
     if value.startswith("restart_container::"): _do_restart_container(value.split("::",1)[1]); return True

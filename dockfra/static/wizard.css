@@ -120,6 +120,17 @@ header .sub{color:var(--muted);font-size:.85rem}
 .field-desc.open{display:block}
 .inline-action{display:inline-block;margin:2px 3px;padding:3px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:.85rem;cursor:pointer;transition:all .15s;vertical-align:middle}
 .inline-action:hover{background:var(--accent);color:#fff}
+.ticket-cards{display:flex;flex-direction:column;gap:8px;width:100%}
+.ticket-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.ticket-card:hover{border-color:var(--accent)}
+.ticket-card-header{display:flex;align-items:center;justify-content:space-between}
+.ticket-id{font-weight:700;font-size:.85rem;font-family:monospace}
+.ticket-status{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.ticket-title{font-size:.82rem;color:var(--text);line-height:1.4}
+.ticket-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.ticket-btn{padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:.75rem;cursor:pointer;transition:all .15s}
+.ticket-btn:hover{border-color:var(--accent);color:var(--accent)}
+.ticket-btn-done:hover{border-color:var(--green);color:var(--green)}
 .field input,.field select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;width:100%}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field-input-wrap{position:relative;display:flex;align-items:center}

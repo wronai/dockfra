@@ -328,7 +328,10 @@ def run_ssh_cmd(value: str, form: dict):
                     f"else source ~/.bashrc 2>/dev/null; {cmd_str}; fi"
                 )
                 # Pass LLM key from wizard state into container env
-                llm_key = _state.get("openrouter_api_key", "") or _state.get("developer_llm_api_key", "")
+                llm_key = (_state.get("openrouter_key", "")
+                           or _state.get("openrouter_api_key", "")
+                           or _state.get("developer_llm_api_key", "")
+                           or os.environ.get("OPENROUTER_API_KEY", ""))
                 llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
                 extra_env = []
                 if llm_key:
