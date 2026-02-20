@@ -11,9 +11,16 @@ echo ""
 echo "Environment: $ENVIRONMENT"
 echo ""
 
-# 1. Initialize app (developer needs keys first)
-echo "━━━ Step 1: Initializing app... ━━━"
-bash "$SCRIPT_DIR/app/scripts/init.sh" "$ENVIRONMENT"
+# 1. Initialize app — app/ is a separate repo (git@github.com:wronai/dockfra-app.git)
+#    The wizard clones it automatically on first launch via GIT_REPO_URL.
+#    If app/ already exists locally, run its init script.
+echo "━━━ Step 1: App stack... ━━━"
+if [ -f "$SCRIPT_DIR/app/scripts/init.sh" ]; then
+    bash "$SCRIPT_DIR/app/scripts/init.sh" "$ENVIRONMENT"
+else
+    echo "  ℹ️  app/ not present — will be cloned from GIT_REPO_URL when wizard launches the stack."
+    echo "  Run: make wizard   (or open http://localhost:5050)"
+fi
 echo ""
 
 # 2. Initialize management (generates keys + syncs to developer)

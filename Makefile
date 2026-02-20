@@ -55,9 +55,25 @@ init: ## Full initialization (keys, env, network) and start wizard
 		echo "💡 Open http://localhost:5050 in your browser"; \
 	fi
 
+.PHONY: clone-app
+clone-app: ## Clone app repo into app/ if not present (reads GIT_REPO_URL from dockfra/.env)
+	@if [ ! -d "$(APP)/.git" ]; then \
+		GIT_REPO_URL=$$(grep '^GIT_REPO_URL=' $(ROOT)/dockfra/.env 2>/dev/null | cut -d= -f2-); \
+		GIT_BRANCH=$$(grep '^GIT_BRANCH=' $(ROOT)/dockfra/.env 2>/dev/null | cut -d= -f2-); \
+		GIT_BRANCH=$${GIT_BRANCH:-main}; \
+		if [ -z "$$GIT_REPO_URL" ]; then \
+			echo "❌ GIT_REPO_URL not set in dockfra/.env — run: make wizard"; exit 1; \
+		fi; \
+		echo "📥 Cloning $$GIT_REPO_URL (branch: $$GIT_BRANCH)..."; \
+		git clone --branch $$GIT_BRANCH --depth 1 $$GIT_REPO_URL $(APP); \
+		echo "✅ Cloned to $(APP)"; \
+	else \
+		echo "✅ app/ already present"; \
+	fi
+
 .PHONY: init-app
-init-app: ## Initialize app stack only
-	@bash $(APP)/scripts/init.sh $(ENVIRONMENT)
+init-app: clone-app ## Initialize app stack only
+	@if [ -f "$(APP)/scripts/init.sh" ]; then bash $(APP)/scripts/init.sh $(ENVIRONMENT); fi
 
 .PHONY: init-mgmt
 init-mgmt: ## Initialize management stack only
@@ -81,7 +97,7 @@ up: up-app up-mgmt up-devices ## Start all stacks (app + management + devices)
 	@echo "✅ All stacks running"
 
 .PHONY: up-app
-up-app: build-ssh-base ## Start app stack
+up-app: clone-app build-ssh-base ## Start app stack (clones repo if needed)
 	@cd $(APP) && docker compose up -d
 	@echo "✅ App stack started"
 
@@ -126,7 +142,7 @@ stop: ## Stop all stacks and kill services on ports 4000, 5050
 
 .PHONY: down-app
 down-app: ## Stop app stack
-	@cd $(APP) && docker compose down
+	@[ -d "$(APP)" ] && cd $(APP) && docker compose down || echo "app/ not present, nothing to stop"
 
 .PHONY: down-mgmt
 down-mgmt: ## Stop management stack
@@ -136,14 +152,14 @@ down-mgmt: ## Stop management stack
 restart: down up ## Restart both stacks
 
 .PHONY: build
-build: ## Build all images
+build: clone-app ## Build all images
 	@cd $(APP) && docker compose build
 	@cd $(MGMT) && docker compose build
 
 .PHONY: ps
 ps: ## Show running containers
 	@echo "── APP ──"
-	@cd $(APP) && docker compose ps 2>/dev/null || echo "  (not running)"
+	@[ -d "$(APP)" ] && cd $(APP) && docker compose ps 2>/dev/null || echo "  (not running)"
 	@echo ""
 	@echo "── MANAGEMENT ──"
 	@cd $(MGMT) && docker compose ps 2>/dev/null || echo "  (not running)"
@@ -158,7 +174,7 @@ logs: ## Tail logs (both stacks)
 
 .PHONY: logs-app
 logs-app: ## Tail app stack logs
-	@cd $(APP) && docker compose logs -f
+	@[ -d "$(APP)" ] && cd $(APP) && docker compose logs -f || echo "app/ not present"
 
 .PHONY: logs-mgmt
 logs-mgmt: ## Tail management stack logs
@@ -221,7 +237,7 @@ ssh-rpi3: ## SSH into ssh-rpi3 container (devices stack)
 # ── Role command shortcuts (delegate to sub-Makefiles) ─────────
 
 .PHONY: developer-help manager-help monitor-help autopilot-help
-developer-help: ## Show developer commands
+developer-help: clone-app ## Show developer commands
 	@$(MAKE) -f $(APP)/ssh-developer/Makefile help
 manager-help: ## Show manager commands
 	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile help
@@ -231,7 +247,7 @@ autopilot-help: ## Show autopilot commands
 	@$(MAKE) -f $(MGMT)/ssh-autopilot/Makefile help
 
 .PHONY: developer-tickets manager-status monitor-status autopilot-status
-developer-tickets: ## List developer tickets
+developer-tickets: clone-app ## List developer tickets
 	@$(MAKE) -f $(APP)/ssh-developer/Makefile my-tickets
 manager-status: ## Manager: all services overview
 	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile status
@@ -241,7 +257,7 @@ autopilot-status: ## Autopilot: show decisions & state
 	@$(MAKE) -f $(MGMT)/ssh-autopilot/Makefile pilot-status
 
 .PHONY: developer-ask manager-ask monitor-ask
-developer-ask: ## Ask LLM (developer): make developer-ask Q="your question"
+developer-ask: clone-app ## Ask LLM (developer): make developer-ask Q="your question"
 	@$(MAKE) -f $(APP)/ssh-developer/Makefile ask Q="$(Q)"
 manager-ask: ## Ask LLM (manager): make manager-ask Q="your question"
 	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile ask Q="$(Q)"
@@ -341,7 +357,7 @@ test-ssh: ## Test SSH connectivity to all roles
 
 .PHONY: clean
 clean: down ## Stop stacks and remove volumes
-	@cd $(APP) && docker compose down -v 2>/dev/null || true
+	@[ -d "$(APP)" ] && cd $(APP) && docker compose down -v 2>/dev/null || true
 	@cd $(MGMT) && docker compose down -v 2>/dev/null || true
 	@echo "✅ Cleaned up"
 
@@ -349,7 +365,7 @@ clean: down ## Stop stacks and remove volumes
 clean-keys: ## Remove generated SSH keys
 	@rm -rf $(MGMT)/keys/manager/id_ed25519* $(MGMT)/keys/autopilot/id_ed25519* $(MGMT)/keys/monitor/id_ed25519*
 	@rm -f $(MGMT)/keys/deployer $(MGMT)/keys/deployer.pub $(MGMT)/keys/config
-	@rm -f $(APP)/ssh-developer/keys/id_ed25519* $(APP)/ssh-developer/keys/deployer*
+	@[ -d "$(APP)/ssh-developer/keys" ] && rm -f $(APP)/ssh-developer/keys/id_ed25519* $(APP)/ssh-developer/keys/deployer* || true
 	@echo "✅ Keys removed (regenerate with: make init)"
 
 # ═══════════════════════════════════════════════════════════════
