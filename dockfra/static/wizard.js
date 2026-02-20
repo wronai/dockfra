@@ -137,21 +137,38 @@ function tryRenderTickets(text) {
   return wrap;
 }
 
+// ── Strip MOTD / box-drawing banners from command output ──────────────────────
+function stripMotd(text) {
+  // Remove lines that are purely box-drawing chars (╔═╗║╚╝╠╣─ etc.) or blank
+  const lines = text.split('\n');
+  const filtered = lines.filter(l => {
+    const stripped = l.replace(/[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]/g, '');
+    return stripped.length > 0;
+  });
+  // If we removed more than half the lines it was a MOTD — return filtered
+  // Otherwise return original (don't strip normal output)
+  if (lines.length - filtered.length > lines.length / 3) {
+    return filtered.join('\n').trim();
+  }
+  return text;
+}
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 socket.on('message', d => {
   if (d.id && document.querySelector(`[data-msg-id="${d.id}"]`)) return;
   const div = document.createElement('div');
   div.className = `msg ${d.role}`;
   if (d.id) div.setAttribute('data-msg-id', d.id);
+  const text = d.role === 'bot' ? stripMotd(d.text) : d.text;
   // Try to render ticket cards for my-tickets output
-  const ticketCards = d.role === 'bot' ? tryRenderTickets(d.text) : null;
+  const ticketCards = d.role === 'bot' ? tryRenderTickets(text) : null;
   if (ticketCards) {
     div.innerHTML = `<div class="avatar">🤖</div><div class="bubble"></div><div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
     div.querySelector('.bubble').appendChild(ticketCards);
   } else {
     div.innerHTML = `
       <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
-      <div class="bubble">${renderMd(d.text)}</div>
+      <div class="bubble">${renderMd(text)}</div>
       <div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
   }
   chat.appendChild(div);
