@@ -45,6 +45,20 @@ alias llm='python3 /shared/lib/llm_client.py'
 [ -f /etc/motd ] && cat /etc/motd
 BASHRC
 
-# ── Scripts chown ─────────────────────────────────────────────
-[ -d "$UH/scripts" ] && chown -R "$SSH_USER:$SSH_USER" "$UH/scripts" 2>/dev/null || true
+# ── .bash_profile: login shells (bash -lc) should also source .bashrc ───
+cat > "$UH/.bash_profile" << 'PROFILE'
+[ -f ~/.bashrc ] && . ~/.bashrc
+PROFILE
+chown "$SSH_USER:$SSH_USER" "$UH/.bash_profile" 2>/dev/null || true
+
+# ── Scripts chown + extensionless symlinks ────────────────────
+if [ -d "$UH/scripts" ]; then
+    chown -R "$SSH_USER:$SSH_USER" "$UH/scripts" 2>/dev/null || true
+    # Create symlinks without .sh so commands work as `test-local` not `test-local.sh`
+    for f in "$UH/scripts"/*.sh; do
+        [ -f "$f" ] || continue
+        target="$UH/scripts/$(basename "$f" .sh)"
+        [ -e "$target" ] || ln -sf "$f" "$target" 2>/dev/null || true
+    done
+fi
 chown "$SSH_USER:$SSH_USER" "$UH/.bashrc" 2>/dev/null || true

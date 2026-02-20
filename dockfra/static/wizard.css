@@ -138,6 +138,9 @@ header .sub{color:var(--muted);font-size:.85rem}
 .action-card-custom{width:140px;margin-top:2px}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .action-card-run{padding:5px 10px !important;flex-shrink:0;font-size:.82rem !important;min-width:32px}
+.action-card-tty{opacity:.75}
+.action-card-tty:hover{border-color:var(--muted);background:var(--bg2)}
+.action-card-tty-hint{font-size:.7rem;color:var(--muted);white-space:nowrap;flex-shrink:0;padding:2px 6px;border:1px solid var(--border);border-radius:4px}
 
 .w-status{display:flex;flex-direction:column;gap:6px}
 .status-item{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.85rem}

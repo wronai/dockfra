@@ -315,16 +315,13 @@ def step_do_launch(form):
     _state.update({"stacks":stacks,"environment":env})
     save_env({"STACKS": stacks, "ENVIRONMENT": env})
 
-    target_names = ["management","app","devices"] if stacks == "all" else [stacks]
+    target_names = list(STACKS.keys()) if stacks == "all" else [stacks]
     # Pre-flight: check for missing required vars
     if step_preflight_fill(target_names):
         return  # form shown, wait for user
 
     cf = "docker-compose.yml" if env == "local" else "docker-compose-production.yml"
-    targets = []
-    if stacks in ("all","management"): targets.append(("management",MGMT))
-    if stacks in ("all","app"):        targets.append(("app",APP))
-    if stacks in ("all","devices"):    targets.append(("devices",DEVS))
+    targets = [(name, STACKS[name]) for name in target_names if name in STACKS]
 
     _launch_sid = getattr(_tl, 'sid', None)
     def run():
@@ -334,7 +331,10 @@ def step_do_launch(form):
         # ── Build shared SSH base image (required by all ssh-* roles) ─────────
         ssh_base_dockerfile = ROOT / "shared" / "Dockerfile.ssh-base"
         ssh_base_context    = ROOT / "shared"
-        needs_base = any(n in [t[0] for t in targets] for n in ("management","app"))
+        needs_base = any(
+            any(sd.name.startswith("ssh-") and (sd / "Dockerfile").exists()
+                for sd in path.iterdir() if sd.is_dir())
+            for _, path in targets)
         if needs_base and ssh_base_dockerfile.exists():
             # Only rebuild if the image doesn't already exist
             check = subprocess.run(

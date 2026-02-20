@@ -220,7 +220,7 @@ function renderActionGrid(d){
   if(d.label){ const lbl=document.createElement('div'); lbl.className='w-action-grid-label'; lbl.textContent=d.label; grid.appendChild(lbl); }
   d.commands.forEach(cmd => {
     const card = document.createElement('div');
-    card.className = 'action-card';
+    card.className = cmd.tty ? 'action-card action-card-tty' : 'action-card';
     const info = document.createElement('div');
     info.className = 'action-card-info';
     info.innerHTML = `<span class="action-card-cmd">${cmd.cmd}</span><span class="action-card-desc">${cmd.desc}</span>`;
@@ -231,24 +231,39 @@ function renderActionGrid(d){
     runBtn.textContent = '\u25b6';
     runBtn.title = cmd.desc;
 
-    function runCard(){
-      const arg = paramWidget ? paramWidget._getValue() : '';
-      if(cmd.params && cmd.params.length > 0 && !arg){
-        if(paramWidget) paramWidget._markRequired();
-        return;
+    if(cmd.tty){
+      const hint = document.createElement('span');
+      hint.className = 'action-card-tty-hint';
+      hint.textContent = '\ud83d\udda5\ufe0f';
+      hint.title = 'Wymaga terminala SSH';
+      card.appendChild(hint);
+      runBtn.onclick = () => {
+        const div = document.createElement('div');
+        div.className = 'msg user';
+        div.innerHTML = `<div class="avatar">\ud83d\udc64</div><div class="bubble">${cmd.cmd}</div>`;
+        chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+        socket.emit('action', {value: d.run_value, form: {ssh_cmd: cmd.cmd, ssh_arg: ''}});
+      };
+      card.appendChild(runBtn);
+    } else {
+      function runCard(){
+        const arg = paramWidget ? paramWidget._getValue() : '';
+        if(cmd.params && cmd.params.length > 0 && !arg){
+          if(paramWidget) paramWidget._markRequired();
+          return;
+        }
+        const display = arg ? `${cmd.cmd} ${arg}` : cmd.cmd;
+        const div = document.createElement('div');
+        div.className = 'msg user';
+        div.innerHTML = `<div class="avatar">\ud83d\udc64</div><div class="bubble">${display}</div>`;
+        chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+        socket.emit('action', {value: d.run_value, form: {ssh_cmd: cmd.cmd, ssh_arg: arg}});
       }
-      const display = arg ? `${cmd.cmd} ${arg}` : cmd.cmd;
-      const div = document.createElement('div');
-      div.className = 'msg user';
-      div.innerHTML = `<div class="avatar">\ud83d\udc64</div><div class="bubble">${display}</div>`;
-      chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
-      socket.emit('action', {value: d.run_value, form: {ssh_cmd: cmd.cmd, ssh_arg: arg}});
+      const paramWidget = buildParamWidget(cmd, runCard);
+      if(paramWidget) card.appendChild(paramWidget);
+      runBtn.onclick = runCard;
+      card.appendChild(runBtn);
     }
-
-    const paramWidget = buildParamWidget(cmd, runCard);
-    if(paramWidget) card.appendChild(paramWidget);
-    runBtn.onclick = runCard;
-    card.appendChild(runBtn);
     grid.appendChild(card);
   });
   widgets.appendChild(grid);

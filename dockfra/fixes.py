@@ -300,7 +300,7 @@ def show_missing_env(stack_name: str):
             {"label": "⚙️ Pełne ustawienia",   "value": "settings"},
         ])
     else:
-        env_file = (MGMT if stack_name=="management" else APP if stack_name=="app" else DEVS) / ".env"
+        env_file = STACKS.get(stack_name, ROOT / stack_name) / ".env"
         if env_file.exists():
             msg("Nie znaleziono brakujących znanych zmiennych. Zawartość pliku `.env`:")
             code_block(env_file.read_text())

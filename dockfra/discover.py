@@ -59,7 +59,8 @@ def _parse_ssh_makefile(path: Path):
         body = "\n".join(body_lines)
         params = [p for p in _re.findall(r'\$\((\w+)\)', body) if p not in _MAKE_SKIP_VARS]
         params = list(dict.fromkeys(params))
-        targets[name] = {"desc": desc, "params": params}
+        tty = bool(_re.search(r'docker exec -it|\$\(SSH\)|\$\{SSH\}', body))
+        targets[name] = {"desc": desc, "params": params, "tty": tty}
     return container, user, port, targets
 
 
@@ -132,14 +133,14 @@ def _discover_ssh_roles():
                     make_col = f"`make -f {mk_rel} {cmd}`" if mk_rel else ""
                 commands.append((ssh_col, info["desc"], make_col))
 
-            # Build cmd_meta: cmd → (label, [params], hint, placeholder)
+            # Build cmd_meta: cmd → (label, [params], hint, placeholder, tty)
             cmd_meta = {}
             for cmd, info in targets.items():
                 params = info["params"]
                 hint, placeholder = "", ""
                 if params:
                     hint, placeholder = _PARAM_HINTS.get(params[0], (params[0], ""))
-                cmd_meta[cmd] = (info["desc"], params, hint, placeholder)
+                cmd_meta[cmd] = (info["desc"], params, hint, placeholder, info.get("tty", False))
 
             roles[role] = {
                 "container": container, "user": user, "port": port,
@@ -182,9 +183,9 @@ def _step_ssh_info(value: str):
 
     cmds_data = []
     for cmd, meta in info["cmd_meta"].items():
-        desc, params, hint, placeholder = meta
+        desc, params, hint, placeholder, tty = meta if len(meta) == 5 else (*meta, False)
         options_endpoint = None
-        if params:
+        if not tty and params:
             tmpl = _PARAM_OPTIONS_API.get(params[0])
             if tmpl:
                 options_endpoint = tmpl.format(role=role)
@@ -192,6 +193,7 @@ def _step_ssh_info(value: str):
             "cmd": cmd, "desc": desc,
             "params": params, "hint": hint, "placeholder": placeholder,
             "options_endpoint": options_endpoint,
+            "tty": tty,
         })
     run_value = f"run_ssh_cmd::{role}::{info['container']}::{info['user']}"
     action_grid(run_value, cmds_data)
@@ -229,31 +231,68 @@ def run_ssh_cmd(value: str, form: dict):
     if not meta:
         msg(f"❌ Nieznana komenda: `{cmd_name}`"); return
 
-    params = meta[1]
-    # Build the shell command
+    desc, params, hint, placeholder = meta[:4]
+    tty = meta[4] if len(meta) > 4 else False
+
+    # Build shell argument string
     if params and arg:
-        # If the param suggests quoting (multi-word args), wrap in quotes
         needs_quote = params[0] in ("Q", "TITLE", "MSG", "F", "FEATURE")
         shell_arg   = f'"{arg}"' if needs_quote else arg
         cmd_str = f"{cmd_name} {shell_arg}"
     else:
         cmd_str = cmd_name
 
-    label = meta[0]
-    msg(f"▶️ Uruchamiam: `{cmd_str}` na `{container}`")
+    msg(f"▶️ Uruchamiam: `{cmd_str}`")
     _tl_sid = getattr(_tl, 'sid', None)
 
     def _run():
         _tl.sid = _tl_sid
         try:
-            rc, out = run_cmd(
-                ["docker", "exec", "-u", user, container,
-                 "bash", "-lc", cmd_str],
-            )
-            if rc == 0:
-                msg(f"✅ `{cmd_str}` — zakończono.")
+            if tty:
+                # TTY command (docker exec -it / SSH): run docker exec directly from host
+                # Parse the container name from the Makefile body pattern exec-<svc>
+                svc_map = {
+                    "exec-backend":  (cname("backend"),        ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && echo '=== processes ===' && ps aux 2>/dev/null | head -6"]),
+                    "exec-frontend": (cname("frontend"),       ["sh", "-c", "echo '=== /usr/share/nginx/html ===' && ls /usr/share/nginx/html 2>/dev/null | head -20"]),
+                    "exec-mobile":   (cname("mobile-backend"), ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && ps aux 2>/dev/null | head -6"]),
+                    "exec-db":       (cname("db"),             ["psql", "-U", "postgres", "-c", "\\l"]),
+                    "exec-redis":    (cname("redis"),          ["redis-cli", "ping"]),
+                }
+                if cmd_name in svc_map:
+                    tgt_container, tgt_cmd = svc_map[cmd_name]
+                    rc, out = run_cmd(["docker", "exec", tgt_container] + tgt_cmd)
+                    if rc == 0:
+                        msg(f"✅ `{cmd_name}` — wynik:\n```\n{out[:2000]}\n```")
+                    else:
+                        msg(f"⚠️ `{cmd_name}` — kontener `{tgt_container}` niedostępny lub błąd (kod {rc}).")
+                else:
+                    ssh_port = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
+                    msg(f"🖥️ `{cmd_name}` wymaga terminala TTY.\n"
+                        f"Otwórz terminal i wpisz:\n```\nssh {user}@localhost -p {ssh_port}\n```\n"
+                        f"Następnie uruchom: `{cmd_str}`")
+                    rc = 0
             else:
-                msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
+                # Try direct script path first (works without .bash_profile / extensionless symlinks),
+                # fall back to sourcing .bashrc (works after container rebuild with new ssh-base-init.sh)
+                script = f"/home/{user}/scripts/{cmd_name}.sh"
+                if params and arg:
+                    needs_quote = params[0] in ("Q", "TITLE", "MSG", "F", "FEATURE")
+                    _sa = f'"{arg}"' if needs_quote else arg
+                    inner = f"'{script}' {_sa}"
+                else:
+                    inner = f"'{script}'"
+                shell = (
+                    f"if [ -x '{script}' ]; then {inner}; "
+                    f"else source ~/.bashrc 2>/dev/null; {cmd_str}; fi"
+                )
+                rc, out = run_cmd(
+                    ["docker", "exec", "-u", user, container, "bash", "-lc", shell],
+                )
+            if not tty:
+                if rc == 0:
+                    msg(f"✅ `{cmd_str}` — zakończono.")
+                else:
+                    msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
         except Exception as e:
             msg(f"❌ Błąd: {e}")
         port = _state.get(f"SSH_{role.upper()}_PORT", _get_role(role)["port"])

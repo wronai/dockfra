@@ -1,3 +1,24 @@
+## [1.0.22] - 2026-02-20
+
+### Summary
+
+fix(docs): configuration management system
+
+### Docs
+
+- docs: update PLAN-post-launch-plugins.md
+
+### Other
+
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/fixes.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+- scripts: update ssh-base-init.sh
+
+
 ## [1.0.21] - 2026-02-20
 
 ### Summary

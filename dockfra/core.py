@@ -19,7 +19,7 @@ __all__ = [
     '_ENV_TO_STATE', '_STATE_TO_ENV',
     # Paths & project config
     'ROOT', 'MGMT', 'APP', 'DEVS', 'WIZARD_DIR', 'WIZARD_ENV', '_PKG_DIR',
-    'PROJECT', 'cname', 'short_name',
+    'PROJECT', 'STACKS', 'cname', 'short_name',
     # ENV
     'ENV_SCHEMA', '_schema_defaults', 'load_env', 'save_env',
     # Helpers
@@ -66,16 +66,23 @@ def _docker_client():
     except Exception:
         return None
 
-_WIZARD_SYSTEM_PROMPT = """
-You are the Dockfra Setup Wizard assistant. Dockfra is a multi-stack Docker infrastructure
-(management, app, devices) managed through this chat UI.
-Help the user configure environment variables, troubleshoot Docker errors, understand
-service roles, and launch stacks. Be concise and practical. Use Markdown.
-Available stacks: management (ssh-manager, ssh-autopilot, ssh-monitor),
-app (frontend, backend, db, redis, mobile-backend, desktop-app),
-devices (ssh-rpi3, vnc-rpi3).
-If asked about a Docker error, suggest the most likely fix.
-"""
+def _build_wizard_prompt() -> str:
+    """Build system prompt dynamically from discovered stacks."""
+    try:
+        stacks_desc = ", ".join(STACKS.keys()) if STACKS else "none discovered yet"
+    except NameError:
+        stacks_desc = "not yet discovered"
+    return (
+        "You are the Dockfra Setup Wizard assistant. Dockfra is a multi-stack Docker infrastructure "
+        "managed through this chat UI.\n"
+        "Help the user configure environment variables, troubleshoot Docker errors, understand "
+        "service roles, and launch stacks. Be concise and practical. Use Markdown.\n"
+        f"Available stacks: {stacks_desc}.\n"
+        "If asked about a Docker error, suggest the most likely fix."
+    )
+
+# Lazy: rebuilt after STACKS is populated (see module bottom)
+_WIZARD_SYSTEM_PROMPT = _build_wizard_prompt()
 
 _CMD_SUGGEST_SYSTEM_PROMPT = """You are a Docker infrastructure troubleshooting expert.
 Analyze the container logs provided by the user and respond ONLY with a valid JSON object.
@@ -118,9 +125,6 @@ def _sid_emit(event, data):
 
 _PKG_DIR   = Path(__file__).parent.resolve()
 ROOT       = Path(os.environ.get("DOCKFRA_ROOT", str(_PKG_DIR.parent))).resolve()
-MGMT       = ROOT / "management"
-APP        = ROOT / "app"
-DEVS       = ROOT / "devices"
 WIZARD_DIR = _PKG_DIR
 WIZARD_ENV = WIZARD_DIR / ".env"
 
@@ -142,23 +146,96 @@ def short_name(container: str) -> str:
     pfx = PROJECT['prefix'] + '-'
     return container[len(pfx):] if container.startswith(pfx) else container
 
-# ── ENV schema ───────────────────────────────────────────────────────────────
-# Each entry: key, label, group, type(text|password|select), placeholder,
-#             required_for(list of stacks), options(for select), default
-ENV_SCHEMA = [
+# ── A: Auto-discover stacks ────────────────────────────────────────────────
+# Scan ROOT for subdirs containing docker-compose.yml.
+# dockfra.yaml can override/extend stack definitions.
+def _discover_stacks() -> dict:
+    """Auto-discover stacks: subdirs of ROOT that contain docker-compose.yml."""
+    stacks = {}
+    skip = {".git", ".venv", "__pycache__", "node_modules", "dockfra", "shared",
+            "scripts", "tests", "keys", ".github"}
+    for d in sorted(ROOT.iterdir()):
+        if not d.is_dir() or d.name.startswith(".") or d.name in skip:
+            continue
+        if (d / "docker-compose.yml").exists() or (d / "docker-compose.yaml").exists():
+            stacks[d.name] = d
+    return stacks
+
+STACKS = _discover_stacks()
+# Backward-compatible aliases (used by existing code)
+MGMT = STACKS.get("management", ROOT / "management")
+APP  = STACKS.get("app",        ROOT / "app")
+DEVS = STACKS.get("devices",    ROOT / "devices")
+# Rebuild prompt now that STACKS is known
+_WIZARD_SYSTEM_PROMPT = _build_wizard_prompt()
+
+# ── C: Optional project config (dockfra.yaml) ────────────────────────────
+def _load_project_config() -> dict:
+    """Load optional dockfra.yaml from project root.
+    Supports: env (label/type/group overrides), stacks, lang."""
+    for name in ("dockfra.yaml", "dockfra.yml"):
+        cfg_path = ROOT / name
+        if cfg_path.exists():
+            try:
+                import yaml
+                return yaml.safe_load(cfg_path.read_text()) or {}
+            except ImportError:
+                # Fallback: minimal YAML subset (key: value)
+                data = {}
+                for line in cfg_path.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and ":" in line:
+                        k, _, v = line.partition(":")
+                        data[k.strip()] = v.strip()
+                return data
+            except Exception:
+                pass
+    return {}
+
+_PROJECT_CONFIG = _load_project_config()
+
+# ── B: Auto-discover env vars from docker-compose files ───────────────────
+def _parse_compose_env_vars() -> dict:
+    """Scan all docker-compose files for ${VAR:-default} patterns.
+    Returns dict: VAR_NAME → {"default": ..., "stack": ..., "type": ...}"""
+    found: dict[str, dict] = {}
+    pattern = _re.compile(r'\$\{([A-Z][A-Z0-9_]*)(?::?-([^}]*))?\}')
+    skip_vars = {"UID", "GID", "HOME", "USER", "PWD", "PATH", "HOSTNAME"}
+    for stack_name, stack_path in STACKS.items():
+        for compose_name in ("docker-compose.yml", "docker-compose.yaml",
+                             "docker-compose-production.yml"):
+            cf = stack_path / compose_name
+            if not cf.exists():
+                continue
+            try:
+                text = cf.read_text(errors="replace")
+            except Exception:
+                continue
+            for m in pattern.finditer(text):
+                var, default = m.group(1), m.group(2) or ""
+                if var in skip_vars:
+                    continue
+                if var not in found:
+                    # Infer type from name
+                    vtype = "text"
+                    if any(k in var for k in ("PASSWORD", "SECRET", "KEY", "TOKEN")):
+                        vtype = "password"
+                    elif any(k in var for k in ("PORT",)):
+                        vtype = "text"
+                    found[var] = {"default": default, "stack": stack_name, "type": vtype}
+    return found
+
+_COMPOSE_VARS = _parse_compose_env_vars()
+
+# ── ENV schema: core + discovered + dockfra.yaml overrides ───────────────
+# Core entries (always present — infrastructure/wizard vars)
+_CORE_ENV_SCHEMA = [
     # Infrastructure
     {"key":"ENVIRONMENT",       "label":"Środowisko",           "group":"Infrastructure",
      "type":"select", "options":[("local","Local"),("production","Production")], "default":"local"},
     {"key":"STACKS",            "label":"Stacki do uruchomienia", "group":"Infrastructure",
-     "type":"select", "options":[("all","Wszystkie"),("management","Management"),("app","App"),("devices","Devices")], "default":"all"},
-    # Device SSH
-    {"key":"DEVICE_IP",         "label":"IP urządzenia",         "group":"Device",
-     "type":"text",  "placeholder":"192.168.1.100",              "default":"",
-     "required_for":["deploy"]},
-    {"key":"DEVICE_USER",       "label":"Użytkownik SSH",         "group":"Device",
-     "type":"text",  "placeholder":"pi",                         "default":"pi"},
-    {"key":"DEVICE_PORT",       "label":"Port SSH",               "group":"Device",
-     "type":"text",  "placeholder":"22",                         "default":"22"},
+     "type":"select", "options":[("all","Wszystkie")] + [(s,s.capitalize()) for s in STACKS],
+     "default":"all"},
     # Git
     {"key":"GIT_NAME",          "label":"Git user.name",          "group":"Git",
      "type":"text",  "placeholder":"Jan Kowalski",               "default":""},
@@ -178,35 +255,67 @@ ENV_SCHEMA = [
          ("openai/gpt-4o-mini",        "GPT-4o Mini"),
          ("openai/gpt-4o",             "GPT-4o"),
      ], "default":"google/gemini-flash-1.5"},
-    # App stack
-    {"key":"POSTGRES_USER",     "label":"PostgreSQL user",        "group":"App",
-     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra",
-     "required_for":["app"]},
-    {"key":"POSTGRES_PASSWORD", "label":"PostgreSQL password",    "group":"App",
-     "type":"password","placeholder":"hasło",                   "default":"",
-     "required_for":["app"]},
-    {"key":"POSTGRES_DB",       "label":"PostgreSQL database",    "group":"App",
-     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra",
-     "required_for":["app"]},
-    {"key":"REDIS_PASSWORD",    "label":"Redis password",          "group":"App",
-     "type":"password","placeholder":"hasło",                   "default":""},
-    {"key":"SECRET_KEY",        "label":"App SECRET_KEY",          "group":"App",
-     "type":"password","placeholder":"losowy klucz",            "default":"",
-     "required_for":["app"]},
-    {"key":"APP_NAME",          "label":"Nazwa aplikacji",         "group":"App",
-     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra"},
-    {"key":"APP_VERSION",       "label":"Wersja aplikacji",        "group":"App",
-     "type":"text",  "placeholder":"0.1.0",                      "default":"0.1.0"},
-    {"key":"DEPLOY_MODE",       "label":"Deploy mode",            "group":"App",
-     "type":"select", "options":[("local","Local"),("production","Production")], "default":"local"},
     # Ports
-    {"key":"VNC_RPI3_PORT",     "label":"Port VNC RPi3",           "group":"Ports",
-     "type":"text",  "placeholder":"6080",                       "default":"6080"},
-    {"key":"DESKTOP_VNC_PORT",  "label":"Port Desktop VNC",        "group":"Ports",
-     "type":"text",  "placeholder":"6081",                       "default":"6081"},
     {"key":"WIZARD_PORT",       "label":"Port Wizarda",            "group":"Ports",
      "type":"text",  "placeholder":"5050",                       "default":"5050"},
 ]
+
+def _build_env_schema() -> list:
+    """Merge core schema + auto-discovered compose vars + dockfra.yaml overrides."""
+    # Start with core entries
+    schema = list(_CORE_ENV_SCHEMA)
+    known_keys = {e["key"] for e in schema}
+
+    # dockfra.yaml env overrides: {VAR: {label:..., type:..., group:...}}
+    yaml_env = _PROJECT_CONFIG.get("env", {}) or {}
+
+    # Add discovered compose env vars (not already in core)
+    for var, info in sorted(_COMPOSE_VARS.items()):
+        if var in known_keys:
+            continue
+        stack = info["stack"]
+        override = yaml_env.get(var, {}) if isinstance(yaml_env, dict) else {}
+        entry = {
+            "key": var,
+            "label": override.get("label", var.replace("_", " ").title()),
+            "group": override.get("group", stack.capitalize()),
+            "type":  override.get("type", info["type"]),
+            "placeholder": override.get("placeholder", info["default"]),
+            "default": info["default"],
+        }
+        req = override.get("required_for")
+        if req:
+            entry["required_for"] = req if isinstance(req, list) else [req]
+        elif stack:
+            entry["required_for"] = [stack]
+        schema.append(entry)
+        known_keys.add(var)
+
+    # Add any dockfra.yaml vars that weren't in compose or core
+    if isinstance(yaml_env, dict):
+        for var, meta in yaml_env.items():
+            if var in known_keys:
+                # Apply overrides to existing entries
+                for e in schema:
+                    if e["key"] == var:
+                        if isinstance(meta, dict):
+                            for k in ("label", "group", "type", "placeholder"):
+                                if k in meta:
+                                    e[k] = meta[k]
+                        break
+                continue
+            if isinstance(meta, dict):
+                schema.append({
+                    "key": var,
+                    "label": meta.get("label", var),
+                    "group": meta.get("group", "Custom"),
+                    "type":  meta.get("type", "text"),
+                    "placeholder": meta.get("placeholder", ""),
+                    "default": meta.get("default", ""),
+                })
+    return schema
+
+ENV_SCHEMA = _build_env_schema()
 
 # ── env file helpers ──────────────────────────────────────────────────────────
 def _schema_defaults() -> dict:
@@ -270,30 +379,16 @@ _state: dict = {}
 _conversation: list[dict] = []
 _logs: list[dict] = []
 
-# mapping: ENV key → _state key (lowercase)
-_ENV_TO_STATE = {
-    "ENVIRONMENT":       "environment",
-    "STACKS":            "stacks",
-    "DEVICE_IP":         "device_ip",
-    "DEVICE_USER":       "device_user",
-    "DEVICE_PORT":       "device_port",
-    "GIT_NAME":          "git_name",
-    "GIT_EMAIL":         "git_email",
+# mapping: ENV key → _state key (auto-generated from ENV_SCHEMA)
+# Special cases for backward compat (old code uses these state key names)
+_STATE_KEY_ALIASES = {
     "GITHUB_SSH_KEY":    "github_key",
     "OPENROUTER_API_KEY":"openrouter_key",
-    "LLM_MODEL":         "llm_model",
-    "POSTGRES_USER":     "postgres_user",
-    "POSTGRES_PASSWORD": "postgres_password",
-    "POSTGRES_DB":       "postgres_db",
-    "REDIS_PASSWORD":    "redis_password",
-    "SECRET_KEY":        "secret_key",
-    "APP_NAME":          "app_name",
-    "APP_VERSION":       "app_version",
-    "DEPLOY_MODE":       "deploy_mode",
-    "VNC_RPI3_PORT":     "vnc_rpi3_port",
-    "DESKTOP_VNC_PORT":  "desktop_vnc_port",
-    "WIZARD_PORT":       "wizard_port",
 }
+_ENV_TO_STATE = {}
+for _e in ENV_SCHEMA:
+    _k = _e["key"]
+    _ENV_TO_STATE[_k] = _STATE_KEY_ALIASES.get(_k, _k.lower())
 _STATE_TO_ENV = {v: k for k, v in _ENV_TO_STATE.items()}
 
 def reset_state():
