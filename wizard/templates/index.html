@@ -359,14 +359,21 @@ function renderStatus(d){
 }
 
 function renderProgress(d){
-  const wrap = document.createElement('div');
-  wrap.className = `w-progress${d.done?' done':''}${d.error?' err':''}`;
-  const icon = d.done ? '✅' : d.error ? '❌' : '';
-  wrap.innerHTML = d.done||d.error
-    ? `<span>${icon}</span><span>${d.label}</span>`
-    : `<div class="spin"></div><span>${d.label}</span>`;
-  widgets.appendChild(wrap);
-  chat.scrollTop = chat.scrollHeight;
+  // Progress goes to processes panel, not #widgets — upsert by slug key
+  const key = 'proc-' + d.label.replace(/[^a-z0-9]/gi,'_');
+  let item = processesList.querySelector(`[data-proc="${key}"]`);
+  if (!item) {
+    item = document.createElement('div');
+    item.className = 'process-item';
+    item.setAttribute('data-proc', key);
+    processesList.appendChild(item);
+  }
+  const statusClass = d.done ? 'running' : d.error ? 'stopped' : 'unknown';
+  const icon = d.done ? '✅' : d.error ? '❌' : '⏳';
+  item.innerHTML = `
+    <div class="process-status ${statusClass}"></div>
+    <span class="process-name">${icon} ${d.label}</span>`;
+  processesList.scrollTop = processesList.scrollHeight;
 }
 
 // ── Panel resizing ───────────────────────────────────────────────────────────

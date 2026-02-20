@@ -161,7 +161,7 @@ services:
     container_name: dockfra-desktop-app
     hostname: desktop-app
     restart: unless-stopped
-    networks: [desktop-net, proxy-net, backend-net]
+    networks: [proxy-net, backend-net]
     volumes:
       - desktop-app-data:/app/dist
       - frontend-data:/output/frontend

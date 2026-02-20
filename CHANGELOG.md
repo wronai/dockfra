@@ -1,3 +1,15 @@
+## [1.0.9] - 2026-02-20
+
+### Summary
+
+feat(docs): docs module improvements
+
+### Other
+
+- docker: update docker-compose.yml
+- update wizard/templates/index.html
+
+
 ## [1.0.8] - 2026-02-20
 
 ### Summary
