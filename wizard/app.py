@@ -2,13 +2,128 @@
 """Dockfra Setup Wizard — http://localhost:5050"""
 import os, json, subprocess, threading, time
 from pathlib import Path
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
 ROOT = Path(__file__).parent.parent.resolve()
 MGMT = ROOT / "management"
 APP  = ROOT / "app"
 DEVS = ROOT / "devices"
+WIZARD_DIR = Path(__file__).parent
+WIZARD_ENV = WIZARD_DIR / ".env"
+
+# ── ENV schema ───────────────────────────────────────────────────────────────
+# Each entry: key, label, group, type(text|password|select), placeholder,
+#             required_for(list of stacks), options(for select), default
+ENV_SCHEMA = [
+    # Infrastructure
+    {"key":"ENVIRONMENT",       "label":"Środowisko",           "group":"Infrastructure",
+     "type":"select", "options":[("local","Local"),("production","Production")], "default":"local"},
+    {"key":"STACKS",            "label":"Stacki do uruchomienia", "group":"Infrastructure",
+     "type":"select", "options":[("all","Wszystkie"),("management","Management"),("app","App"),("devices","Devices")], "default":"all"},
+    # Device SSH
+    {"key":"DEVICE_IP",         "label":"IP urządzenia",         "group":"Device",
+     "type":"text",  "placeholder":"192.168.1.100",              "default":"",
+     "required_for":["deploy"]},
+    {"key":"DEVICE_USER",       "label":"Użytkownik SSH",         "group":"Device",
+     "type":"text",  "placeholder":"pi",                         "default":"pi"},
+    {"key":"DEVICE_PORT",       "label":"Port SSH",               "group":"Device",
+     "type":"text",  "placeholder":"22",                         "default":"22"},
+    # Git
+    {"key":"GIT_NAME",          "label":"Git user.name",          "group":"Git",
+     "type":"text",  "placeholder":"Jan Kowalski",               "default":""},
+    {"key":"GIT_EMAIL",         "label":"Git user.email",         "group":"Git",
+     "type":"text",  "placeholder":"jan@example.com",            "default":""},
+    {"key":"GITHUB_SSH_KEY",    "label":"Ścieżka klucza SSH",     "group":"Git",
+     "type":"text",  "placeholder":"~/.ssh/id_ed25519",          "default":str(Path.home()/".ssh/id_ed25519")},
+    # LLM
+    {"key":"OPENROUTER_API_KEY","label":"OpenRouter API Key",     "group":"LLM",
+     "type":"password","placeholder":"sk-or-v1-...",             "default":"",
+     "required_for":["management"]},
+    {"key":"LLM_MODEL",         "label":"Model LLM",              "group":"LLM",
+     "type":"select", "options":[
+         ("google/gemini-flash-1.5",   "Gemini Flash 1.5"),
+         ("google/gemini-2.0-flash-001","Gemini 2.0 Flash"),
+         ("anthropic/claude-3-5-haiku","Claude 3.5 Haiku"),
+         ("openai/gpt-4o-mini",        "GPT-4o Mini"),
+         ("openai/gpt-4o",             "GPT-4o"),
+     ], "default":"google/gemini-flash-1.5"},
+    # App stack
+    {"key":"POSTGRES_USER",     "label":"PostgreSQL user",        "group":"App",
+     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra",
+     "required_for":["app"]},
+    {"key":"POSTGRES_PASSWORD", "label":"PostgreSQL password",    "group":"App",
+     "type":"password","placeholder":"hasło",                   "default":"",
+     "required_for":["app"]},
+    {"key":"POSTGRES_DB",       "label":"PostgreSQL database",    "group":"App",
+     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra",
+     "required_for":["app"]},
+    {"key":"REDIS_PASSWORD",    "label":"Redis password",          "group":"App",
+     "type":"password","placeholder":"hasło",                   "default":""},
+    {"key":"SECRET_KEY",        "label":"App SECRET_KEY",          "group":"App",
+     "type":"password","placeholder":"losowy klucz",            "default":"",
+     "required_for":["app"]},
+    {"key":"APP_NAME",          "label":"Nazwa aplikacji",         "group":"App",
+     "type":"text",  "placeholder":"dockfra",                    "default":"dockfra"},
+    {"key":"APP_VERSION",       "label":"Wersja aplikacji",        "group":"App",
+     "type":"text",  "placeholder":"0.1.0",                      "default":"0.1.0"},
+    {"key":"DEPLOY_MODE",       "label":"Deploy mode",            "group":"App",
+     "type":"select", "options":[("local","Local"),("production","Production")], "default":"local"},
+    # Ports
+    {"key":"VNC_RPI3_PORT",     "label":"Port VNC RPi3",           "group":"Ports",
+     "type":"text",  "placeholder":"6080",                       "default":"6080"},
+    {"key":"DESKTOP_VNC_PORT",  "label":"Port Desktop VNC",        "group":"Ports",
+     "type":"text",  "placeholder":"6081",                       "default":"6081"},
+    {"key":"WIZARD_PORT",       "label":"Port Wizarda",            "group":"Ports",
+     "type":"text",  "placeholder":"5050",                       "default":"5050"},
+]
+
+# ── env file helpers ──────────────────────────────────────────────────────────
+def _schema_defaults() -> dict:
+    return {e["key"]: e["default"] for e in ENV_SCHEMA}
+
+def load_env() -> dict:
+    """Load wizard/.env, create from .env.example if missing."""
+    example = WIZARD_DIR / ".env.example"
+    if not WIZARD_ENV.exists() and example.exists():
+        WIZARD_ENV.write_text(example.read_text())
+    data = _schema_defaults()
+    if WIZARD_ENV.exists():
+        for line in WIZARD_ENV.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                data[k.strip()] = v.strip()
+    return data
+
+def save_env(updates: dict):
+    """Write updates to wizard/.env preserving comments and unknown keys."""
+    existing: dict[str, str] = {}
+    lines_out: list[str] = []
+    if WIZARD_ENV.exists():
+        for line in WIZARD_ENV.read_text().splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                k, _, v = stripped.partition("=")
+                existing[k.strip()] = line  # keep original line
+            lines_out.append(line)
+    written: set[str] = set()
+    result: list[str] = []
+    for line in lines_out:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            k = stripped.partition("=")[0].strip()
+            if k in updates:
+                result.append(f"{k}={updates[k]}")
+                written.add(k)
+            else:
+                result.append(line)
+        else:
+            result.append(line)
+    for k, v in updates.items():
+        if k not in written:
+            result.append(f"{k}={v}")
+    WIZARD_ENV.write_text("\n".join(result) + "\n")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dockfra-wizard"
@@ -25,16 +140,38 @@ _state: dict = {}
 _conversation: list[dict] = []
 _logs: list[dict] = []
 
+# mapping: ENV key → _state key (lowercase)
+_ENV_TO_STATE = {
+    "ENVIRONMENT":       "environment",
+    "STACKS":            "stacks",
+    "DEVICE_IP":         "device_ip",
+    "DEVICE_USER":       "device_user",
+    "DEVICE_PORT":       "device_port",
+    "GIT_NAME":          "git_name",
+    "GIT_EMAIL":         "git_email",
+    "GITHUB_SSH_KEY":    "github_key",
+    "OPENROUTER_API_KEY":"openrouter_key",
+    "LLM_MODEL":         "llm_model",
+    "POSTGRES_USER":     "postgres_user",
+    "POSTGRES_PASSWORD": "postgres_password",
+    "POSTGRES_DB":       "postgres_db",
+    "REDIS_PASSWORD":    "redis_password",
+    "SECRET_KEY":        "secret_key",
+    "APP_NAME":          "app_name",
+    "APP_VERSION":       "app_version",
+    "DEPLOY_MODE":       "deploy_mode",
+    "VNC_RPI3_PORT":     "vnc_rpi3_port",
+    "DESKTOP_VNC_PORT":  "desktop_vnc_port",
+    "WIZARD_PORT":       "wizard_port",
+}
+_STATE_TO_ENV = {v: k for k, v in _ENV_TO_STATE.items()}
+
 def reset_state():
     global _state, _conversation, _logs
-    _state = {
-        "step": "welcome",
-        "environment": "local",
-        "device_ip": "", "device_user": "pi", "device_port": "22",
-        "github_key": str(Path.home() / ".ssh/id_ed25519"),
-        "openrouter_key": "", "llm_model": "google/gemini-3-flash-preview",
-        "git_name": "", "git_email": "",
-    }
+    env = load_env()
+    _state = {"step": "welcome"}
+    for env_key, state_key in _ENV_TO_STATE.items():
+        _state[state_key] = env.get(env_key, "")
     _conversation = []
     _logs = []
 
@@ -102,16 +239,30 @@ def progress(label, done=False, error=False): widget({"type":"progress","label":
 def clear_widgets():                socketio.emit("clear_widgets")
 
 # ── steps ────────────────────────────────────────────────────────────────────
+def _env_status_summary() -> str:
+    """One-line summary: which required vars are missing."""
+    missing = []
+    for e in ENV_SCHEMA:
+        sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+        if e.get("required_for") and not _state.get(sk):
+            missing.append(e["key"])
+    if missing:
+        return f"⚠️ Brakuje: `{'`, `'.join(missing[:4])}{'...' if len(missing)>4 else ''}`"
+    return "✅ Konfiguracja kompletna"
+
+
 def step_welcome():
     _state["step"] = "welcome"
     cfg = detect_config()
     _state.update({k:v for k,v in cfg.items() if v})
     msg("# 👋 Dockfra Setup Wizard")
     msg("Jestem Twoim asystentem konfiguracji. Co chcesz zrobić?")
+    msg(_env_status_summary())
     buttons([
         {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
         {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-        {"label":"🔑 Konfiguruj credentials",   "value":"setup_creds"},
+        {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
+        {"label":"📊 Status kontenerów",         "value":"status"},
     ])
 
 def step_status():
@@ -124,7 +275,7 @@ def step_status():
         return
     msg(f"**Uruchomione kontenery ({len(containers)}):**")
     status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in containers])
-    buttons([{"label":"🔄 Odśwież","value":"status"},{"label":"📋 Logi","value":"pick_logs"},{"label":"🏠 Menu","value":"back"}])
+    buttons([{"label":"🔄 Odśwież","value":"status"},{"label":"🏠 Menu","value":"back"}])
 
 def step_pick_logs():
     clear_widgets()
@@ -145,32 +296,148 @@ def step_show_logs(container):
     except Exception as e: msg(f"❌ {e}")
     buttons([{"label":"🔄 Odśwież","value":f"logs::{container}"},{"label":"← Inne logi","value":"pick_logs"},{"label":"🏠 Menu","value":"back"}])
 
+def step_settings(group: str = ""):
+    """Show env editor for a specific group or group selector."""
+    _state["step"] = "settings"
+    clear_widgets()
+    groups = list(dict.fromkeys(e["group"] for e in ENV_SCHEMA))
+    if not group:
+        msg("## ⚙️ Ustawienia — wybierz sekcję")
+        msg("Kliknij sekcję aby edytować jej zmienne. Wszystko zapisywane do `wizard/.env`.")
+        # Show status for each group
+        rows = []
+        for g in groups:
+            g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
+            missing = [e for e in g_entries
+                       if e.get("required_for") and not _state.get(_ENV_TO_STATE.get(e["key"],e["key"].lower()))]
+            rows.append({"name": g, "ok": len(missing)==0,
+                         "detail": f"{len(missing)} brakujących" if missing else "OK"})
+        status_row(rows)
+        buttons(
+            [{"label": f"✏️ {g}", "value": f"settings_group::{g}"} for g in groups] +
+            [{"label": "🏠 Menu", "value": "back"}]
+        )
+    else:
+        entries = [e for e in ENV_SCHEMA if e["group"] == group]
+        msg(f"## ⚙️ {group}")
+        for e in entries:
+            sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+            cur = _state.get(sk, e.get("default", ""))
+            if e["type"] == "select":
+                opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
+                select(e["key"], e["label"], opts, cur)
+            else:
+                text_input(e["key"], e["label"],
+                           e.get("placeholder", ""), cur,
+                           sec=(e["type"] == "password"))
+        buttons([
+            {"label": "💾 Zapisz",    "value": f"save_settings::{group}"},
+            {"label": "← Sekcje",    "value": "settings"},
+            {"label": "🏠 Menu",      "value": "back"},
+        ])
+
+
+def step_save_settings(group: str, form: dict):
+    """Save edited group back to _state and wizard/.env."""
+    clear_widgets()
+    entries = [e for e in ENV_SCHEMA if e["group"] == group]
+    env_updates: dict[str, str] = {}
+    for e in entries:
+        raw = form.get(e["key"], "")
+        if raw is not None:
+            val = str(raw).strip()
+            sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+            _state[sk] = val
+            env_updates[e["key"]] = val
+    save_env(env_updates)
+    msg(f"✅ **{group}** — zapisano do `wizard/.env`")
+    for e in entries:
+        sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+        val = _state.get(sk, "")
+        display = mask(val) if e["type"] == "password" and val else (val or "(puste)")
+        msg(f"- `{e['key']}` = `{display}`")
+    buttons([
+        {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
+        {"label": "← Sekcje",        "value": "settings"},
+        {"label": "🚀 Uruchom",       "value": "launch_all"},
+        {"label": "🏠 Menu",          "value": "back"},
+    ])
+
+
+def preflight_check(stacks: list[str]) -> list[dict]:
+    """Return list of missing required vars for the given stacks.
+    Each item: {key, label, group, type, placeholder}."""
+    missing = []
+    for e in ENV_SCHEMA:
+        required = e.get("required_for", [])
+        if not any(r in stacks or r == "all" for r in required):
+            continue
+        sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+        if not _state.get(sk):
+            missing.append(e)
+    return missing
+
+
+def step_preflight_fill(stacks: list[str]):
+    """Show inline form for all missing required vars before launching."""
+    missing = preflight_check(stacks)
+    if not missing:
+        return False  # nothing missing, proceed
+    clear_widgets()
+    groups = list(dict.fromkeys(e["group"] for e in missing))
+    msg("## ⚠️ Brakujące zmienne")
+    msg(f"Przed uruchomieniem stacków `{', '.join(stacks)}` uzupełnij:`")
+    for e in missing:
+        msg(f"- **{e['label']}** (`{e['key']}`)", role="bot")
+    msg("\nUzupełnij poniżej lub przejdź do ⚙️ Ustawienia:")
+    for e in missing:
+        if e["type"] == "select":
+            opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
+            select(e["key"], e["label"], opts, e.get("default", ""))
+        else:
+            text_input(e["key"], e["label"],
+                       e.get("placeholder", ""), _state.get(_ENV_TO_STATE.get(e["key"],""), ""),
+                       sec=(e["type"] == "password"))
+    buttons([
+        {"label": "✅ Zapisz i uruchom",  "value": f"preflight_save_launch::{','.join(stacks)}"},
+        {"label": "⚙️ Pełne ustawienia",  "value": "settings"},
+        {"label": "← Wróć",              "value": "back"},
+    ])
+    return True  # showed form, caller should stop
+
+
 def step_setup_creds():
     _state["step"] = "setup_creds"
     clear_widgets()
-    msg("## 🔑 Credentials")
-    text_input("git_name","Git user.name","Tom Sapletta",_state.get("git_name",""))
-    text_input("git_email","Git user.email","tom@example.com",_state.get("git_email",""))
-    text_input("github_key","Ścieżka klucza SSH","~/.ssh/id_ed25519",_state.get("github_key",""))
-    text_input("openrouter_key","OpenRouter API Key","sk-or-v1-...",_state.get("openrouter_key",""),sec=True)
-    select("llm_model","Model LLM",[
-        {"label":"Gemini Flash Preview","value":"google/gemini-3-flash-preview"},
-        {"label":"Claude Sonnet 4",     "value":"anthropic/claude-sonnet-4"},
-        {"label":"GPT-4o",              "value":"openai/gpt-4o"},
-    ],_state.get("llm_model","google/gemini-3-flash-preview"))
-    buttons([{"label":"✅ Zapisz","value":"save_creds"},{"label":"← Wróć","value":"back"}])
+    msg("## 🔑 Credentials (skrót)")
+    msg("Szybka edycja najważniejszych zmiennych. Pełne ustawienia: ⚙️ Ustawienia.")
+    text_input("GIT_NAME","Git user.name","Jan Kowalski",_state.get("git_name",""))
+    text_input("GIT_EMAIL","Git user.email","jan@example.com",_state.get("git_email",""))
+    text_input("GITHUB_SSH_KEY","Ścieżka klucza SSH","~/.ssh/id_ed25519",_state.get("github_key",""))
+    text_input("OPENROUTER_API_KEY","OpenRouter API Key","sk-or-v1-...",_state.get("openrouter_key",""),sec=True)
+    opts = [{"label": lbl, "value": val}
+            for val,lbl in next(e["options"] for e in ENV_SCHEMA if e["key"]=="LLM_MODEL")]
+    select("LLM_MODEL","Model LLM", opts, _state.get("llm_model","google/gemini-flash-1.5"))
+    buttons([{"label":"💾 Zapisz","value":"save_creds"},{"label":"⚙️ Wszystkie ustawienia","value":"settings"},{"label":"← Wróć","value":"back"}])
 
 def step_save_creds(form):
     clear_widgets()
-    for k in ("git_name","git_email","github_key","openrouter_key","llm_model"):
-        if form.get(k): _state[k] = form[k].strip()
-    msg("✅ Zapisano credentials.")
+    env_updates: dict[str, str] = {}
+    for env_key in ("GIT_NAME","GIT_EMAIL","GITHUB_SSH_KEY","OPENROUTER_API_KEY","LLM_MODEL"):
+        raw = form.get(env_key, "")
+        if raw:
+            val = str(raw).strip()
+            sk = _ENV_TO_STATE[env_key]
+            _state[sk] = val
+            env_updates[env_key] = val
+    save_env(env_updates)
+    msg("✅ Zapisano i zaktualizowano `wizard/.env`.")
     key = _state.get("openrouter_key","")
     msg(f"- Git: `{_state.get('git_name','')}` <{_state.get('git_email','')}>")
     msg(f"- SSH: `{_state.get('github_key','')}`")
     msg(f"- API: `{mask(key) if key else '(brak)'}`")
     msg(f"- Model: `{_state.get('llm_model','')}`")
-    buttons([{"label":"🚀 Uruchom stacki","value":"launch_all"},{"label":"🏠 Menu","value":"back"}])
+    buttons([{"label":"🚀 Uruchom stacki","value":"launch_all"},{"label":"⚙️ Ustawienia","value":"settings"},{"label":"🏠 Menu","value":"back"}])
 
 def step_launch_all():
     _state["step"] = "launch_all"
@@ -188,11 +455,71 @@ def step_launch_all():
     ],_state.get("environment","local"))
     buttons([{"label":"▶️ Uruchom","value":"do_launch"},{"label":"← Wróć","value":"back"}])
 
+def _analyze_launch_error(name: str, output: str) -> tuple[str, list]:
+    """Parse docker compose output and return (analysis_text, solution_buttons)."""
+    lines = output[-3000:]
+    analysis = []
+    solutions = []
+
+    if "port is already allocated" in lines or "address already in use" in lines:
+        import re
+        port = re.search(r"Bind for [\d.]+:(\d+) failed", lines)
+        port_num = port.group(1) if port else "?"
+        analysis.append(f"⚠️ **Port `{port_num}` zajęty** — inny proces już go używa.")
+        solutions.append({"label":f"🔍 Pokaż co blokuje port {port_num}","value":f"diag_port::{port_num}"})
+        if port_num == "6080" and name == "devices":
+            solutions.append({"label":"🔧 Auto: użyj portu 6082 dla VNC","value":"fix_vnc_port"})
+        solutions.append({"label":f"🔄 Zmień port i spróbuj ponownie","value":f"retry_launch"})
+
+    if "undefined network" in lines or "invalid compose project" in lines:
+        import re
+        net = re.search(r'"([^"]+)" refers to undefined network ([^:]+)', lines)
+        srv = net.group(1) if net else "service"
+        netname = net.group(2).strip() if net else "?"
+        analysis.append(f"⚠️ **Sieć `{netname}` niezdefiniowana** w `{name}/docker-compose.yml` (service: `{srv}`).")
+        solutions.append({"label":f"🔧 Auto-napraw compose","value":f"fix_compose::{name}"})
+
+    if "variable is not set" in lines or "Defaulting to a blank string" in lines:
+        missing = []
+        for ln in lines.splitlines():
+            if "variable is not set" in ln:
+                import re; m = re.search(r'"([A-Z_]+)" variable is not set', ln)
+                if m and m.group(1) not in missing: missing.append(m.group(1))
+        if missing:
+            analysis.append(f"⚠️ **Brakujące zmienne env:** `{'`, `'.join(missing[:6])}`")
+            solutions.append({"label":"🔑 Skonfiguruj credentials","value":"setup_creds"})
+            solutions.append({"label":"📄 Pokaż brakujące zmienne","value":f"show_missing_env::{name}"})
+
+    if "permission denied" in lines.lower():
+        analysis.append("⚠️ **Błąd uprawnień** — sprawdź czy Docker działa bez sudo lub dodaj użytkownika do grupy `docker`.")
+        solutions.append({"label":"🔧 Napraw uprawnienia Docker","value":"fix_docker_perms"})
+
+    if "pull access denied" in lines or "not found" in lines and "image" in lines:
+        analysis.append("⚠️ **Nie można pobrać obrazu Docker** — sprawdź nazwę obrazu i dostęp do registry.")
+        solutions.append({"label":"🔄 Spróbuj ponownie","value":"retry_launch"})
+
+    if not analysis:
+        analysis.append(f"❌ **Stack `{name}` nie uruchomił się** (exit code ≠ 0).")
+        solutions.append({"label":"📋 Pokaż pełne logi","value":f"logs_stack::{name}"})
+
+    solutions.append({"label":"🔄 Spróbuj ponownie","value":"retry_launch"})
+    solutions.append({"label":"⏭ Pomiń i kontynuuj","value":"post_launch_creds"})
+    solutions.append({"label":"🏠 Menu","value":"back"})
+    return "\n".join(analysis), solutions
+
+
 def step_do_launch(form):
     clear_widgets()
-    stacks = form.get("stacks","all")
-    env    = form.get("environment","local")
+    stacks = form.get("stacks", form.get("STACKS", _state.get("stacks","all")))
+    env    = form.get("environment", form.get("ENVIRONMENT", _state.get("environment","local")))
     _state.update({"stacks":stacks,"environment":env})
+    save_env({"STACKS": stacks, "ENVIRONMENT": env})
+
+    target_names = ["management","app","devices"] if stacks == "all" else [stacks]
+    # Pre-flight: check for missing required vars
+    if step_preflight_fill(target_names):
+        return  # form shown, wait for user
+
     cf = "docker-compose.yml" if env == "local" else "docker-compose-production.yml"
     targets = []
     if stacks in ("all","management"): targets.append(("management",MGMT))
@@ -201,23 +528,40 @@ def step_do_launch(form):
 
     def run():
         subprocess.run(["docker","network","create","dockfra-shared"],capture_output=True)
+        env_file_args = ["--env-file", str(WIZARD_ENV)] if WIZARD_ENV.exists() else []
+        failed = []
         for name, path in targets:
             msg(f"▶️ **{name}**...")
             progress(f"Uruchamiam {name}...")
-            rc, _ = run_cmd(["docker","compose","-f",cf,"up","-d","--build"],cwd=path)
+            rc, out = run_cmd(["docker","compose","-f",cf]+env_file_args+["up","-d","--build"],cwd=path)
             progress(f"{name}", done=(rc==0), error=(rc!=0))
-            msg(f"{'✅' if rc==0 else '❌'} {name} (exit {rc})")
-        msg("\n✅ **Gotowe!**")
-        containers = docker_ps()
-        dockfra = [c for c in containers if "dockfra" in c["name"]]
-        if dockfra:
-            status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in dockfra])
-        socketio.emit("widget",{"type":"buttons","items":[
-            {"label":"🔑 Setup GitHub + LLM","value":"post_launch_creds"},
-            {"label":"📦 Wdróż na urządzenie","value":"deploy_device"},
-            {"label":"📊 Status","value":"status"},
-            {"label":"🏠 Menu","value":"back"},
-        ]})
+            if rc == 0:
+                msg(f"✅ **{name}** uruchomiony")
+            else:
+                failed.append((name, out))
+                msg(f"❌ **{name}** — błąd (exit {rc})")
+
+        if failed:
+            msg("---")
+            msg("## 🔍 Analiza błędów")
+            for name, out in failed:
+                analysis, solutions = _analyze_launch_error(name, out)
+                msg(f"### Stack: `{name}`\n{analysis}")
+                msg("Co chcesz zrobić?")
+                buttons(solutions)
+                time.sleep(0.1)
+        else:
+            msg("## ✅ Wszystkie stacki uruchomione!")
+            containers = docker_ps()
+            dockfra = [c for c in containers if "dockfra" in c["name"]]
+            if dockfra:
+                status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in dockfra])
+            socketio.emit("widget",{"type":"buttons","items":[
+                {"label":"🔑 Setup GitHub + LLM","value":"post_launch_creds"},
+                {"label":"📦 Wdróż na urządzenie","value":"deploy_device"},
+                {"label":"📊 Status","value":"status"},
+                {"label":"🏠 Menu","value":"back"},
+            ]})
     threading.Thread(target=run,daemon=True).start()
 
 def step_deploy_device():
@@ -379,6 +723,67 @@ def step_run_post_creds():
     threading.Thread(target=run,daemon=True).start()
 
 # ── router ────────────────────────────────────────────────────────────────────
+def diag_port(port_num: str):
+    clear_widgets()
+    msg(f"🔍 Sprawdzam co blokuje port `{port_num}`...")
+    def run():
+        try:
+            out = subprocess.check_output(
+                ["bash","-c",f"lsof -i :{port_num} 2>/dev/null || ss -tlnp | grep :{port_num} || echo '(brak wyniku)'"],
+                text=True, stderr=subprocess.STDOUT)
+            code_block(out.strip() or "(nic nie znaleziono)")
+        except Exception as e:
+            msg(f"❌ {e}")
+        msg(f"Możesz zmienić port w `devices/docker-compose.yml` lub zatrzymać konfliktujący proces.")
+        buttons([
+            {"label":"🔄 Spróbuj ponownie","value":"retry_launch"},
+            {"label":"🏠 Menu","value":"back"},
+        ])
+    threading.Thread(target=run,daemon=True).start()
+
+
+def show_missing_env(stack_name: str):
+    clear_widgets()
+    env_file = (MGMT if stack_name=="management" else APP if stack_name=="app" else DEVS) / ".env"
+    msg(f"## 📄 Brakujące zmienne — `{stack_name}`")
+    if env_file.exists():
+        code_block(env_file.read_text())
+    else:
+        msg(f"Brak pliku `.env` w `{stack_name}/`")
+        msg("Skopiuj plik `.env.example` lub użyj `make init` żeby go wygenerować.")
+    buttons([
+        {"label":"🔑 Skonfiguruj credentials","value":"setup_creds"},
+        {"label":"🔄 Spróbuj ponownie","value":"retry_launch"},
+        {"label":"🏠 Menu","value":"back"},
+    ])
+
+
+def retry_launch(form=None):
+    step_do_launch({"stacks": _state.get("stacks","all"), "environment": _state.get("environment","local")})
+
+
+def fix_vnc_port():
+    clear_widgets()
+    env_file = DEVS / ".env"
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    lines = [l for l in lines if not l.startswith("VNC_RPI3_PORT=")]
+    lines.append("VNC_RPI3_PORT=6082")
+    env_file.write_text("\n".join(lines) + "\n")
+    msg("✅ Ustawiono `VNC_RPI3_PORT=6082` w `devices/.env`")
+    msg("VNC dla RPi3 będzie dostępny pod: **http://localhost:6082**")
+    retry_launch()
+
+
+def fix_docker_perms():
+    clear_widgets()
+    msg("## 🔧 Naprawa uprawnień Docker")
+    msg("Uruchom poniższe komendy na hoście, a następnie wyloguj się i zaloguj ponownie:")
+    code_block("sudo usermod -aG docker $USER\nnewgrp docker")
+    msg("Lub jeśli jesteś rootem, ustaw socket:")
+    code_block("sudo chmod 666 /var/run/docker.sock")
+    buttons([{"label":"🔄 Spróbuj ponownie","value":"retry_launch"},{"label":"🏠 Menu","value":"back"}])
+
+
 STEPS = {
     "welcome":          lambda f: step_welcome(),
     "back":             lambda f: step_welcome(),
@@ -388,19 +793,41 @@ STEPS = {
     "save_creds":       step_save_creds,
     "launch_all":       lambda f: step_launch_all(),
     "do_launch":        step_do_launch,
+    "retry_launch":     lambda f: retry_launch(f),
     "deploy_device":    lambda f: step_deploy_device(),
     "test_device":      step_test_device,
     "do_deploy":        step_do_deploy,
     "launch_devices":   step_launch_devices,
     "post_launch_creds":lambda f: step_post_launch_creds(),
     "run_post_creds":   lambda f: step_run_post_creds(),
+    "fix_docker_perms": lambda f: fix_docker_perms(),
+    "fix_vnc_port":     lambda f: fix_vnc_port(),
 }
 
 # ── socket events ─────────────────────────────────────────────────────────────
 @socketio.on("connect")
 def on_connect():
-    reset_state()
-    step_welcome()
+    # Only reset on first connection; on reconnect, just re-emit existing state
+    if not _conversation:
+        reset_state()
+        step_welcome()
+    else:
+        # Replay conversation to reconnected client
+        for m in _conversation:
+            emit("message", m)
+        # Clear widgets and show current state buttons (without replaying messages)
+        emit("clear_widgets", {})
+        step = _state.get("step","welcome")
+        if step == "welcome":
+            buttons([
+                {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
+                {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
+                {"label":"🔑 Konfiguruj credentials",   "value":"setup_creds"},
+            ])
+        elif step == "status":
+            step_status()
+        elif step == "setup_creds":
+            step_setup_creds()
 
 @socketio.on("action")
 def on_action(data):
@@ -408,6 +835,15 @@ def on_action(data):
     form  = data.get("form", {})
     if value.startswith("logs::"):
         step_show_logs(value.split("::",1)[1]); return
+    if value.startswith("diag_port::"):
+        diag_port(value.split("::",1)[1]); return
+    if value.startswith("show_missing_env::"):
+        show_missing_env(value.split("::",1)[1]); return
+    if value.startswith("logs_stack::"):
+        step_show_logs(value.split("::",1)[1]); return
+    if value.startswith("fix_compose::"):
+        msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
+        buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"🏠 Menu","value":"back"}]); return
     handler = STEPS.get(value)
     if handler:
         handler(form)
@@ -469,7 +905,8 @@ def api_processes():
                 "name": container["name"],
                 "status": status,
                 "details": container["status"],
-                "type": "container"
+                "type": "container",
+                "ports": container["ports"]
             })
     except:
         pass
@@ -498,6 +935,30 @@ def api_processes():
         })
     
     return json.dumps(processes)
+
+@app.route("/api/process/<action>/<process_name>", methods=["POST"])
+def api_process_action(action, process_name):
+    try:
+        if action == "stop":
+            result = subprocess.run(["docker", "stop", process_name], capture_output=True, text=True)
+            return json.dumps({"success": result.returncode == 0, "message": result.stdout or result.stderr})
+        elif action == "restart":
+            result = subprocess.run(["docker", "restart", process_name], capture_output=True, text=True)
+            return json.dumps({"success": result.returncode == 0, "message": result.stdout or result.stderr})
+        elif action == "change_port":
+            # For port changes, we need to get the new port from the request
+            data = request.get_json()
+            new_port = data.get("port")
+            if not new_port:
+                return json.dumps({"success": False, "message": "New port required"})
+            
+            # This is a simplified implementation - in reality, you'd need to
+            # update the docker-compose.yml and restart the container
+            return json.dumps({"success": False, "message": "Port change not implemented yet"})
+        else:
+            return json.dumps({"success": False, "message": f"Unknown action: {action}"})
+    except Exception as e:
+        return json.dumps({"success": False, "message": str(e)})
 
 if __name__ == "__main__":
     print("🧙 Dockfra Wizard → http://localhost:5050")

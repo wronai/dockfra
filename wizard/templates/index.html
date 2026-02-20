@@ -22,22 +22,28 @@ header .sub{color:var(--muted);font-size:.85rem}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .main{display:flex;flex:1;overflow:hidden;position:relative}
-.chat-panel{width:25%;display:flex;flex-direction:column;min-width:200px}
+.chat-panel{width:25%;display:flex;flex-direction:column;min-width:200px;position:relative}
 .processes-panel{width:20%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
 .log-panel{width:55%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
 .resize-handle{position:absolute;top:0;bottom:0;width:4px;background:transparent;cursor:col-resize;z-index:10}
 .resize-handle:hover{background:var(--accent)}
 .resize-handle.left{left:-2px}
 .resize-handle.right{right:-2px}
-.processes-panel h3{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)}
+.processes-panel h3{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 #processes-list{flex:1;overflow-y:auto;padding:10px 14px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.75rem;line-height:1.6}
-.process-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)}
+.process-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);position:relative}
 .process-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .process-status.running{background:var(--green)}
 .process-status.stopped{background:var(--red)}
 .process-status.unknown{background:var(--muted)}
-.process-name{font-size:.7rem;color:var(--text)}
-.process-details{font-size:.65rem;color:var(--muted);margin-left:auto}
+.process-name{font-size:.7rem;color:var(--text);flex:1}
+.process-details{font-size:.65rem;color:var(--muted);margin-left:auto;margin-right:8px}
+.process-actions{position:relative}
+.process-actions select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 6px;font-size:.6rem;cursor:pointer}
+.process-actions select:focus{outline:none;border-color:var(--accent)}
+.chat-header{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.copy-btn{font-size:0.7rem;padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);transition:all .2s}
+.copy-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 .msg{position:relative}
 .msg-copy{position:absolute;top:5px;right:5px;width:20px;height:20px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:.7rem;opacity:0;transition:opacity .2s}
 .msg:hover .msg-copy{display:flex;opacity:1}
@@ -113,12 +119,19 @@ header .sub{color:var(--muted);font-size:.85rem}
 
 <div class="main">
   <div class="chat-panel" id="chat-panel">
+    <div class="chat-header">
+      <span>💬 Chat</span>
+      <button id="copy-chat" class="copy-btn">📋 Copy</button>
+    </div>
     <div id="chat"></div>
     <div id="widgets"></div>
   </div>
   <div class="resize-handle right" id="resize-handle-chat"></div>
   <div class="processes-panel" id="processes-panel">
-    <h3>⚙️ Processes</h3>
+    <h3>
+      <span>⚙️ Processes</span>
+      <button id="copy-processes" class="copy-btn">📋 Copy</button>
+    </h3>
     <div id="processes-list"></div>
   </div>
   <div class="resize-handle right" id="resize-handle-logs"></div>
@@ -489,11 +502,50 @@ async function updateProcesses() {
       const statusClass = process.status === 'running' ? 'running' : 
                          process.status === 'stopped' ? 'stopped' : 'unknown';
       
+      // Create dropdown for process actions
+      const actionsSelect = document.createElement('select');
+      actionsSelect.className = 'process-actions';
+      actionsSelect.innerHTML = `
+        <option value="">Actions</option>
+        <option value="stop">⏹ Stop</option>
+        <option value="restart">🔄 Restart</option>
+        <option value="change_port">🔧 Change Port</option>
+      `;
+      
+      // Add event listener for process actions
+      actionsSelect.addEventListener('change', async (e) => {
+        const action = e.target.value;
+        if (!action) return;
+        
+        if (action === 'change_port') {
+          const newPort = prompt(`Enter new port for ${process.name}:`);
+          if (newPort) {
+            await executeProcessAction(action, process.name, { port: newPort });
+          }
+        } else {
+          await executeProcessAction(action, process.name);
+        }
+        
+        // Reset select
+        e.target.value = '';
+        
+        // Refresh processes after action
+        setTimeout(updateProcesses, 2000);
+      });
+      
       item.innerHTML = `
         <div class="process-status ${statusClass}"></div>
         <span class="process-name">${process.name}</span>
         <span class="process-details">${process.details}</span>
       `;
+      
+      // Add actions dropdown
+      if (process.type === 'container') {
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'process-actions';
+        actionsContainer.appendChild(actionsSelect);
+        item.appendChild(actionsContainer);
+      }
       
       processesList.appendChild(item);
     });
@@ -503,6 +555,31 @@ async function updateProcesses() {
     }
   } catch (error) {
     processesList.innerHTML = '<div style="color:var(--red);font-size:.7rem;">Error loading processes</div>';
+  }
+}
+
+// Execute process action
+async function executeProcessAction(action, processName, data = {}) {
+  try {
+    const response = await fetch(`/api/process/${action}/${processName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log(`Successfully ${action} ${processName}`);
+    } else {
+      console.error(`Failed to ${action} ${processName}:`, result.message);
+      alert(`Failed to ${action} ${processName}: ${result.message}`);
+    }
+  } catch (error) {
+    console.error(`Error executing ${action} on ${processName}:`, error);
+    alert(`Error executing ${action} on ${processName}: ${error.message}`);
   }
 }
 
@@ -530,6 +607,77 @@ document.getElementById('copy-logs').addEventListener('click', () => {
   }).catch(err => {
     console.error('Failed to copy logs:', err);
     const btn = document.getElementById('copy-logs');
+    btn.textContent = '❌ Failed';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy';
+    }, 2000);
+  });
+});
+
+// ── Copy chat functionality ────────────────────────────────────────────────────
+document.getElementById('copy-chat').addEventListener('click', () => {
+  const allMessages = Array.from(chat.children).map(msgDiv => {
+    const role = msgDiv.classList.contains('bot') ? '🤖 Bot' : '👤 User';
+    const bubble = msgDiv.querySelector('.bubble');
+    const content = bubble ? bubble.textContent || bubble.innerText : '';
+    return `${role}: ${content}`;
+  }).join('\n\n');
+  
+  navigator.clipboard.writeText(allMessages).then(() => {
+    const btn = document.getElementById('copy-chat');
+    const originalText = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = 'var(--bg3)';
+      btn.style.color = 'var(--text)';
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy chat:', err);
+    const btn = document.getElementById('copy-chat');
+    btn.textContent = '❌ Failed';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy';
+    }, 2000);
+  });
+});
+
+// ── Copy processes functionality ───────────────────────────────────────────────────
+document.getElementById('copy-processes').addEventListener('click', () => {
+  const allProcesses = Array.from(processesList.children).map(processDiv => {
+    const statusEl = processDiv.querySelector('.process-status');
+    const nameEl = processDiv.querySelector('.process-name');
+    const detailsEl = processDiv.querySelector('.process-details');
+    
+    const status = statusEl ? (
+      statusEl.classList.contains('running') ? '🟢 Running' :
+      statusEl.classList.contains('stopped') ? '🔴 Stopped' : '⚪ Unknown'
+    ) : '⚪ Unknown';
+    
+    const name = nameEl ? nameEl.textContent : 'Unknown';
+    const details = detailsEl ? detailsEl.textContent : '';
+    
+    return `${status} | ${name} | ${details}`;
+  }).join('\n');
+  
+  navigator.clipboard.writeText(allProcesses).then(() => {
+    const btn = document.getElementById('copy-processes');
+    const originalText = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = 'var(--bg3)';
+      btn.style.color = 'var(--text)';
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy processes:', err);
+    const btn = document.getElementById('copy-processes');
     btn.textContent = '❌ Failed';
     setTimeout(() => {
       btn.textContent = '📋 Copy';
