@@ -1,3 +1,49 @@
+## [1.0.28] - 2026-02-20
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Docs
+
+- docs: update README
+- docs: update TODO.md
+
+
+## [1.0.28] - 2026-02-20
+
+### Summary
+
+docs(docs): comprehensive documentation, comparisons, generification
+
+### Features
+
+- **Auto-discover stacks** — `_discover_stacks()` scans ROOT for subdirs with `docker-compose.yml`
+- **Auto-discover env vars** — `_parse_compose_env_vars()` extracts `${VAR:-default}` from compose files (55+ vars)
+- **`dockfra.yaml`** — optional project config for label/type/group overrides
+- **`_build_env_schema()`** — merges core + discovered + yaml overrides (62 entries)
+- **Auto `_ENV_TO_STATE`** — generated from ENV_SCHEMA (eliminated 22-line manual mapping)
+- **Dynamic `_WIZARD_SYSTEM_PROMPT`** — built from discovered stacks
+- **Dynamic `COMMON_PORTS`** — built from ENV_SCHEMA port defaults
+- **`_FIELD_META`** — descriptions for 40+ commonly used Docker variables
+
+### Docs
+
+- docs: create docs/ARCHITECTURE.md — system design, modules, data flow
+- docs: create docs/CONFIGURATION.md — dockfra.yaml, ENV_SCHEMA, auto-discovery
+- docs: create docs/GETTING-STARTED.md — quickstart for any Docker project
+- docs: create docs/SSH-ROLES.md — role system, commands, isolation
+- docs: create docs/WIZARD-API.md — REST + WebSocket API reference
+- docs: create comparisons/README.md — overview matrix (9 systems)
+- docs: create comparisons/vs-kamal.md — vs Basecamp Kamal
+- docs: create comparisons/vs-coolify.md — vs Coolify self-hosted PaaS
+- docs: create comparisons/vs-portainer.md — vs Portainer Docker GUI
+- docs: create comparisons/vs-multi-agent-frameworks.md — vs CrewAI, AutoGen, LangGraph
+- docs: create comparisons/vs-ai-dev-agents.md — vs OpenDevin, Devika, SWE-Agent, Aider
+- docs: rewrite README.md — current architecture, features, links to docs/ and comparisons/
+- docs: rewrite TODO.md — current state with 56 completed items
+
+
 ## [1.0.27] - 2026-02-20
 
 ### Summary
