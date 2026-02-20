@@ -57,9 +57,8 @@ eggs/
 # lib/
 lib64/
 
-# Re-include shared/lib in both stacks
-!management/shared/lib/
-!app/shared/lib/
+# Re-include shared/lib
+!shared/lib/
 parts/
 sdist/
 var/
@@ -261,3 +260,4 @@ tmp/
 # Local databases
 *.db
 *.sqlite
+wizard/.venv/

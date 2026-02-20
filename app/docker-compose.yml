@@ -243,7 +243,7 @@ services:
       - developer-workspace:/home/developer/workspace
       - git-repo:/repo
       - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
+      - ../shared/lib:/shared/lib:ro
       - backend-data:/mnt/backend-data:ro
       - frontend-data:/mnt/frontend-data:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

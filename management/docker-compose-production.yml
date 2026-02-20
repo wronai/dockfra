@@ -50,7 +50,7 @@ services:
       - ./keys/manager:/root/.ssh:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
+      - ../shared/lib:/shared/lib:ro
       - manager-workspace:/home/manager/workspace
     deploy:
       resources:
@@ -96,7 +96,7 @@ services:
       - ./keys/autopilot:/root/.ssh:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
+      - ../shared/lib:/shared/lib:ro
       - autopilot-workspace:/home/autopilot/workspace
     depends_on:
       - ssh-manager
@@ -145,7 +145,7 @@ services:
       - ./keys/monitor:/root/.ssh:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
-      - ./shared/lib:/shared/lib:ro
+      - ../shared/lib:/shared/lib:ro
       - monitor-workspace:/home/monitor/workspace
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:

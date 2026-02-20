@@ -31,13 +31,13 @@ t "init.sh (root) exists" "test -f '$PROJECT/init.sh'"
 
 # ═══ 2. SHARED LIB ═══
 echo ""; echo "  2. SHARED LIBRARY"
-t "management: llm_client.py" "test -f '$MGMT/shared/lib/llm_client.py'"
-t "management: ticket_system.py" "test -f '$MGMT/shared/lib/ticket_system.py'"
-t "app: llm_client.py" "test -f '$APP/shared/lib/llm_client.py'"
-t "app: ticket_system.py" "test -f '$APP/shared/lib/ticket_system.py'"
-t "llm_client importable" "PYTHONPATH='$APP/shared/lib' python3 -c 'import llm_client; llm_client.get_config()'"
-t "ticket_system importable" "PYTHONPATH='$APP/shared/lib' python3 -c 'import ticket_system'"
-t "ticket_system: create/list/get/update" "PYTHONPATH='$APP/shared/lib' TICKETS_DIR=/tmp/dockfra-test-tickets python3 -c \"
+t "management: llm_client.py" "test -f '$PROJECT/shared/lib/llm_client.py'"
+t "management: ticket_system.py" "test -f '$PROJECT/shared/lib/ticket_system.py'"
+t "app: llm_client.py" "test -f '$PROJECT/shared/lib/llm_client.py'"
+t "app: ticket_system.py" "test -f '$PROJECT/shared/lib/ticket_system.py'"
+t "llm_client importable" "PYTHONPATH='$PROJECT/shared/lib' python3 -c 'import llm_client; llm_client.get_config()'"
+t "ticket_system importable" "PYTHONPATH='$PROJECT/shared/lib' python3 -c 'import ticket_system'"
+t "ticket_system: create/list/get/update" "PYTHONPATH='$PROJECT/shared/lib' TICKETS_DIR=/tmp/dockfra-test-tickets python3 -c \"
 import ticket_system as ts
 t = ts.create('Test ticket', description='E2E test', priority='high')
 assert t['id'].startswith('T-')

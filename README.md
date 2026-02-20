@@ -389,8 +389,8 @@ dockfra/
 │   │   └── keys/                          # authorized_keys from management
 │   ├── frontend/ backend/ mobile-backend/ desktop-app/
 │   ├── ssh-rpi3/ vnc-rpi3/
-│   └── shared/
-│       └── lib/                            # llm_client.py, ticket_system.py
+├── shared/                                 # Shared libraries
+│   └── lib/                                # llm_client.py, ticket_system.py
 │
 ├── Makefile                                # Operational targets (make help)
 ├── scripts/                                # Host-side setup scripts

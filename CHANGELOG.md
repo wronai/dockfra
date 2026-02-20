@@ -1,3 +1,27 @@
+## [1.0.6] - 2026-02-20
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update README
+
+### Test
+
+- scripts: update run-tests.sh
+
+### Other
+
+- update .gitignore
+- docker: update docker-compose.yml
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- update wizard/app.py
+- update wizard/templates/index.html
+
+
 ## [1.0.5] - 2026-02-20
 
 ### Summary
@@ -70,6 +94,12 @@ refactor(build): configuration management system
 ### Test
 
 - scripts: update run-tests.sh
+
+### Refactor
+
+- refactor: move app/shared/lib to shared/lib for better architecture
+- refactor: update all docker-compose.yml volume paths
+- refactor: update test paths and gitignore rules
 
 ### Other
 
