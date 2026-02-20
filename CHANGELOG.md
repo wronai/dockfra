@@ -1,3 +1,19 @@
+## [1.0.10] - 2026-02-20
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update TODO.md
+
+### Other
+
+- update wizard/app.py
+- update wizard/templates/index.html
+
+
 ## [1.0.9] - 2026-02-20
 
 ### Summary

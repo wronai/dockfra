@@ -5,6 +5,17 @@ from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
+# Thread-local: when set, emit helpers target this SID instead of broadcasting
+_tl = threading.local()
+
+def _sid_emit(event, data):
+    """Emit to current SID if inside a handler, broadcast otherwise."""
+    sid = getattr(_tl, 'sid', None)
+    if sid:
+        socketio.emit(event, data, room=sid)
+    else:
+        socketio.emit(event, data)
+
 ROOT = Path(__file__).parent.parent.resolve()
 MGMT = ROOT / "management"
 APP  = ROOT / "app"
@@ -228,15 +239,15 @@ def mask(k): return k[:12]+"..."+k[-4:] if len(k)>=16 else "***"
 def msg(text, role="bot"):
     msg_id = f"msg-{len(_conversation)}"
     _conversation.append({"id": msg_id, "role": role, "text": text, "timestamp": time.time()})
-    socketio.emit("message",  {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
-def widget(w):                      socketio.emit("widget",    w);                          time.sleep(0.04)
+    _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
+def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
 def text_input(n,l,ph="",v="",sec=False): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec})
 def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":l,"options":opts,"value":v})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
 def progress(label, done=False, error=False): widget({"type":"progress","label":label,"done":done,"error":error})
-def clear_widgets():                socketio.emit("clear_widgets")
+def clear_widgets():                _sid_emit("clear_widgets", {})
 
 # ── steps ────────────────────────────────────────────────────────────────────
 def _env_status_summary() -> str:
@@ -262,7 +273,6 @@ def step_welcome():
         {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
         {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
         {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
-        {"label":"📊 Status kontenerów",         "value":"status"},
     ])
 
 def step_status():
@@ -275,7 +285,11 @@ def step_status():
         return
     msg(f"**Uruchomione kontenery ({len(containers)}):**")
     status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in containers])
-    buttons([{"label":"🔄 Odśwież","value":"status"},{"label":"🏠 Menu","value":"back"}])
+    buttons([
+        {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
+        {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
+        {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
+    ])
 
 def step_pick_logs():
     clear_widgets()
@@ -294,7 +308,7 @@ def step_show_logs(container):
         out = subprocess.check_output(["docker","logs","--tail","60",container],text=True,stderr=subprocess.STDOUT)
         code_block(out[-4000:])
     except Exception as e: msg(f"❌ {e}")
-    buttons([{"label":"🔄 Odśwież","value":f"logs::{container}"},{"label":"← Inne logi","value":"pick_logs"},{"label":"🏠 Menu","value":"back"}])
+    buttons([{"label":"🔄 Odśwież","value":f"logs::{container}"},{"label":"← Inne logi","value":"pick_logs"}])
 
 def step_settings(group: str = ""):
     """Show env editor for a specific group or group selector."""
@@ -314,8 +328,7 @@ def step_settings(group: str = ""):
                          "detail": f"{len(missing)} brakujących" if missing else "OK"})
         status_row(rows)
         buttons(
-            [{"label": f"✏️ {g}", "value": f"settings_group::{g}"} for g in groups] +
-            [{"label": "🏠 Menu", "value": "back"}]
+            [{"label": f"✏️ {g}", "value": f"settings_group::{g}"} for g in groups]
         )
     else:
         entries = [e for e in ENV_SCHEMA if e["group"] == group]
@@ -333,7 +346,6 @@ def step_settings(group: str = ""):
         buttons([
             {"label": "💾 Zapisz",    "value": f"save_settings::{group}"},
             {"label": "← Sekcje",    "value": "settings"},
-            {"label": "🏠 Menu",      "value": "back"},
         ])
 
 
@@ -360,7 +372,6 @@ def step_save_settings(group: str, form: dict):
         {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
         {"label": "← Sekcje",        "value": "settings"},
         {"label": "🚀 Uruchom",       "value": "launch_all"},
-        {"label": "🏠 Menu",          "value": "back"},
     ])
 
 
@@ -789,6 +800,7 @@ STEPS = {
     "back":             lambda f: step_welcome(),
     "status":           lambda f: step_status(),
     "pick_logs":        lambda f: step_pick_logs(),
+    "settings":         lambda f: step_settings(),
     "setup_creds":      lambda f: step_setup_creds(),
     "save_creds":       step_save_creds,
     "launch_all":       lambda f: step_launch_all(),
@@ -807,49 +819,75 @@ STEPS = {
 # ── socket events ─────────────────────────────────────────────────────────────
 @socketio.on("connect")
 def on_connect():
-    # Only reset on first connection; on reconnect, just re-emit existing state
-    if not _conversation:
-        reset_state()
-        step_welcome()
-    else:
-        # Replay conversation to reconnected client
-        for m in _conversation:
-            emit("message", m)
-        # Clear widgets and show current state buttons (without replaying messages)
-        emit("clear_widgets", {})
-        step = _state.get("step","welcome")
-        if step == "welcome":
-            buttons([
-                {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
-                {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-                {"label":"🔑 Konfiguruj credentials",   "value":"setup_creds"},
-            ])
-        elif step == "status":
-            step_status()
-        elif step == "setup_creds":
-            step_setup_creds()
+    _tl.sid = request.sid
+    try:
+        if not _conversation:
+            reset_state()
+            step_welcome()
+        else:
+            # Replay conversation to THIS client only
+            for m in _conversation:
+                emit("message", m)
+            emit("clear_widgets", {})
+            step = _state.get("step","welcome")
+            if step in ("welcome", None, ""):
+                buttons([
+                    {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
+                    {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
+                    {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
+                    {"label":"📊 Status kontenerów",         "value":"status"},
+                ])
+            elif step == "status":    step_status()
+            elif step == "settings":  step_settings()
+            elif step == "setup_creds": step_setup_creds()
+    finally:
+        _tl.sid = None
+
+@socketio.on("disconnect")
+def on_disconnect():
+    _tl.sid = None
 
 @socketio.on("action")
 def on_action(data):
-    value = data.get("value","")
-    form  = data.get("form", {})
-    if value.startswith("logs::"):
-        step_show_logs(value.split("::",1)[1]); return
-    if value.startswith("diag_port::"):
-        diag_port(value.split("::",1)[1]); return
-    if value.startswith("show_missing_env::"):
-        show_missing_env(value.split("::",1)[1]); return
-    if value.startswith("logs_stack::"):
-        step_show_logs(value.split("::",1)[1]); return
-    if value.startswith("fix_compose::"):
-        msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
-        buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"🏠 Menu","value":"back"}]); return
-    handler = STEPS.get(value)
-    if handler:
-        handler(form)
-    else:
-        msg(f"⚠️ Nieznana akcja: `{value}`")
-        buttons([{"label":"🏠 Menu","value":"back"}])
+    _tl.sid = request.sid
+    try:
+        value = data.get("value","")
+        form  = data.get("form", {})
+        if value.startswith("logs::"):
+            step_show_logs(value.split("::",1)[1]); return
+        if value.startswith("diag_port::"):
+            diag_port(value.split("::",1)[1]); return
+        if value.startswith("show_missing_env::"):
+            show_missing_env(value.split("::",1)[1]); return
+        if value.startswith("logs_stack::"):
+            step_show_logs(value.split("::",1)[1]); return
+        if value.startswith("fix_compose::"):
+            msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
+            buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"← Wróć","value":"back"}]); return
+        if value.startswith("settings_group::"):
+            step_settings(value.split("::",1)[1]); return
+        if value.startswith("save_settings::"):
+            step_save_settings(value.split("::",1)[1], form); return
+        if value.startswith("preflight_save_launch::"):
+            env_updates: dict[str, str] = {}
+            for k, v in form.items():
+                if k in _ENV_TO_STATE:
+                    _state[_ENV_TO_STATE[k]] = str(v).strip()
+                    env_updates[k] = str(v).strip()
+            if env_updates:
+                save_env(env_updates)
+            stacks_str = value.split("::",1)[1]
+            _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(","))==1 else "all"
+            step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment","local")})
+            return
+        handler = STEPS.get(value)
+        if handler:
+            handler(form)
+        else:
+            msg(f"⚠️ Nieznana akcja: `{value}`")
+            buttons([{"label":"← Wróć","value":"back"}])
+    finally:
+        _tl.sid = None
 
 # ── routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -883,6 +921,34 @@ def api_events():
             try: events.append(json.loads(line))
             except: pass
     return json.dumps(events)
+
+@app.route("/api/env")
+def api_env():
+    env = load_env()
+    # Mask passwords/keys
+    safe = {}
+    for e in ENV_SCHEMA:
+        val = env.get(e["key"], e.get("default",""))
+        safe[e["key"]] = {
+            "value":  mask(val) if e["type"] == "password" and val else val,
+            "label":  e["label"],
+            "group":  e["group"],
+            "empty":  not val,
+            "required_for": e.get("required_for", []),
+        }
+    return json.dumps(safe)
+
+@app.route("/api/env", methods=["POST"])
+def api_env_post():
+    data = request.get_json(silent=True) or {}
+    valid = {k: str(v) for k, v in data.items() if k in {e["key"] for e in ENV_SCHEMA}}
+    if valid:
+        save_env(valid)
+        for env_key, val in valid.items():
+            sk = _ENV_TO_STATE.get(env_key)
+            if sk:
+                _state[sk] = val
+    return json.dumps({"ok": True, "updated": list(valid.keys())})
 
 @app.route("/api/history")
 def api_history():

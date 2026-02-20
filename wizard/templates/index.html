@@ -38,9 +38,15 @@ header .sub{color:var(--muted);font-size:.85rem}
 .process-status.unknown{background:var(--muted)}
 .process-name{font-size:.7rem;color:var(--text);flex:1}
 .process-details{font-size:.65rem;color:var(--muted);margin-left:auto;margin-right:8px}
-.process-actions{position:relative}
+.process-actions{position:relative;display:flex;gap:4px;align-items:center}
 .process-actions select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 6px;font-size:.6rem;cursor:pointer}
 .process-actions select:focus{outline:none;border-color:var(--accent)}
+.process-icon-btn{background:transparent;border:none;color:var(--text);cursor:pointer;padding:2px;font-size:.8rem;border-radius:3px;transition:all .2s;position:relative}
+.process-icon-btn:hover{background:var(--bg3);color:var(--accent)}
+.process-icon-btn:active{transform:scale(0.9)}
+.tooltip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:.6rem;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s;z-index:1000;margin-bottom:4px}
+.tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--bg2)}
+.process-icon-btn:hover .tooltip{opacity:1}
 .chat-header{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .copy-btn{font-size:0.7rem;padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);transition:all .2s}
 .copy-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -165,46 +171,23 @@ function renderMd(text){
 }
 
 // ── Load conversation history ────────────────────────────────────────────────
-async function loadHistory() {
+// History is replayed by server on socket connect — no separate fetch needed.
+// loadHistory() kept only for logs (no widget/message duplication risk there).
+async function loadLogs() {
   try {
-    const response = await fetch('/api/history');
-    const data = await response.json();
-    
-    // Clear current content
-    chat.innerHTML = '';
-    logOut.innerHTML = '';
-    widgets.innerHTML = '';
-    
-    // Load conversation
-    data.conversation.forEach(msg => {
-      const div = document.createElement('div');
-      div.className = `msg ${msg.role}`;
-      div.setAttribute('data-msg-id', msg.id);
-      div.innerHTML = `
-        <div class="avatar">${msg.role==='bot'?'🤖':'👤'}</div>
-        <div class="bubble">${renderMd(msg.text)}</div>`;
-      chat.appendChild(div);
-    });
-    
-    // Load logs
-    data.logs.forEach(log => {
+    const r = await fetch('/api/history');
+    const d = await r.json();
+    d.logs.forEach(log => {
+      if(log.id && document.querySelector(`[data-log-id="${log.id}"]`)) return;
       const l = document.createElement('div');
-      l.className = 'log-line' + (log.text.includes('Error')||log.text.includes('error')||log.text.startsWith('E ')?' err':'');
+      l.className = 'log-line' + (/error|Error/.test(log.text)||log.text.startsWith('E ')?' err':'');
       l.setAttribute('data-log-id', log.id);
       l.textContent = log.text;
       logOut.appendChild(l);
     });
-    
-    // Scroll to bottom
-    chat.scrollTop = chat.scrollHeight;
     logOut.scrollTop = logOut.scrollHeight;
-  } catch (error) {
-    console.error('Failed to load history:', error);
-  }
+  } catch(e) { console.warn('loadLogs:', e); }
 }
-
-// Load history on page load
-loadHistory();
 
 // ── Message ────────────────────────────────────────────────────────────────
 socket.on('message', d => {
@@ -284,9 +267,12 @@ function sendAction(value){
 }
 
 function renderButtons(d){
+  // Replace any existing buttons row — never accumulate multiple
+  const existing = widgets.querySelector('.w-buttons');
+  if(existing) existing.remove();
   const wrap = document.createElement('div');
   wrap.className = 'w-buttons';
-  if(d.label){ const l=document.createElement('div'); l.style.cssText='width:100%;color:var(--muted);font-size:.8rem'; l.textContent=d.label; wrap.appendChild(l); }
+  if(d.label){ const l=document.createElement('div'); l.style.cssText='width:100%;color:var(--muted);font-size:.8rem;margin-bottom:4px'; l.textContent=d.label; wrap.appendChild(l); }
   d.items.forEach(item => {
     const b = document.createElement('button');
     b.className = 'btn';
@@ -502,36 +488,43 @@ async function updateProcesses() {
       const statusClass = process.status === 'running' ? 'running' : 
                          process.status === 'stopped' ? 'stopped' : 'unknown';
       
-      // Create dropdown for process actions
-      const actionsSelect = document.createElement('select');
-      actionsSelect.className = 'process-actions';
-      actionsSelect.innerHTML = `
-        <option value="">Actions</option>
-        <option value="stop">⏹ Stop</option>
-        <option value="restart">🔄 Restart</option>
-        <option value="change_port">🔧 Change Port</option>
-      `;
+      // Create icon buttons for process actions
+      const actionsContainer = document.createElement('div');
+      actionsContainer.className = 'process-actions';
       
-      // Add event listener for process actions
-      actionsSelect.addEventListener('change', async (e) => {
-        const action = e.target.value;
-        if (!action) return;
-        
-        if (action === 'change_port') {
-          const newPort = prompt(`Enter new port for ${process.name}:`);
-          if (newPort) {
-            await executeProcessAction(action, process.name, { port: newPort });
-          }
-        } else {
-          await executeProcessAction(action, process.name);
-        }
-        
-        // Reset select
-        e.target.value = '';
-        
-        // Refresh processes after action
+      // Stop button
+      const stopBtn = document.createElement('button');
+      stopBtn.className = 'process-icon-btn';
+      stopBtn.innerHTML = '⏹<span class="tooltip">Stop</span>';
+      stopBtn.onclick = async () => {
+        await executeProcessAction('stop', process.name);
         setTimeout(updateProcesses, 2000);
-      });
+      };
+      
+      // Restart button
+      const restartBtn = document.createElement('button');
+      restartBtn.className = 'process-icon-btn';
+      restartBtn.innerHTML = '🔄<span class="tooltip">Restart</span>';
+      restartBtn.onclick = async () => {
+        await executeProcessAction('restart', process.name);
+        setTimeout(updateProcesses, 2000);
+      };
+      
+      // Change port button
+      const portBtn = document.createElement('button');
+      portBtn.className = 'process-icon-btn';
+      portBtn.innerHTML = '🔧<span class="tooltip">Change Port</span>';
+      portBtn.onclick = async () => {
+        const newPort = prompt(`Enter new port for ${process.name}:`);
+        if (newPort) {
+          await executeProcessAction('change_port', process.name, { port: newPort });
+          setTimeout(updateProcesses, 2000);
+        }
+      };
+      
+      actionsContainer.appendChild(stopBtn);
+      actionsContainer.appendChild(restartBtn);
+      actionsContainer.appendChild(portBtn);
       
       item.innerHTML = `
         <div class="process-status ${statusClass}"></div>
@@ -539,11 +532,8 @@ async function updateProcesses() {
         <span class="process-details">${process.details}</span>
       `;
       
-      // Add actions dropdown
+      // Add actions buttons
       if (process.type === 'container') {
-        const actionsContainer = document.createElement('div');
-        actionsContainer.className = 'process-actions';
-        actionsContainer.appendChild(actionsSelect);
         item.appendChild(actionsContainer);
       }
       
