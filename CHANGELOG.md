@@ -1,3 +1,20 @@
+## [1.0.14] - 2026-02-20
+
+### Summary
+
+feat(docs): configuration management system
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- docker: update docker-compose.yml
+- update dockfra/app.py
+- docker: update docker-compose.yml
+
+
 ## [1.0.13] - 2026-02-20
 
 ### Summary

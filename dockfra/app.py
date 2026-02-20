@@ -1133,12 +1133,23 @@ def step_do_launch(form):
                 msg(f"#### 🔴 `{c['name']}` — {c['status']}\n{finding}")
                 if btns:
                     btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
-                    buttons(btns)
                 time.sleep(0.05)
-        _sid_emit("widget", {"type": "buttons", "items": [
-            {"label": "🔑 Setup GitHub + LLM", "value": "post_launch_creds"},
-            {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
-        ]})
+            # Show single consolidated action bar for failing containers
+            fix_btns = []
+            for c in restarting:
+                fix_btns.append({"label": f"🔧 Napraw {c['name'].replace('dockfra-','')}", "value": f"fix_container::{c['name']}"})
+            fix_btns += [
+                {"label": "🔄 Uruchom ponownie", "value": "retry_launch"},
+                {"label": "⚙️ Ustawienia",       "value": "settings"},
+            ]
+            buttons(fix_btns)
+        else:
+            msg("## ✅ Infrastruktura gotowa!")
+            buttons([
+                {"label": "🔑 Setup GitHub + LLM", "value": "post_launch_creds"},
+                {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
+                {"label": "🏠 Menu",                "value": "back"},
+            ])
     threading.Thread(target=run,daemon=True).start()
 
 def step_deploy_device():
