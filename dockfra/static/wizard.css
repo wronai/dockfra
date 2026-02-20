@@ -127,9 +127,15 @@ header .sub{color:var(--muted);font-size:.85rem}
 .action-card-info{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
 .action-card-cmd{font-family:'Cascadia Code','Fira Code',monospace;font-size:.82rem;color:var(--accent);font-weight:600;white-space:nowrap}
 .action-card-desc{font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.action-card-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:.8rem;width:120px;flex-shrink:0;transition:border-color .15s}
+.action-card-param{display:flex;flex-direction:column;gap:3px;flex-shrink:0}
+.action-card-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:.8rem;width:140px;flex-shrink:0;transition:border-color .15s}
 .action-card-input:focus{outline:none;border-color:var(--accent)}
 .action-card-input.input-required{border-color:var(--red);animation:shake .3s ease}
+.action-card-select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:.8rem;width:160px;flex-shrink:0;cursor:pointer;transition:border-color .15s;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238892b0'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
+.action-card-select:focus{outline:none;border-color:var(--accent)}
+.action-card-select.input-required{border-color:var(--red);animation:shake .3s ease}
+.action-card-select option{background:var(--bg3);color:var(--text)}
+.action-card-custom{width:140px;margin-top:2px}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .action-card-run{padding:5px 10px !important;flex-shrink:0;font-size:.82rem !important;min-width:32px}
 

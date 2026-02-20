@@ -37,7 +37,7 @@ from .fixes import (
     fix_acme_storage, fix_readonly_volume, fix_docker_perms,
 )
 from .discover import (
-    _step_ssh_info, step_ssh_console, run_ssh_cmd,
+    _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES,
 )
 
 STEPS = {
@@ -267,6 +267,59 @@ def api_processes():
     
     return json.dumps(processes)
 
+@app.route("/api/ssh-options/<kind>")
+@app.route("/api/ssh-options/<kind>/<role>")
+def api_ssh_options(kind, role="developer"):
+    import glob as _glob
+    if kind == "tickets":
+        tickets_dir = ROOT / "shared" / "tickets"
+        options = []
+        if tickets_dir.exists():
+            status_icon = {"open": "○", "in_progress": "◐", "closed": "●"}
+            for path in sorted(_glob.glob(str(tickets_dir / "T-*.json"))):
+                try:
+                    with open(path) as f:
+                        t = json.load(f)
+                    if t.get("status") == "closed":
+                        continue
+                    icon = status_icon.get(t.get("status", "open"), "○")
+                    options.append({
+                        "value": t["id"],
+                        "label": f"{icon} {t['id']} — {t['title'][:45]}"
+                    })
+                except Exception:
+                    pass
+        return json.dumps({"options": options})
+
+    elif kind == "files":
+        ri = _SSH_ROLES.get(role, {})
+        container = ri.get("container", cname(f"ssh-{role}"))
+        try:
+            out = subprocess.check_output(
+                ["docker", "exec", container,
+                 "find", "/workspace/app",
+                 "-type", "f",
+                 "(",
+                 "-name", "*.py", "-o", "-name", "*.js", "-o", "-name", "*.ts",
+                 "-o", "-name", "*.tsx", "-o", "-name", "*.jsx",
+                 "-o", "-name", "*.css", "-o", "-name", "*.html",
+                 "-o", "-name", "*.yml", "-o", "-name", "*.yaml",
+                 ")",
+                 "!", "-path", "*/node_modules/*",
+                 "!", "-path", "*/__pycache__/*",
+                 "!", "-path", "*/.git/*"],
+                text=True, stderr=subprocess.DEVNULL, timeout=6)
+            paths = sorted(p.strip() for p in out.splitlines() if p.strip())
+            options = []
+            for p in paths[:120]:
+                rel = p.replace("/workspace/app/", "", 1)
+                options.append({"value": rel, "label": rel})
+            return json.dumps({"options": options})
+        except Exception as e:
+            return json.dumps({"options": [], "error": str(e)})
+
+    return json.dumps({"options": []})
+
 @app.route("/api/device-ips")
 def api_device_ips():
     import re
@@ -344,8 +397,12 @@ def api_device_ips():
     raw_arp = [d for d in arp if d["ip"] not in local_ips and d["ip"] not in container_ips]
 
     # Probe hostnames + open ports in parallel
-    COMMON_PORTS = [22, 80, 443, 2200, 2201, 2202, 2203, 2222,
-                    3000, 5000, 6080, 8000, 8080, 8081, 8082, 8100, 8202, 9000]
+    # Build scan ports dynamically from ENV_SCHEMA port defaults + standard ports
+    _schema_ports = set()
+    for e in ENV_SCHEMA:
+        if e.get("group") == "Ports" and e.get("default","").isdigit():
+            _schema_ports.add(int(e["default"]))
+    COMMON_PORTS = sorted(_schema_ports | {22, 80, 443, 2222, 3000, 5000, 8000, 8080, 9000})
 
     def _probe(d: dict) -> dict:
         ip = d["ip"]

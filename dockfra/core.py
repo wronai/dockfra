@@ -17,8 +17,9 @@ __all__ = [
     '_state', '_conversation', '_logs', '_tl', '_log_buffer',
     '_sid_emit', 'reset_state',
     '_ENV_TO_STATE', '_STATE_TO_ENV',
-    # Paths
+    # Paths & project config
     'ROOT', 'MGMT', 'APP', 'DEVS', 'WIZARD_DIR', 'WIZARD_ENV', '_PKG_DIR',
+    'PROJECT', 'cname', 'short_name',
     # ENV
     'ENV_SCHEMA', '_schema_defaults', 'load_env', 'save_env',
     # Helpers
@@ -122,6 +123,24 @@ APP        = ROOT / "app"
 DEVS       = ROOT / "devices"
 WIZARD_DIR = _PKG_DIR
 WIZARD_ENV = WIZARD_DIR / ".env"
+
+# ── Project naming ───────────────────────────────────────────────────────────
+# Override with DOCKFRA_PREFIX env var to rebrand all container/image/network names.
+_PREFIX = os.environ.get("DOCKFRA_PREFIX", "dockfra")
+PROJECT = {
+    "prefix":         _PREFIX,
+    "network":        f"{_PREFIX}-shared",
+    "ssh_base_image": f"{_PREFIX}-ssh-base",
+}
+
+def cname(service: str) -> str:
+    """Container name from service: cname('traefik') → 'dockfra-traefik'"""
+    return f"{PROJECT['prefix']}-{service}"
+
+def short_name(container: str) -> str:
+    """Strip project prefix: 'dockfra-traefik' → 'traefik'"""
+    pfx = PROJECT['prefix'] + '-'
+    return container[len(pfx):] if container.startswith(pfx) else container
 
 # ── ENV schema ───────────────────────────────────────────────────────────────
 # Each entry: key, label, group, type(text|password|select), placeholder,
@@ -237,7 +256,7 @@ def save_env(updates: dict):
     WIZARD_ENV.write_text("\n".join(result) + "\n")
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "dockfra-wizard"
+app.config["SECRET_KEY"] = f"{_PREFIX}-wizard"
 # Try gevent first, fallback to threading
 try:
     import gevent
@@ -614,8 +633,8 @@ def _detect_suggestions() -> dict:
     env_ip = _devices_env_ip()
     # L2: running devices-stack container
     docker_ip = ""
-    for cname in ["dockfra-ssh-rpi3", "ssh-rpi3"]:
-        docker_ip = _docker_container_env(cname, "RPI3_HOST")
+    for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
+        docker_ip = _docker_container_env(cn, "RPI3_HOST")
         if docker_ip: break
     best_ip = env_ip or docker_ip or ""
 
@@ -725,7 +744,7 @@ _HEALTH_PATTERNS = [
      "err", "Brakuje zmiennej środowiskowej",
      [{"label":"⚙️ Konfiguracja","value":"settings"}]),
     (r"network .+? not found|network .+? declared as external",
-     "err", "Brak sieci Docker — uruchom `docker network create dockfra-shared`",
+     "err", f"Brak sieci Docker — uruchom `docker network create {PROJECT['network']}`",
      [{"label":"🚀 Uruchom ponownie","value":"launch_all"}]),
     (r"oci runtime|oci error|cannot start container",
      "err", "Błąd Docker runtime",

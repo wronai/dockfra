@@ -319,7 +319,7 @@ def _prompt_api_key(return_action: str = ""):
                "sk-or-v1-...", _state.get("openrouter_key", ""), sec=True)
     opts = [{"label": lbl, "value": val}
             for val, lbl in next(e["options"] for e in ENV_SCHEMA if e["key"] == "LLM_MODEL")]
-    select("LLM_MODEL", "Model LLM", opts, _state.get("llm_model", "google/gemini-flash-1.5"))
+    select("LLM_MODEL", "Model LLM", opts, _state.get("llm_model", _schema_defaults().get("LLM_MODEL", "")))
     btn_items = [{"label": "✅ Zapisz klucz", "value": "save_creds"}]
     if return_action:
         btn_items.append({"label": "🧠 Powtórz analizę", "value": return_action})
@@ -420,31 +420,32 @@ def fix_acme_storage():
     _state["acme_storage"] = acme_value
     save_env({"ACME_STORAGE": acme_value})
 
-    msg("🔄 Restartuję `dockfra-traefik`...")
+    _traefik = cname("traefik")
+    msg(f"🔄 Restartuję `{_traefik}`...")
     _tl_sid = getattr(_tl, 'sid', None)
     def run():
         _tl.sid = _tl_sid
         try:
-            subprocess.check_output(["docker", "restart", "dockfra-traefik"],
+            subprocess.check_output(["docker", "restart", _traefik],
                                     text=True, stderr=subprocess.STDOUT)
-            msg("✅ `dockfra-traefik` zrestartowany.")
+            msg(f"✅ `{_traefik}` zrestartowany.")
         except Exception as shell_err:
             cli = _docker_client()
             if cli:
                 try:
-                    cli.containers.get("dockfra-traefik").restart()
-                    msg("✅ `dockfra-traefik` zrestartowany przez SDK.")
+                    cli.containers.get(_traefik).restart()
+                    msg(f"✅ `{_traefik}` zrestartowany przez SDK.")
                 except Exception as sdk_err:
                     msg(f"⚠️ Restart nie powiódł się: {sdk_err}")
             else:
                 msg(f"⚠️ {shell_err}")
         time.sleep(5)
         all_c = docker_ps()
-        c = next((c for c in all_c if c["name"] == "dockfra-traefik"), None)
+        c = next((c for c in all_c if c["name"] == _traefik), None)
         if c:
             ok = "Up" in c["status"] and "Restarting" not in c["status"]
             icon = "✅" if ok else "🔴"
-            msg(f"{icon} `dockfra-traefik`: {c['status']}")
+            msg(f"{icon} `{_traefik}`: {c['status']}")
         buttons([{"label": "🔄 Uruchom wszystko", "value": "retry_launch"},
                  {"label": "⚙️ Ustawienia",      "value": "settings"}])
         _tl.sid = None
@@ -454,8 +455,8 @@ def fix_acme_storage():
 def fix_readonly_volume(container: str = ""):
     """Find read-only volume mounts for a container and fix host directory permissions."""
     clear_widgets()
-    cname = container or "dockfra-ssh-developer"
-    msg(f"## 🔧 Naprawiam uprawnienia woluminów — `{cname}`")
+    target = container or cname("ssh-developer")
+    msg(f"## 🔧 Naprawiam uprawnienia woluminów — `{target}`")
     _tl_sid = getattr(_tl, 'sid', None)
     def run():
         _tl.sid = _tl_sid
@@ -463,14 +464,14 @@ def fix_readonly_volume(container: str = ""):
         try:
             raw = subprocess.check_output(
                 ["docker", "inspect", "--format",
-                 "{{range .Mounts}}{{.Source}}:{{.Destination}}:{{.RW}}\n{{end}}", cname],
+                 "{{range .Mounts}}{{.Source}}:{{.Destination}}:{{.RW}}\n{{end}}", target],
                 text=True, stderr=subprocess.STDOUT).strip()
         except Exception:
             cli = _docker_client()
             if not cli:
                 msg("❌ Nie można pobrać informacji o montowaniach."); return
             try:
-                attrs = cli.containers.get(cname).attrs
+                attrs = cli.containers.get(target).attrs
                 mounts = attrs.get("Mounts", [])
                 raw = "\n".join(f"{m.get('Source','')}:{m.get('Destination','')}:{m.get('RW','')}" for m in mounts)
             except Exception as e:

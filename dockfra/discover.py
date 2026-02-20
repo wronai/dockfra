@@ -22,6 +22,10 @@ _PARAM_HINTS = {
     "TARGET":  ("Cel",             "developer"),
     "ARTIFACT":("Ścieżka artefaktu", "/artifacts/app.tar.gz"),
 }
+_PARAM_OPTIONS_API = {
+    "T": "/api/ssh-options/tickets",
+    "F": "/api/ssh-options/files/{role}",
+}
 _FALLBACK_ICONS = {"developer": "🔧", "manager": "👤", "monitor": "📡", "autopilot": "🤖"}
 _FALLBACK_PORTS = {"developer": "2200", "manager": "2202", "monitor": "2201", "autopilot": "2203"}
 
@@ -105,7 +109,7 @@ def _discover_ssh_roles():
 
             container, user, port, targets = _parse_ssh_makefile(makefile)
             icon, title                    = _parse_ssh_motd(motd, role)
-            container = container or f"dockfra-ssh-{role}"
+            container = container or cname(f"ssh-{role}")
             user      = user or role
             port      = port or _FALLBACK_PORTS.get(role, "2222")
 
@@ -155,7 +159,7 @@ def _refresh_ssh_roles():
 def _get_role(role: str):
     """Get role data, falling back to a minimal stub."""
     return _SSH_ROLES.get(role, {
-        "container": f"dockfra-ssh-{role}", "user": role,
+        "container": cname(f"ssh-{role}"), "user": role,
         "port": _FALLBACK_PORTS.get(role, "2222"),
         "icon": _FALLBACK_ICONS.get(role, "🖥️"),
         "title": role.capitalize(), "makefile": "",
@@ -179,9 +183,15 @@ def _step_ssh_info(value: str):
     cmds_data = []
     for cmd, meta in info["cmd_meta"].items():
         desc, params, hint, placeholder = meta
+        options_endpoint = None
+        if params:
+            tmpl = _PARAM_OPTIONS_API.get(params[0])
+            if tmpl:
+                options_endpoint = tmpl.format(role=role)
         cmds_data.append({
             "cmd": cmd, "desc": desc,
             "params": params, "hint": hint, "placeholder": placeholder,
+            "options_endpoint": options_endpoint,
         })
     run_value = f"run_ssh_cmd::{role}::{info['container']}::{info['user']}"
     action_grid(run_value, cmds_data)
@@ -206,7 +216,7 @@ def run_ssh_cmd(value: str, form: dict):
     """Execute selected command via docker exec and stream output to chat."""
     parts     = value.split("::")
     role      = parts[1] if len(parts) > 1 else "developer"
-    container = parts[2] if len(parts) > 2 else "dockfra-ssh-developer"
+    container = parts[2] if len(parts) > 2 else cname("ssh-developer")
     user      = parts[3] if len(parts) > 3 else "developer"
     cmd_name  = (form.get("ssh_cmd") or "").strip()
     arg       = (form.get("ssh_arg") or "").strip()

@@ -136,6 +136,82 @@ function sendAction(value, label){
   socket.emit('action', {value, form});
 }
 
+function buildParamWidget(cmd, onRun){
+  if(!cmd.params || cmd.params.length === 0) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'action-card-param';
+
+  if(!cmd.options_endpoint){
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'action-card-input';
+    inp.placeholder = cmd.placeholder || cmd.params.join(', ');
+    inp.title = cmd.hint || '';
+    inp.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); onRun(); }});
+    wrap.appendChild(inp);
+    wrap._getValue = () => inp.value.trim();
+    wrap._markRequired = () => { inp.focus(); inp.classList.add('input-required'); setTimeout(()=>inp.classList.remove('input-required'),1200); };
+    return wrap;
+  }
+
+  // Async select
+  const sel = document.createElement('select');
+  sel.className = 'action-card-select';
+  const loadOpt = document.createElement('option');
+  loadOpt.value = ''; loadOpt.textContent = '⏳ Ładowanie…'; loadOpt.disabled = true; loadOpt.selected = true;
+  sel.appendChild(loadOpt);
+
+  const customInp = document.createElement('input');
+  customInp.type = 'text'; customInp.className = 'action-card-input action-card-custom';
+  customInp.placeholder = cmd.placeholder || cmd.params.join(', ');
+  customInp.style.display = 'none';
+  customInp.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); onRun(); }});
+
+  sel.addEventListener('change', () => {
+    const isCustom = sel.value === '__custom__';
+    customInp.style.display = isCustom ? '' : 'none';
+    if(isCustom) customInp.focus();
+  });
+
+  wrap.appendChild(sel);
+  wrap.appendChild(customInp);
+  wrap._getValue = () => sel.value === '__custom__' ? customInp.value.trim() : sel.value;
+  wrap._markRequired = () => {
+    const el = sel.value === '__custom__' ? customInp : sel;
+    el.classList.add('input-required');
+    setTimeout(()=>el.classList.remove('input-required'),1200);
+  };
+
+  fetch(cmd.options_endpoint)
+    .then(r => r.json())
+    .then(d => {
+      sel.innerHTML = '';
+      if(!d.options || d.options.length === 0){
+        sel.style.display = 'none'; customInp.style.display = '';
+        wrap._getValue = () => customInp.value.trim();
+        wrap._markRequired = () => { customInp.focus(); customInp.classList.add('input-required'); setTimeout(()=>customInp.classList.remove('input-required'),1200); };
+        return;
+      }
+      const placeholder = document.createElement('option');
+      placeholder.value = ''; placeholder.textContent = `— wybierz ${cmd.params[0]} —`; placeholder.disabled = true; placeholder.selected = true;
+      sel.appendChild(placeholder);
+      d.options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value; opt.textContent = o.label;
+        sel.appendChild(opt);
+      });
+      const customOpt = document.createElement('option');
+      customOpt.value = '__custom__'; customOpt.textContent = '✏️ Wpisz ręcznie…';
+      sel.appendChild(customOpt);
+    })
+    .catch(() => {
+      sel.style.display = 'none'; customInp.style.display = '';
+      wrap._getValue = () => customInp.value.trim();
+      wrap._markRequired = () => { customInp.focus(); customInp.classList.add('input-required'); setTimeout(()=>customInp.classList.remove('input-required'),1200); };
+    });
+
+  return wrap;
+}
+
 function renderActionGrid(d){
   const existing = widgets.querySelector('.w-action-grid');
   if(existing) existing.remove();
@@ -149,34 +225,28 @@ function renderActionGrid(d){
     info.className = 'action-card-info';
     info.innerHTML = `<span class="action-card-cmd">${cmd.cmd}</span><span class="action-card-desc">${cmd.desc}</span>`;
     card.appendChild(info);
-    let argInput = null;
-    if(cmd.params && cmd.params.length > 0){
-      argInput = document.createElement('input');
-      argInput.type = 'text';
-      argInput.className = 'action-card-input';
-      argInput.placeholder = cmd.placeholder || cmd.params.join(', ');
-      argInput.title = cmd.hint || cmd.params.join(', ');
-      argInput.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); runCard(); } });
-      card.appendChild(argInput);
-    }
+
     const runBtn = document.createElement('button');
     runBtn.className = 'btn action-card-run';
-    runBtn.textContent = '▶';
+    runBtn.textContent = '\u25b6';
     runBtn.title = cmd.desc;
+
     function runCard(){
-      const arg = argInput ? argInput.value.trim() : '';
+      const arg = paramWidget ? paramWidget._getValue() : '';
       if(cmd.params && cmd.params.length > 0 && !arg){
-        argInput.focus(); argInput.classList.add('input-required');
-        setTimeout(()=>argInput.classList.remove('input-required'), 1200);
+        if(paramWidget) paramWidget._markRequired();
         return;
       }
       const display = arg ? `${cmd.cmd} ${arg}` : cmd.cmd;
       const div = document.createElement('div');
       div.className = 'msg user';
-      div.innerHTML = `<div class="avatar">👤</div><div class="bubble">${display}</div>`;
+      div.innerHTML = `<div class="avatar">\ud83d\udc64</div><div class="bubble">${display}</div>`;
       chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
       socket.emit('action', {value: d.run_value, form: {ssh_cmd: cmd.cmd, ssh_arg: arg}});
     }
+
+    const paramWidget = buildParamWidget(cmd, runCard);
+    if(paramWidget) card.appendChild(paramWidget);
     runBtn.onclick = runCard;
     card.appendChild(runBtn);
     grid.appendChild(card);

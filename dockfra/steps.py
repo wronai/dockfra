@@ -192,7 +192,7 @@ def step_setup_creds():
     text_input("OPENROUTER_API_KEY","OpenRouter API Key","sk-or-v1-...",_state.get("openrouter_key",""),sec=True)
     opts = [{"label": lbl, "value": val}
             for val,lbl in next(e["options"] for e in ENV_SCHEMA if e["key"]=="LLM_MODEL")]
-    select("LLM_MODEL","Model LLM", opts, _state.get("llm_model","google/gemini-flash-1.5"))
+    select("LLM_MODEL","Model LLM", opts, _state.get("llm_model",_schema_defaults().get("LLM_MODEL","")))
     buttons([{"label":"💾 Zapisz","value":"save_creds"},{"label":"⚙️ Wszystkie ustawienia","value":"settings"},{"label":"← Wróć","value":"back"}])
 
 def step_save_creds(form):
@@ -286,7 +286,13 @@ def _analyze_launch_error(name: str, output: str) -> tuple[str, list]:
         analysis.append("⚠️ **Błąd uprawnień** — sprawdź czy Docker działa bez sudo lub dodaj użytkownika do grupy `docker`.")
         solutions.append({"label":"🔧 Napraw uprawnienia Docker","value":"fix_docker_perms"})
 
-    if "pull access denied" in lines or "not found" in lines and "image" in lines:
+    _base_img = PROJECT["ssh_base_image"]
+    if _base_img in lines and ("pull access denied" in lines or "failed to resolve source metadata" in lines):
+        analysis.append(
+            f"⚠️ **Brak lokalnego obrazu `{_base_img}`** — obraz bazowy SSH musi być zbudowany lokalnie "
+            "z `shared/Dockerfile.ssh-base`. Kliknij **Spróbuj ponownie** — kreator zbuduje go automatycznie.")
+        solutions.append({"label":"🔨 Zbuduj ssh-base i uruchom ponownie","value":"retry_launch"})
+    elif "pull access denied" in lines or ("not found" in lines and "image" in lines):
         analysis.append("⚠️ **Nie można pobrać obrazu Docker** — sprawdź nazwę obrazu i dostęp do registry.")
         solutions.append({"label":"🔄 Spróbuj ponownie","value":"retry_launch"})
 
@@ -323,7 +329,37 @@ def step_do_launch(form):
     _launch_sid = getattr(_tl, 'sid', None)
     def run():
         _tl.sid = _launch_sid  # propagate SID so _emit_log_error targets the right client
-        subprocess.run(["docker","network","create","dockfra-shared"],capture_output=True)
+        subprocess.run(["docker","network","create",PROJECT["network"]],capture_output=True)
+
+        # ── Build shared SSH base image (required by all ssh-* roles) ─────────
+        ssh_base_dockerfile = ROOT / "shared" / "Dockerfile.ssh-base"
+        ssh_base_context    = ROOT / "shared"
+        needs_base = any(n in [t[0] for t in targets] for n in ("management","app"))
+        if needs_base and ssh_base_dockerfile.exists():
+            # Only rebuild if the image doesn't already exist
+            check = subprocess.run(
+                ["docker","image","inspect",PROJECT["ssh_base_image"]],
+                capture_output=True)
+            if check.returncode != 0:
+                progress(f"🔨 Buduję {PROJECT['ssh_base_image']}...")
+                proc = subprocess.Popen(
+                    ["docker","build","-t",PROJECT["ssh_base_image"],
+                     "-f", str(ssh_base_dockerfile), str(ssh_base_context)],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, cwd=str(ROOT))
+                for line in proc.stdout:
+                    socketio.emit("log_line", {"text": line.rstrip()})
+                proc.wait()
+                if proc.returncode != 0:
+                    progress(PROJECT["ssh_base_image"], error=True)
+                    msg(f"❌ **Błąd budowania `{PROJECT['ssh_base_image']}`** — sprawdź logi po prawej.")
+                    buttons([{"label":"🔄 Spróbuj ponownie","value":"retry_launch"},
+                             {"label":"🏠 Menu","value":"back"}])
+                    return
+                progress(PROJECT["ssh_base_image"], done=True)
+            else:
+                progress(f"{PROJECT['ssh_base_image']} (cached)", done=True)
+
         env_file_args = ["--env-file", str(WIZARD_ENV)] if WIZARD_ENV.exists() else []
         failed = []
         for name, path in targets:
@@ -365,7 +401,7 @@ def step_do_launch(form):
             # Show single consolidated action bar for failing containers
             fix_btns = []
             for c in restarting:
-                fix_btns.append({"label": f"🔧 Napraw {c['name'].replace('dockfra-','')}", "value": f"fix_container::{c['name']}"})
+                fix_btns.append({"label": f"🔧 Napraw {short_name(c['name'])}", "value": f"fix_container::{c['name']}"})
             fix_btns += [
                 {"label": "🔄 Uruchom ponownie", "value": "retry_launch"},
                 {"label": "⚙️ Ustawienia",       "value": "settings"},
@@ -387,7 +423,7 @@ def step_do_launch(form):
                     f"`ssh {ri['user']}@localhost -p {port}`\n"
                     f"| Komenda | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
                 )
-            if "dockfra-desktop" in running_names:
+            if cname("desktop") in running_names or cname("desktop-app") in running_names:
                 sections.append(
                     f"### 🖥️ Desktop (noVNC)  [http://localhost:{vnc_port}](http://localhost:{vnc_port})\n"
                     "Przeglądarkowy pulpit z podglądem dashboardu i logów."
@@ -458,7 +494,7 @@ def step_do_deploy(form):
     if not ip: msg("❌ Brak IP!"); step_deploy_device(); return
     msg(f"## 🚀 Wdrożenie → `{user}@{ip}:{port}`")
     def run():
-        container = "dockfra-ssh-developer"
+        container = _get_role("developer")["container"]
         if container not in [c["name"] for c in docker_ps()]:
             msg(f"❌ `{container}` nie działa. Uruchom app stack.")
             socketio.emit("widget",{"type":"buttons","items":[
@@ -511,25 +547,27 @@ def step_launch_devices(form=None):
     clear_widgets()
     msg("▶️ Uruchamiam **devices** stack...")
     def run():
-        subprocess.run(["docker","network","create","dockfra-shared"],capture_output=True)
+        subprocess.run(["docker","network","create",PROJECT["network"]],capture_output=True)
         progress("Uruchamiam devices...")
         rc, _ = run_cmd(["docker","compose","up","-d","--build"],cwd=DEVS)
         progress("devices",done=(rc==0),error=(rc!=0))
         if rc==0:
+            vnc_p = _state.get("VNC_RPI3_PORT", "6080")
             msg("✅ Devices stack uruchomiony!")
-            msg("📺 VNC: http://localhost:6080")
-            msg("🔒 SSH-RPi3: `ssh deployer@localhost -p 2224`")
+            msg(f"📺 VNC: http://localhost:{vnc_p}")
+            msg(f"🔒 SSH-RPi3: `ssh deployer@localhost -p {_state.get('SSH_RPI3_PORT','2224')}`")
         else:
             msg("❌ Błąd uruchamiania devices stack")
     threading.Thread(target=run,daemon=True).start()
 
 def step_post_launch_creds():
     clear_widgets()
-    container = "dockfra-ssh-developer"
+    dev_role = _get_role("developer")
+    container = dev_role["container"]
     if container not in [c["name"] for c in docker_ps()]:
         msg(f"❌ `{container}` nie działa.")
         buttons([{"label":"🚀 Uruchom stacki","value":"launch_all"},{"label":"← Wróć","value":"back"}]); return
-    msg("## 🔑 Setup GitHub + LLM w developer")
+    msg(f"## 🔑 Setup GitHub + LLM w {dev_role['user']}")
     key = _state.get("openrouter_key","")
     status_row([
         {"name":"GitHub SSH key","ok": Path(_state.get("github_key","~/.ssh/id_ed25519")).expanduser().exists(),"detail":_state.get("github_key","")},
@@ -544,9 +582,9 @@ def step_run_post_creds():
     msg("⚙️ Konfiguruję GitHub + LLM...")
     def run():
         env = {**os.environ,
-               "DEVELOPER_CONTAINER":"dockfra-ssh-developer","DEVELOPER_USER":"developer",
+               "DEVELOPER_CONTAINER":_get_role("developer")["container"],"DEVELOPER_USER":_get_role("developer")["user"],
                "GITHUB_SSH_KEY":_state.get("github_key",str(Path.home()/".ssh/id_ed25519")),
-               "LLM_MODEL":_state.get("llm_model","google/gemini-3-flash-preview"),
+               "LLM_MODEL":_state.get("llm_model",_schema_defaults().get("LLM_MODEL","")),
                "OPENROUTER_API_KEY":_state.get("openrouter_key","")}
         for script in ["setup-github-keys.sh","setup-llm.sh","setup-dev-tools.sh"]:
             sp = ROOT/"scripts"/script
