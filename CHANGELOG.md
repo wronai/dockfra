@@ -1,3 +1,15 @@
+## [1.0.25] - 2026-02-20
+
+### Summary
+
+docs(docs): configuration management system
+
+### Docs
+
+- docs: update ARCHITECTURE.md
+- docs: update CONFIGURATION.md
+
+
 ## [1.0.24] - 2026-02-20
 
 ### Summary
