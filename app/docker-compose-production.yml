@@ -15,8 +15,6 @@ networks:
     driver: bridge
   desktop-net:
     driver: bridge
-  ssh-net:
-    driver: bridge
   rpi3-net:
     driver: bridge
   dev-net:
@@ -219,7 +217,7 @@ services:
     container_name: dockfra-ssh-developer-prod
     hostname: ssh-developer
     restart: always
-    networks: [dev-net, frontend-net, backend-net]
+    networks: [dev-net, frontend-net, backend-net, mobile-net]
     ports:
       - "${SSH_DEVELOPER_PORT:-2200}:2222"
     env_file: ./ssh-developer/.env
@@ -242,6 +240,9 @@ services:
       - git-repo:/repo
       - shared-tickets:/shared/tickets
       - ./shared/lib:/shared/lib:ro
+      - backend-data:/mnt/backend-data:ro
+      - frontend-data:/mnt/frontend-data:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
         limits:
@@ -258,52 +259,12 @@ services:
         max-size: "50m"
         max-file: "10"
 
-  ssh-frontend:
-    image: lscr.io/linuxserver/openssh-server:latest
-    container_name: dockfra-ssh-frontend-prod
-    hostname: ssh-frontend
-    restart: always
-    networks: [frontend-net, ssh-net]
-    ports:
-      - "${SSH_FRONTEND_PORT:-2222}:2222"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - USER_NAME=${SSH_DEPLOY_USER:-deployer}
-      - PUBLIC_KEY_FILE=/keys/deployer.pub
-      - SUDO_ACCESS=true
-      - PASSWORD_ACCESS=false
-      - LISTEN_PORT=2222
-    volumes:
-      - ssh-keys:/keys:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
-  ssh-backend:
-    image: lscr.io/linuxserver/openssh-server:latest
-    container_name: dockfra-ssh-backend-prod
-    hostname: ssh-backend
-    restart: always
-    networks: [backend-net, ssh-net]
-    ports:
-      - "${SSH_BACKEND_PORT:-2223}:2222"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - USER_NAME=${SSH_DEPLOY_USER:-deployer}
-      - PUBLIC_KEY_FILE=/keys/deployer.pub
-      - SUDO_ACCESS=true
-      - PASSWORD_ACCESS=false
-      - LISTEN_PORT=2222
-    volumes:
-      - ssh-keys:/keys:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
   ssh-rpi3:
     build: { context: ./ssh-rpi3 }
     container_name: dockfra-ssh-rpi3-prod
     hostname: ssh-rpi3
     restart: always
-    networks: [rpi3-net, ssh-net, desktop-net]
+    networks: [rpi3-net, dev-net, desktop-net]
     ports:
       - "${SSH_RPI3_PORT:-2224}:2222"
     environment:

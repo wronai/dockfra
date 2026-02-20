@@ -65,10 +65,10 @@ network (local) or SSH tunneling (production):
 Each role service has its own `.env` with independent LLM configuration via **OpenRouter**:
 
 ```
-ssh-developer/.env    → LLM for code reviews, implementation, debugging
-ssh-monitor/.env      → LLM for log analysis, deployment decisions
-ssh-manager/.env      → LLM for ticket planning, project management
-ssh-autopilot/.env    → LLM for autonomous orchestration decisions
+app/ssh-developer/.env            → LLM for code reviews, implementation, debugging
+management/ssh-monitor/.env       → LLM for log analysis, deployment decisions
+management/ssh-manager/.env       → LLM for ticket planning, project management
+management/ssh-autopilot/.env     → LLM for autonomous orchestration decisions
 ```
 
 Configure API key and model per service:
@@ -88,42 +88,53 @@ Supported models (via OpenRouter):
 
 ## Quick Start
 
-### One-command setup (local)
+### Makefile (recommended)
 
 ```bash
 git clone <repo> dockfra && cd dockfra
-./init.sh local
+
+# 1. Initialize + start
+make init                    # Generate keys, env files, docker network
+make up                      # Start both stacks (app + management)
+
+# 2. Setup GitHub credentials + LLM
+pip install getv             # API key manager
+getv set llm openrouter OPENROUTER_API_KEY=sk-or-v1-...
+make setup-all               # GitHub keys + LLM + dev tools (one command)
+
+# 3. Use
+make ssh-developer           # SSH into developer workspace
+make aider                   # Launch aider AI pair programming
+make test-github             # Verify GitHub access
+make test-llm                # Verify LLM connectivity
 ```
 
-### Step-by-step (local)
+### Step-by-step (manual)
 
 ```bash
 # 1. Initialize both stacks
-cd app && bash scripts/init.sh local
-cd ../management && bash scripts/init.sh local
+make init-app
+make init-mgmt
 
-# 2. Configure LLM API keys
-nano management/ssh-manager/.env       # Set OPENROUTER_API_KEY
-nano management/ssh-autopilot/.env     # Set OPENROUTER_API_KEY
-nano management/ssh-monitor/.env       # Set OPENROUTER_API_KEY
-nano app/ssh-developer/.env            # Set OPENROUTER_API_KEY
+# 2. Configure LLM API key via getv
+pip install getv
+getv set llm openrouter OPENROUTER_API_KEY=sk-or-v1-your-key-here
 
-# 3. Start app first (developer needs to be up)
-cd app && docker compose up -d
+# 3. Start
+make up-app                  # App stack first
+make up-mgmt                 # Management stack
 
-# 4. Start management
-cd ../management && docker compose up -d
+# 4. Copy GitHub credentials to developer container
+make setup-github            # Copies ~/.ssh/id_ed25519 + git config
 
-# 5. Test connectivity
-docker exec dockfra-ssh-autopilot ssh developer@ssh-developer -p 2222 "id"
+# 5. Setup LLM (OpenRouter + LiteLLM + aider)
+make setup-llm               # Injects OPENROUTER_API_KEY via getv
+make setup-dev-tools         # Installs aider, configures Continue.dev
 
-# 6. Login as Manager
-ssh manager@localhost -p 2202
-ticket-create "Add user auth" --priority=high --desc="Implement JWT auth"
-
-# 7. Check developer workspace
-ssh developer@localhost -p 2200
-my-tickets
+# 6. Login and work
+make ssh-developer
+aider-start                  # AI pair programming with Gemini Flash
+litellm-start                # Start LiteLLM proxy for Continue.dev
 ```
 
 ### Production setup
@@ -132,14 +143,109 @@ my-tickets
 # SERVER 1: Management
 cd management && bash scripts/init.sh production
 nano .env.production  # Set DEVELOPER_HOST, API keys
-docker compose -f docker-compose-production.yml up -d
+make up-prod
 
 # SERVER 2: App
 cd app && bash scripts/init.sh production
 nano .env.production  # Set DB password, API keys, domain
 # Copy management public keys to ssh-developer/keys/authorized_keys
-docker compose -f docker-compose-production.yml up -d
+make up-prod
 ```
+
+## Makefile Reference
+
+```bash
+make help                    # Show all targets
+```
+
+| Target | Description |
+|---|---|
+| `make init` | Full initialization (keys, env, network) |
+| `make up` / `make down` | Start / stop both stacks |
+| `make build` | Build all Docker images |
+| `make ps` | Show running containers |
+| **GitHub + LLM** | |
+| `make setup-github` | Copy host GitHub SSH keys to developer |
+| `make setup-llm` | Configure LLM (OpenRouter via getv + LiteLLM) |
+| `make setup-dev-tools` | Install aider, Continue.dev, Claude proxy |
+| `make setup-all` | All three above in one command |
+| **SSH Access** | |
+| `make ssh-developer` | SSH into developer (port 2200) |
+| `make ssh-manager` | SSH into manager (port 2202) |
+| `make ssh-autopilot` | SSH into autopilot (port 2203) |
+| `make ssh-monitor` | SSH into monitor (port 2201) |
+| **LLM Tools** | |
+| `make aider` | Start aider inside developer |
+| `make litellm` | Start LiteLLM proxy (port 4000) |
+| `make llm-ask Q="question"` | Quick LLM query |
+| **getv** | |
+| `make getv-list` | List getv profiles |
+| `make getv-set-key KEY=sk-...` | Set OpenRouter API key |
+| **Testing** | |
+| `make test` | Full E2E test suite |
+| `make test-github` | Test GitHub SSH from developer |
+| `make test-llm` | Test LLM connectivity |
+| `make test-ssh` | Test SSH ports |
+
+## LLM-Powered Development (getv + OpenRouter)
+
+### API Key Management with getv
+
+[getv](https://github.com/wronai/getv) manages API keys securely in `~/.getv/`:
+
+```bash
+pip install getv
+
+# Auto-detect from clipboard or set manually
+getv set llm openrouter OPENROUTER_API_KEY=sk-or-v1-...
+
+# Verify
+getv list llm openrouter
+getv get llm openrouter OPENROUTER_API_KEY
+
+# Inject into container
+make setup-llm               # Uses getv internally
+```
+
+The default model is **`google/gemini-3-flash-preview`** via OpenRouter. Override:
+```bash
+make setup-llm LLM_MODEL=anthropic/claude-sonnet-4
+make aider LLM_MODEL=openai/gpt-4o
+```
+
+### LLM Dev Tools Inside ssh-developer
+
+After `make setup-all`, these tools are available inside the developer container:
+
+| Tool | Command | Description |
+|---|---|---|
+| **Aider** | `aider-start` | AI pair programming — edits files, commits |
+| **LiteLLM** | `litellm-start` | OpenAI-compatible proxy on `:4000` |
+| **Continue.dev** | VS Code extension | Config auto-loaded from `~/.continue/config.json` |
+| **Claude Code** | `claude-proxy` | Routes through LiteLLM proxy |
+| **Quick ask** | `llm-ask "question"` | One-shot LLM query |
+
+### IDE Remote SSH (VS Code / Windsurf / Cursor)
+
+Add to your **local** `~/.ssh/config`:
+
+```
+Host dockfra-developer
+    HostName localhost
+    Port 2200
+    User developer
+    IdentityFile ~/.ssh/id_ed25519
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+```
+
+Then in your IDE:
+1. **Cmd+Shift+P** → "Remote-SSH: Connect to Host" → `dockfra-developer`
+2. Install **Continue** extension on the remote
+3. Continue reads `~/.continue/config.json` (auto-configured by `make setup-dev-tools`)
+4. Prompt: *"napraw DSI config"* — the LLM edits files directly inside the container
+
+This works with **VS Code**, **Windsurf**, **Cursor**, and any VS Code fork with Remote-SSH.
 
 ## Ticket-Driven Workflow
 
@@ -286,10 +392,15 @@ dockfra/
 │   └── shared/
 │       └── lib/                            # llm_client.py, ticket_system.py
 │
-├── scripts/                                # Legacy scripts
-│   ├── setup.sh                            # Legacy setup
-│   └── run-tests.sh                        # E2E tests
-├── docker-compose.yml                      # Legacy (monolithic)
+├── Makefile                                # Operational targets (make help)
+├── scripts/                                # Host-side setup scripts
+│   ├── setup-github-keys.sh              # Copy GitHub SSH keys to developer
+│   ├── setup-llm.sh                      # Configure LLM via getv + OpenRouter
+│   ├── setup-dev-tools.sh                # Install aider, Continue.dev, LiteLLM
+│   └── inject-getv-env.sh               # Inject getv profile into container
+├── tests/
+│   └── run-tests.sh                      # E2E test suite (hybrid)
+├── goal.yaml                               # Project goals
 └── TODO/                                   # Architecture notes
 ```
 

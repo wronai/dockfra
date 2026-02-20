@@ -1,3 +1,32 @@
+## [1.0.3] - 2026-02-20
+
+### Summary
+
+refactor(build): configuration management system
+
+### Docs
+
+- docs: update README
+
+### Test
+
+- scripts: update run-tests.sh
+
+### Other
+
+- update .env.local
+- update .env.production
+- update .gitignore
+- build: update Makefile
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- scripts: update entrypoint.sh
+- update app/ssh-developer/keys/.gitkeep
+- update management/keys/.gitkeep
+- update management/keys/autopilot/.gitkeep
+- ... and 8 more
+
+
 ## [1.0.2] - 2026-02-20
 
 ### Summary

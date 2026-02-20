@@ -10,9 +10,20 @@ venv
 node_modules
 package-lock.json
 
-# Hybrid structure
-management/keys/
-app/ssh-developer/keys/
+# Hybrid structure — keys (auto-generated, keep .gitkeep)
+management/keys/*
+!management/keys/.gitkeep
+!management/keys/manager/
+management/keys/manager/*
+!management/keys/manager/.gitkeep
+!management/keys/autopilot/
+management/keys/autopilot/*
+!management/keys/autopilot/.gitkeep
+!management/keys/monitor/
+management/keys/monitor/*
+!management/keys/monitor/.gitkeep
+app/ssh-developer/keys/*
+!app/ssh-developer/keys/.gitkeep
 management/.env.local
 management/.env.production
 app/.env.local
@@ -240,12 +251,6 @@ marimo/_lsp/
 __marimo__/
 
 # Generated test artifacts and local data
-# (avoid adding rapidly changing files created by test/e2e scripts)
-frontend/tests/all-pages-documentation.md
-frontend/tests/all-pages-list.json
-frontend/tests/test-all-pages-curl.sh
-frontend/tests/e2e-uniqueness-report.json
-frontend/tmp/
 syntax-report.json
 tmp/
 
@@ -254,29 +259,5 @@ tmp/
 !**/secret.env.example
 
 # Local databases
-backend/*.db
 *.db
-backend/*.sqlite
-
-# Pendrive / storage data (keep folder structure via .gitkeep, ignore actual data)
-pendrive/logs/system/*.log
-pendrive/logs/app/*.log
-pendrive/stats/daily/stats-*.json
-pendrive/stats/aggregated/stats-*.json
-pendrive/templates/scenarios-*.json
-pendrive/templates/xml-templates/
-pendrive/templates/dsl/
-pendrive/reports/pdf/*.pdf
-pendrive/reports/xml/*.xml
-pendrive/.device_info
-pendrive/.sync_manifest
-pendrive/README.txt
-# Local stats/restart cache (~/.identification-kiosk/stats/)
-
-# Docs site generated files
-site/public/docs/
-site/public/docs-manifest.json
-site/public/artifacts/*.deb
-site/public/artifacts/*.AppImage
-site/public/artifacts/*.msi
-site/public/artifacts/*.exe
+*.sqlite
