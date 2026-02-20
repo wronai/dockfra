@@ -22,6 +22,11 @@ networks:
 volumes:
   ssh-keys:
   shared-tickets:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ../shared/tickets
   manager-workspace:
   autopilot-workspace:
   monitor-workspace:
