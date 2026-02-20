@@ -607,6 +607,13 @@ _HEALTH_PATTERNS = [
     (r"address already in use|listen.*address.*in use",
      "err", "Port zajęty przez inny proces",
      [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"}]),
+    (r"host not found in upstream [\"']?([\w-]+)[\"']?",
+     "err", "nginx: nie można znaleźć upstream — zależna usługa nie działa lub jest w innej sieci",
+     [{"label":"📊 Status sieci","value":"status"},
+      {"label":"🚀 Uruchom wszystko","value":"launch_all"}]),
+    (r"no route to host|network.*unreachable",
+     "err", "Brak trasy do hosta — sprawdź sieci Docker",
+     [{"label":"🚀 Uruchom ponownie","value":"launch_all"}]),
 ]
 
 def _analyze_container_log(name: str) -> tuple[str, list]:
@@ -623,7 +630,7 @@ def _analyze_container_log(name: str) -> tuple[str, list]:
         if m:
             port = m.group(1) if m.lastindex and m.group(1).isdigit() else ""
             fixed_btns = [
-                {**b, "value": b["value"].replace("__PORT__", port)}
+                {**b, "value": b["value"].replace("__PORT__", port).replace("__NAME__", name)}
                 for b in solutions
             ]
             # add LLM analysis button
