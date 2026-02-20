@@ -323,7 +323,42 @@ def step_do_launch(form):
         return  # form shown, wait for user
 
     cf = "docker-compose.yml" if env == "local" else "docker-compose-production.yml"
-    targets = [(name, STACKS[name]) for name in target_names if name in STACKS]
+
+    # ── If app stack is requested but folder missing, clone from GIT_REPO_URL ─
+    app_repo_url = _state.get("git_repo_url", "")
+    app_dir = ROOT / "app"
+    needs_app = "app" in target_names
+    if needs_app and app_repo_url:
+        if not app_dir.exists() or not any(app_dir.iterdir()):
+            msg(f"📥 Klonuję repozytorium aplikacji z `{app_repo_url}`…")
+            branch = _state.get("git_branch", "main") or "main"
+            rc = subprocess.run(
+                ["git", "clone", "--branch", branch, "--depth", "1", app_repo_url, str(app_dir)],
+                capture_output=True, text=True)
+            if rc.returncode != 0:
+                msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
+                buttons([{"label":"⚙️ Zmień GIT_REPO_URL","value":"settings_group::Git"},
+                         {"label":"🏠 Menu","value":"back"}])
+                return
+            msg(f"✅ Sklonowano do `{app_dir}`")
+        elif (app_dir / ".git").exists():
+            progress("🔄 Aktualizuję app/ (git pull)…")
+            subprocess.run(["git", "-C", str(app_dir), "pull", "--ff-only"],
+                           capture_output=True)
+    elif needs_app and not app_repo_url and not app_dir.exists():
+        msg("⚠️ Stack `app` wybrany, ale brak folderu `app/` i `GIT_REPO_URL` nie jest ustawiony.")
+        buttons([{"label":"⚙️ Ustaw GIT_REPO_URL","value":"settings_group::Git"},
+                 {"label":"🏠 Menu","value":"back"}])
+        return
+
+    # Re-discover stacks after potential clone (app/ may now exist)
+    from dockfra.core import _discover_stacks as _ds
+    _current_stacks = _ds()
+    targets = [(name, _current_stacks[name]) for name in target_names if name in _current_stacks]
+    if not targets:
+        msg("⚠️ Brak dostępnych stacków do uruchomienia.")
+        buttons([{"label":"🏠 Menu","value":"back"}])
+        return
 
     _launch_sid = getattr(_tl, 'sid', None)
     def run():

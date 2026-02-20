@@ -1,3 +1,14 @@
+## [1.0.24] - 2026-02-20
+
+### Summary
+
+docs(docs): docs module improvements
+
+### Other
+
+- update dockfra/steps.py
+
+
 ## [1.0.23] - 2026-02-20
 
 ### Summary
