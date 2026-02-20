@@ -1,3 +1,21 @@
+## [1.0.7] - 2026-02-20
+
+### Summary
+
+feat(build): CLI interface with 3 supporting modules
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- build: update Makefile
+- update wizard/app.py
+- update wizard/requirements.txt
+- update wizard/templates/index.html
+
+
 ## [1.0.6] - 2026-02-20
 
 ### Summary

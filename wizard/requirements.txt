@@ -1,2 +1,4 @@
 flask>=3.0
 flask-socketio>=5.3
+gevent>=23.0
+gevent-websocket>=0.10

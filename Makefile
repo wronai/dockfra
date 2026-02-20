@@ -5,6 +5,7 @@
 # Usage:
 #   make init              — Full setup (local)
 #   make up                — Start all stacks (app + management + devices)
+#   make stop              — Stop all stacks
 #   make setup-github      — Copy GitHub SSH keys to developer
 #   make setup-llm         — Configure LLM (OpenRouter + getv)
 #   make setup-dev-tools   — Install aider, Continue.dev, LiteLLM
@@ -40,8 +41,19 @@ SCRIPTS   := $(ROOT)/scripts
 # ═══════════════════════════════════════════════════════════════
 
 .PHONY: init
-init: ## Full initialization (keys, env, network)
+init: ## Full initialization (keys, env, network) and start wizard
 	@bash $(ROOT)/init.sh $(ENVIRONMENT)
+	@echo "🧙 Starting Dockfra Wizard..."
+	@bash $(ROOT)/wizard/run.sh &
+	@sleep 2
+	@echo "🌐 Opening Dockfra Wizard in browser..."
+	@if command -v xdg-open > /dev/null 2>&1; then \
+		xdg-open http://localhost:5050 2>/dev/null || true; \
+	elif command -v open > /dev/null 2>&1; then \
+		open http://localhost:5050 2>/dev/null || true; \
+	else \
+		echo "💡 Open http://localhost:5050 in your browser"; \
+	fi
 
 .PHONY: init-app
 init-app: ## Initialize app stack only
@@ -94,6 +106,18 @@ down: ## Stop all stacks
 	@cd $(APP) && docker compose down 2>/dev/null || true
 	@cd $(DEVICES) && docker compose down 2>/dev/null || true
 	@echo "✅ All stacks stopped"
+
+.PHONY: stop
+stop: ## Stop all stacks and kill services on ports 4000, 5050
+	@cd $(MGMT) && docker compose down 2>/dev/null || true
+	@cd $(APP) && docker compose down 2>/dev/null || true
+	@cd $(DEVICES) && docker compose down 2>/dev/null || true
+	@echo "🔍 Killing processes on ports 4000, 5050..."
+	@-pkill -f "litellm.*port.*4000" 2>/dev/null || true
+	@-pkill -f "python.*5050" 2>/dev/null || true
+	@-lsof -ti:4000 | xargs -r kill -9 2>/dev/null || true
+	@-lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
+	@echo "✅ All stacks stopped and ports cleared"
 
 .PHONY: down-app
 down-app: ## Stop app stack

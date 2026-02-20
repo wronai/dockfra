@@ -12,12 +12,21 @@ DEVS = ROOT / "devices"
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dockfra-wizard"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", manage_session=False)
+# Try gevent first, fallback to threading
+try:
+    import gevent
+    from gevent import pywsgi
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent", manage_session=False)
+except ImportError:
+    print("⚠️ gevent not found, using threading mode (WebSocket may have issues)")
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", manage_session=False)
 
 _state: dict = {}
+_conversation: list[dict] = []
+_logs: list[dict] = []
 
 def reset_state():
-    global _state
+    global _state, _conversation, _logs
     _state = {
         "step": "welcome",
         "environment": "local",
@@ -26,6 +35,8 @@ def reset_state():
         "openrouter_key": "", "llm_model": "google/gemini-3-flash-preview",
         "git_name": "", "git_email": "",
     }
+    _conversation = []
+    _logs = []
 
 reset_state()
 
@@ -57,7 +68,9 @@ def run_cmd(cmd, cwd=None):
     lines = []
     for line in proc.stdout:
         lines.append(line.rstrip())
-        socketio.emit("log_line", {"text": line.rstrip()})
+        log_id = f"log-{len(_logs)}"
+        _logs.append({"id": log_id, "text": line.rstrip(), "timestamp": time.time()})
+        socketio.emit("log_line", {"id": log_id, "text": line.rstrip()})
     proc.wait()
     return proc.returncode, "\n".join(lines)
 
@@ -75,7 +88,10 @@ def docker_ps():
 
 def mask(k): return k[:12]+"..."+k[-4:] if len(k)>=16 else "***"
 
-def msg(text, role="bot"):          socketio.emit("message",  {"role":role, "text":text}); time.sleep(0.04)
+def msg(text, role="bot"):
+    msg_id = f"msg-{len(_conversation)}"
+    _conversation.append({"id": msg_id, "role": role, "text": text, "timestamp": time.time()})
+    socketio.emit("message",  {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      socketio.emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
 def text_input(n,l,ph="",v="",sec=False): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec})
@@ -432,6 +448,14 @@ def api_events():
             try: events.append(json.loads(line))
             except: pass
     return json.dumps(events)
+
+@app.route("/api/history")
+def api_history():
+    return json.dumps({
+        "conversation": _conversation,
+        "logs": _logs,
+        "current_step": _state.get("step", "welcome")
+    })
 
 if __name__ == "__main__":
     print("🧙 Dockfra Wizard → http://localhost:5050")

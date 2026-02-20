@@ -22,8 +22,8 @@ header .sub{color:var(--muted);font-size:.85rem}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .main{display:flex;flex:1;overflow:hidden;position:relative}
-.chat-panel{flex:1;display:flex;flex-direction:column;min-width:200px}
-.log-panel{width:340px;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
+.chat-panel{width:40%;display:flex;flex-direction:column;min-width:200px}
+.log-panel{width:60%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
 .resize-handle{position:absolute;top:0;bottom:0;width:4px;background:transparent;cursor:col-resize;z-index:10}
 .resize-handle:hover{background:var(--accent)}
 .resize-handle.left{left:-2px}
@@ -104,7 +104,7 @@ header .sub{color:var(--muted);font-size:.85rem}
   </div>
   <div class="resize-handle right" id="resize-handle"></div>
   <div class="log-panel" id="log-panel">
-    <h3>📋 Execution log</h3>
+    <h3>📋 Execution log <button id="copy-logs" style="float:right;font-size:0.7rem;padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;">📋 Copy</button></h3>
     <div id="log-output"></div>
   </div>
 </div>
@@ -131,10 +131,58 @@ function renderMd(text){
     .replace(/\n/g, '<br>');
 }
 
+// ── Load conversation history ────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const response = await fetch('/api/history');
+    const data = await response.json();
+    
+    // Clear current content
+    chat.innerHTML = '';
+    logOut.innerHTML = '';
+    
+    // Load conversation
+    data.conversation.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = `msg ${msg.role}`;
+      div.setAttribute('data-msg-id', msg.id);
+      div.innerHTML = `
+        <div class="avatar">${msg.role==='bot'?'🤖':'👤'}</div>
+        <div class="bubble">${renderMd(msg.text)}</div>`;
+      chat.appendChild(div);
+    });
+    
+    // Load logs
+    data.logs.forEach(log => {
+      const l = document.createElement('div');
+      l.className = 'log-line' + (log.text.includes('Error')||log.text.includes('error')||log.text.startsWith('E ')?' err':'');
+      l.setAttribute('data-log-id', log.id);
+      l.textContent = log.text;
+      logOut.appendChild(l);
+    });
+    
+    // Scroll to bottom
+    chat.scrollTop = chat.scrollHeight;
+    logOut.scrollTop = logOut.scrollHeight;
+  } catch (error) {
+    console.error('Failed to load history:', error);
+  }
+}
+
+// Load history on page load
+loadHistory();
+
 // ── Message ────────────────────────────────────────────────────────────────
 socket.on('message', d => {
+  // Check if message already exists to prevent duplicates
+  if (d.id) {
+    const existingMsg = document.querySelector(`[data-msg-id="${d.id}"]`);
+    if (existingMsg) return; // Skip duplicate
+  }
+  
   const div = document.createElement('div');
   div.className = `msg ${d.role}`;
+  if (d.id) div.setAttribute('data-msg-id', d.id);
   div.innerHTML = `
     <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
     <div class="bubble">${renderMd(d.text)}</div>`;
@@ -277,10 +325,114 @@ function renderProgress(d){
   chat.scrollTop = chat.scrollHeight;
 }
 
+// ── Panel resizing ───────────────────────────────────────────────────────────
+const resizeHandle = document.getElementById('resize-handle');
+const chatPanel = document.getElementById('chat-panel');
+const logPanel = document.getElementById('log-panel');
+const mainContainer = document.querySelector('.main');
+let isResizing = false;
+let startX = 0;
+let startLogWidth = 0;
+
+resizeHandle.addEventListener('mousedown', (e) => {
+  isResizing = true;
+  startX = e.clientX;
+  startLogWidth = logPanel.offsetWidth;
+  
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.body.style.pointerEvents = 'none'; // Prevent text selection during resize
+  resizeHandle.style.pointerEvents = 'auto'; // Allow handle to be clicked
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+  
+  const deltaX = e.clientX - startX;
+  const containerWidth = mainContainer.offsetWidth;
+  const newLogWidth = startLogWidth - deltaX;
+  
+  // Constrain log panel width (min 200px, max 80% of container)
+  const minPanelWidth = 200;
+  const maxLogWidth = containerWidth * 0.8;
+  
+  if (newLogWidth >= minPanelWidth && newLogWidth <= maxLogWidth) {
+    logPanel.style.width = newLogWidth + 'px';
+    // Chat panel automatically fills remaining space with flex: 1
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.body.style.pointerEvents = '';
+    
+    // Save the preferred log width to localStorage
+    const logWidth = logPanel.offsetWidth;
+    localStorage.setItem('dockfra-log-width', logWidth);
+  }
+});
+
+// Restore saved widths on page load
+function restorePanelWidths() {
+  const savedLogWidth = localStorage.getItem('dockfra-log-width');
+  const containerWidth = mainContainer.offsetWidth;
+  
+  if (savedLogWidth) {
+    const logWidth = Math.min(Math.max(parseInt(savedLogWidth), 200), containerWidth * 0.8);
+    logPanel.style.width = logWidth + 'px';
+    // Chat panel automatically fills remaining space with flex: 1
+  } else {
+    // Set default 40/60 split if no saved preference
+    logPanel.style.width = '60%';
+    chatPanel.style.width = '40%';
+  }
+}
+
+// Restore widths after page load
+setTimeout(restorePanelWidths, 100);
+
+// ── Copy logs functionality ───────────────────────────────────────────────────
+document.getElementById('copy-logs').addEventListener('click', () => {
+  const allLogs = Array.from(logOut.children).map(child => child.textContent).join('\n');
+  const truncatedLogs = allLogs.length > 5000 ? allLogs.slice(-5000) : allLogs;
+  
+  navigator.clipboard.writeText(truncatedLogs).then(() => {
+    const btn = document.getElementById('copy-logs');
+    const originalText = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = 'var(--bg3)';
+      btn.style.color = 'var(--text)';
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy logs:', err);
+    const btn = document.getElementById('copy-logs');
+    btn.textContent = '❌ Failed';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy';
+    }, 2000);
+  });
+});
+
 // ── Log panel ──────────────────────────────────────────────────────────────
 socket.on('log_line', d => {
+  // Check if log line already exists to prevent duplicates
+  if (d.id) {
+    const existingLog = document.querySelector(`[data-log-id="${d.id}"]`);
+    if (existingLog) return; // Skip duplicate
+  }
+  
   const l = document.createElement('div');
   l.className = 'log-line' + (d.text.includes('Error')||d.text.includes('error')||d.text.startsWith('E ')?' err':'');
+  if (d.id) l.setAttribute('data-log-id', d.id);
   l.textContent = d.text;
   logOut.appendChild(l);
   logOut.scrollTop = logOut.scrollHeight;
