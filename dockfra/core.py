@@ -284,6 +284,10 @@ _CORE_ENV_SCHEMA = [
      "type":"select", "options":[("all","Wszystkie")] + [(s,s.capitalize()) for s in STACKS],
      "default":"all"},
     # Git
+    {"key":"GIT_REPO_URL",      "label":"Git Repo URL",           "group":"Git",
+     "type":"text",  "placeholder":"git@github.com:org/app.git", "default":""},
+    {"key":"GIT_BRANCH",        "label":"Git Branch",             "group":"Git",
+     "type":"text",  "placeholder":"main",                       "default":"main"},
     {"key":"GIT_NAME",          "label":"Git user.name",          "group":"Git",
      "type":"text",  "placeholder":"Jan Kowalski",               "default":""},
     {"key":"GIT_EMAIL",         "label":"Git user.email",         "group":"Git",
