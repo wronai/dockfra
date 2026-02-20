@@ -272,6 +272,19 @@ _FIELD_META: dict[str, dict] = {
     "HEALTHCHECK_TIMEOUT":   {"desc": "Timeout odpowiedzi healthchecka Docker (np. 10s)."},
     "HEALTHCHECK_RETRIES":   {"desc": "Ile nieudanych healthchecków zanim kontener jest oznaczony jako unhealthy."},
     "SSH_DEPLOY_USER":       {"desc": "Użytkownik SSH do deployu na urządzenia IoT/RPi."},
+    # Integrations
+    "GITHUB_TOKEN":   {"desc": "GitHub Personal Access Token (classic lub fine-grained). Wymagany do sync ticketów z GitHub Issues. Uprawnienia: repo, issues."},
+    "GITHUB_REPO":    {"desc": "Repozytorium GitHub w formacie owner/repo (np. myorg/myapp). Tickety sync z Issues tego repo."},
+    "JIRA_URL":       {"desc": "URL instancji Jira Cloud (np. https://your-org.atlassian.net). Wymagany do sync z Jira."},
+    "JIRA_EMAIL":     {"desc": "Email użytkownika Jira powiązany z API tokenem."},
+    "JIRA_TOKEN":     {"desc": "Jira API Token (generuj w: id.atlassian.com → Ustawienia → Tokeny API)."},
+    "JIRA_PROJECT":   {"desc": "Klucz projektu Jira (np. PROJ). Nowe tickety będą tworzone w tym projekcie."},
+    "TRELLO_KEY":     {"desc": "Trello API Key (generuj na: trello.com/power-ups/admin)."},
+    "TRELLO_TOKEN":   {"desc": "Trello autoryzacyjny token (generuj po uzyskaniu API Key)."},
+    "TRELLO_BOARD":   {"desc": "ID tablicy Trello. Znajdź w URL tablicy: trello.com/b/<BOARD_ID>/..."},
+    "TRELLO_LIST":    {"desc": "ID listy Trello dla nowych kart. Pobierz przez API: /boards/<ID>/lists."},
+    "LINEAR_TOKEN":   {"desc": "Linear API Token (generuj w: linear.app → Settings → API → Personal API keys)."},
+    "LINEAR_TEAM":    {"desc": "ID zespołu Linear. Tickety będą tworzone w tym zespole."},
 }
 
 # ── ENV schema: core + discovered + dockfra.yaml overrides ───────────────
@@ -309,6 +322,31 @@ _CORE_ENV_SCHEMA = [
     # Ports
     {"key":"WIZARD_PORT",       "label":"Port Wizarda",            "group":"Ports",
      "type":"text",  "placeholder":"5050",                       "default":"5050"},
+    # Integrations
+    {"key":"GITHUB_TOKEN",      "label":"GitHub Personal Access Token","group":"Integrations",
+     "type":"password","placeholder":"ghp_xxx...",               "default":""},
+    {"key":"GITHUB_REPO",       "label":"GitHub Repo (owner/repo)",   "group":"Integrations",
+     "type":"text",  "placeholder":"myorg/myapp",                "default":""},
+    {"key":"JIRA_URL",          "label":"Jira URL",                   "group":"Integrations",
+     "type":"text",  "placeholder":"https://your-org.atlassian.net","default":""},
+    {"key":"JIRA_EMAIL",        "label":"Jira Email",                 "group":"Integrations",
+     "type":"text",  "placeholder":"user@company.com",           "default":""},
+    {"key":"JIRA_TOKEN",        "label":"Jira API Token",             "group":"Integrations",
+     "type":"password","placeholder":"xxx...",                    "default":""},
+    {"key":"JIRA_PROJECT",      "label":"Jira Project Key",           "group":"Integrations",
+     "type":"text",  "placeholder":"PROJ",                       "default":""},
+    {"key":"TRELLO_KEY",        "label":"Trello API Key",             "group":"Integrations",
+     "type":"password","placeholder":"xxx...",                    "default":""},
+    {"key":"TRELLO_TOKEN",      "label":"Trello Token",               "group":"Integrations",
+     "type":"password","placeholder":"xxx...",                    "default":""},
+    {"key":"TRELLO_BOARD",      "label":"Trello Board ID",            "group":"Integrations",
+     "type":"text",  "placeholder":"board_id",                   "default":""},
+    {"key":"TRELLO_LIST",       "label":"Trello List ID",             "group":"Integrations",
+     "type":"text",  "placeholder":"list_id",                    "default":""},
+    {"key":"LINEAR_TOKEN",      "label":"Linear API Token",           "group":"Integrations",
+     "type":"password","placeholder":"lin_api_xxx...",            "default":""},
+    {"key":"LINEAR_TEAM",       "label":"Linear Team ID",             "group":"Integrations",
+     "type":"text",  "placeholder":"team_id",                    "default":""},
 ]
 
 def _build_env_schema() -> list:

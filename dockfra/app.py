@@ -13,7 +13,7 @@ from .core import (
     ENV_SCHEMA, load_env, save_env,
     ROOT, MGMT, _PKG_DIR,
     _llm_chat, _llm_config, _LLM_AVAILABLE, _WIZARD_SYSTEM_PROMPT,
-    msg, buttons, progress, mask,
+    msg, buttons, progress, mask, clear_widgets,
     run_cmd, docker_ps, _analyze_container_log,
     _local_interfaces, _arp_devices, _devices_env_ip, _subnet_ping_sweep,
     _docker_container_env,
@@ -37,7 +37,7 @@ from .fixes import (
     fix_acme_storage, fix_readonly_volume, fix_docker_perms,
 )
 from .discover import (
-    _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES, _refresh_ssh_roles,
+    _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES, _refresh_ssh_roles, _get_role,
 )
 import os as _os, sys as _sys
 
