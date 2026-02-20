@@ -1,19 +1,54 @@
 #!/usr/bin/env python3
 """Dockfra Setup Wizard — http://localhost:5050"""
-import os, json, subprocess, threading, time, socket as _socket, secrets as _secrets
+import os, json, subprocess, threading, time, socket as _socket, secrets as _secrets, sys
+from collections import deque
 from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
+# Allow importing shared lib without installation
+_SHARED_LIB = Path(__file__).parent.parent / "shared" / "lib"
+if str(_SHARED_LIB) not in sys.path:
+    sys.path.insert(0, str(_SHARED_LIB))
+try:
+    from llm_client import chat as _llm_chat, get_config as _llm_config
+    _LLM_AVAILABLE = True
+except ImportError:
+    _LLM_AVAILABLE = False
+    def _llm_chat(*a, **kw): return "[LLM] llm_client not found"
+    def _llm_config(): return {}
+
+_WIZARD_SYSTEM_PROMPT = """
+You are the Dockfra Setup Wizard assistant. Dockfra is a multi-stack Docker infrastructure
+(management, app, devices) managed through this chat UI.
+Help the user configure environment variables, troubleshoot Docker errors, understand
+service roles, and launch stacks. Be concise and practical. Use Markdown.
+Available stacks: management (ssh-manager, ssh-autopilot, ssh-monitor),
+app (frontend, backend, db, redis, mobile-backend, desktop-app),
+devices (ssh-rpi3, vnc-rpi3).
+If asked about a Docker error, suggest the most likely fix.
+"""
+
 # Thread-local: when set, emit helpers target this SID instead of broadcasting
 _tl = threading.local()
 
+# Global log buffer (circular, last 2000 lines) for /api/logs/tail
+_log_buffer: deque = deque(maxlen=2000)
+
 def _sid_emit(event, data):
-    """Emit to current SID if inside a handler, broadcast otherwise."""
+    """Emit to SID, or to collector (REST mode), or broadcast."""
+    # REST API collector mode: capture all emitted events
+    collector = getattr(_tl, 'collector', None)
+    if collector is not None:
+        collector.append({"event": event, "data": data})
+    # Capture log lines to global buffer
+    if event == "log_line":
+        _log_buffer.append({"text": data.get("text",""), "ts": time.time()})
+    # Emit via SocketIO unless in pure REST mode (no sid AND collector set)
     sid = getattr(_tl, 'sid', None)
     if sid:
         socketio.emit(event, data, room=sid)
-    else:
+    elif collector is None:
         socketio.emit(event, data)
 
 ROOT = Path(__file__).parent.parent.resolve()
@@ -242,7 +277,7 @@ def msg(text, role="bot"):
     _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
-def text_input(n,l,ph="",v="",sec=False,hint="",chips=None): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or []})
+def text_input(n,l,ph="",v="",sec=False,hint="",chips=None,modal_type=""): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or [],"modal_type":modal_type})
 def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":l,"options":opts,"value":v})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
@@ -324,6 +359,46 @@ def _local_interfaces() -> list[str]:
             ips.append(m.group(1))
     except: pass
     return ips
+
+def _subnet_ping_sweep(max_hosts: int = 254, timeout: float = 0.4) -> list[str]:
+    """Ping-sweep the host's first non-loopback /24 subnet. Returns responding IPs."""
+    import re, ipaddress
+    from concurrent.futures import ThreadPoolExecutor
+    # Find a suitable subnet (prefer 192.168.x, 10.x, 172.16-31.x; skip 10.42 CNI)
+    subnet_ip = ""
+    try:
+        out = subprocess.check_output(["ip","addr"], text=True, stderr=subprocess.DEVNULL)
+        for m in re.finditer(r'inet (\d+\.\d+\.\d+\.\d+)/(\d+).*scope global', out):
+            ip, prefix = m.group(1), int(m.group(2))
+            parts = [int(x) for x in ip.split(".")]
+            # skip CNI / docker ranges
+            if parts[0] == 10 and parts[1] in (42, 96, 244): continue
+            if parts[0] == 172 and 16 <= parts[1] <= 31: continue
+            if parts[0] == 127: continue
+            subnet_ip = ip
+            break
+    except: pass
+    if not subnet_ip: return []
+    try:
+        net = ipaddress.IPv4Network(f"{subnet_ip}/24", strict=False)
+        hosts = [str(h) for h in net.hosts() if str(h) != subnet_ip][:max_hosts]
+    except: return []
+    def _ping(ip: str) -> str:
+        try:
+            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                # Try port 22 (SSH) first — fast
+                if s.connect_ex((ip, 22)) == 0: return ip
+            # Fallback: ICMP via system ping (1 packet, 0.4s timeout)
+            r = subprocess.run(["ping","-c1","-W1",ip], capture_output=True, timeout=2)
+            if r.returncode == 0: return ip
+        except: pass
+        return ""
+    responding = []
+    with ThreadPoolExecutor(max_workers=32) as ex:
+        for result in ex.map(_ping, hosts):
+            if result: responding.append(result)
+    return responding
 
 def _detect_suggestions() -> dict:
     """Auto-detect suggested values for form fields. Returns {key: {value, hint, chips}}."""
@@ -448,15 +523,17 @@ def _emit_missing_fields(missing: list[dict]):
         # Pre-fill with suggestion only when field is still empty
         if not cur and sug.get("value"):
             cur = sug["value"]
-        hint  = sug.get("hint", "")
-        chips = sug.get("chips", [])
+        hint      = sug.get("hint", "")
+        chips     = sug.get("chips", [])
+        modal_type = "ip_picker" if e["key"] == "DEVICE_IP" else ""
         if e["type"] == "select":
             opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
             select(e["key"], e["label"], opts, cur)
         else:
             text_input(e["key"], e["label"],
                        e.get("placeholder", ""), cur,
-                       sec=(e["type"] == "password"), hint=hint, chips=chips)
+                       sec=(e["type"] == "password"), hint=hint, chips=chips,
+                       modal_type=modal_type)
 
 def step_welcome():
     _state["step"] = "welcome"
@@ -483,6 +560,82 @@ def step_welcome():
             {"label": "📊 Status",                   "value": "status"},
         ])
 
+_HEALTH_PATTERNS = [
+    # (regex, severity, message_pl, [solution_buttons])
+    (r"port is already allocated|bind for 0\.0\.0\.0:(\d+) failed",
+     "err", "Konflikt portu — inny proces zajmuje port",
+     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"},
+      {"label":"⚙️ Zmień port","value":"settings"}]),
+    (r"Bind for .+:(\d+) failed",
+     "err", "Port zajęty",
+     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"}]),
+    (r"permission denied",
+     "err", "Brak uprawnień — Docker może wymagać sudo lub grupy docker",
+     [{"label":"🔧 Napraw uprawnienia","value":"fix_docker_perms"}]),
+    (r"no such file or directory",
+     "err", "Brak pliku lub katalogu — sprawdź ścieżki woluminów",
+     [{"label":"⚙️ Ustawienia","value":"settings"}]),
+    (r"connection refused|connection reset by peer",
+     "warn", "Odmowa połączenia — zależna usługa może nie być gotowa",
+     [{"label":"📊 Status","value":"status"},{"label":"🔄 Uruchom ponownie","value":"launch_all"}]),
+    (r'variable .+? is not set|required.*not set|env.*missing',
+     "err", "Brakuje zmiennej środowiskowej",
+     [{"label":"⚙️ Konfiguracja","value":"settings"}]),
+    (r"network .+? not found|network .+? declared as external",
+     "err", "Brak sieci Docker — uruchom `docker network create dockfra-shared`",
+     [{"label":"🚀 Uruchom ponownie","value":"launch_all"}]),
+    (r"oci runtime|oci error|cannot start container",
+     "err", "Błąd Docker runtime",
+     [{"label":"🐋 Pokaż logi","value":"pick_logs"}]),
+    (r"health_status.*unhealthy|container.*unhealthy",
+     "warn", "Kontener niezdrowy (healthcheck nie przechodzi)",
+     [{"label":"📋 Pokaż logi","value":"pick_logs"}]),
+    (r"exec.*not found|executable file not found",
+     "err", "Nie znaleziono wykonywalnego pliku w obrazie",
+     [{"label":"🔧 Przebuduj","value":"launch_all"}]),
+    (r"Read-only file system",
+     "err", "Wolumin zamontowany jako read-only — sprawdź `volumes:` i uprawnienia hosta",
+     [{"label":"⚙️ Ustawienia","value":"settings"},
+      {"label":"🔧 Diagnoza","value":"ai_analyze::__NAME__"}]),
+    (r"unable to initialize certificates resolver.*no storage",
+     "err", "Traefik: brak ścieżki przechowywania certyfikatów ACME — ustaw `ACME_STORAGE` lub wyłącz Let's Encrypt",
+     [{"label":"⚙️ Konfiguracja","value":"settings"},
+      {"label":"🧠 Analizuj","value":"ai_analyze::__NAME__"}]),
+    (r"letsencrypt.*storage|acme.*storage|certificatesresolvers",
+     "warn", "Traefik ACME/Let's Encrypt: brakuje konfiguracji storage",
+     [{"label":"⚙️ Ustawienia","value":"settings"}]),
+    (r"address already in use|listen.*address.*in use",
+     "err", "Port zajęty przez inny proces",
+     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"}]),
+]
+
+def _analyze_container_log(name: str) -> tuple[str, list]:
+    """Read last 40 lines of a container log and return (finding_text, buttons)."""
+    try:
+        out = subprocess.check_output(
+            ["docker","logs","--tail","40",name],
+            text=True, stderr=subprocess.STDOUT)
+    except Exception as e:
+        return f"Nie można pobrać logów: {e}", []
+    import re
+    for pattern, sev, message, solutions in _HEALTH_PATTERNS:
+        m = re.search(pattern, out, re.IGNORECASE)
+        if m:
+            port = m.group(1) if m.lastindex and m.group(1).isdigit() else ""
+            fixed_btns = [
+                {**b, "value": b["value"].replace("__PORT__", port)}
+                for b in solutions
+            ]
+            # add LLM analysis button
+            fixed_btns.append({"label":"🧠 Analizuj z AI","value":f"ai_analyze::{name}"})
+            snippet = "\n".join(out.strip().splitlines()[-6:])
+            return f"**{message}**\n```\n{snippet}\n```", fixed_btns
+    # No known pattern — return last lines
+    snippet = "\n".join(out.strip().splitlines()[-5:])
+    return (f"Nieznany błąd — ostatnie logi:\n```\n{snippet}\n```",
+            [{"label":"🧠 Analizuj z AI","value":f"ai_analyze::{name}"},
+             {"label":"📋 Pokaż pełne logi","value":f"logs::{name}"}])
+
 def step_status():
     _state["step"] = "status"
     clear_widgets()
@@ -491,8 +644,20 @@ def step_status():
         msg("⚠️ Brak uruchomionych kontenerów.")
         buttons([{"label":"🚀 Uruchom teraz","value":"launch_all"},{"label":"🏠 Menu","value":"back"}])
         return
-    msg(f"**Uruchomione kontenery ({len(containers)}):**")
-    status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in containers])
+    running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
+    failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
+    msg(f"## 📊 Stan systemu — {len(running)} ✅ OK · {len(failing)} 🔴 problemów")
+    status_row([{"name":c["name"],
+                 "ok": "Up" in c["status"] and "Restarting" not in c["status"],
+                 "detail":c["status"]} for c in containers])
+    if failing:
+        msg(f"### 🔍 Analiza problemów ({len(failing)} kontenerów)")
+        for c in failing:
+            finding, btns = _analyze_container_log(c["name"])
+            msg(f"#### `{c['name']}` — {c['status']}\n{finding}")
+            if btns:
+                btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
+                buttons(btns)
     buttons([
         {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
         {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
@@ -537,16 +702,23 @@ def step_settings(group: str = ""):
     else:
         entries = [e for e in ENV_SCHEMA if e["group"] == group]
         msg(f"## ⚙️ {group}")
+        suggestions = _detect_suggestions()
         for e in entries:
-            sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+            sk  = _ENV_TO_STATE.get(e["key"], e["key"].lower())
             cur = _state.get(sk, e.get("default", ""))
+            sug = suggestions.get(e["key"], {})
+            if not cur and sug.get("value"):
+                cur = sug["value"]
             if e["type"] == "select":
                 opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
                 select(e["key"], e["label"], opts, cur)
             else:
                 text_input(e["key"], e["label"],
                            e.get("placeholder", ""), cur,
-                           sec=(e["type"] == "password"))
+                           sec=(e["type"] == "password"),
+                           hint=sug.get("hint", ""),
+                           chips=sug.get("chips", []),
+                           modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "")
         buttons([
             {"label": "💾 Zapisz",    "value": f"save_settings::{group}"},
             {"label": "← Sekcje",    "value": "settings"},
@@ -566,12 +738,13 @@ def step_save_settings(group: str, form: dict):
             _state[sk] = val
             env_updates[e["key"]] = val
     save_env(env_updates)
-    msg(f"✅ **{group}** — zapisano do `wizard/.env`")
+    lines = []
     for e in entries:
         sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
         val = _state.get(sk, "")
         display = mask(val) if e["type"] == "password" and val else (val or "(puste)")
-        msg(f"- `{e['key']}` = `{display}`")
+        lines.append(f"{e['key']} = {display}")
+    msg(f"✅ **{group}** — zapisano do `wizard/.env`\n" + "\n".join(f"- `{l}`" for l in lines))
     buttons([
         {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
         {"label": "← Sekcje",        "value": "settings"},
@@ -746,18 +919,13 @@ def step_do_launch(form):
         env_file_args = ["--env-file", str(WIZARD_ENV)] if WIZARD_ENV.exists() else []
         failed = []
         for name, path in targets:
-            msg(f"▶️ **{name}**...")
-            progress(f"Uruchamiam {name}...")
+            progress(f"▶️ {name}...")
             rc, out = run_cmd(["docker","compose","-f",cf]+env_file_args+["up","-d","--build"],cwd=path)
             progress(f"{name}", done=(rc==0), error=(rc!=0))
-            if rc == 0:
-                msg(f"✅ **{name}** uruchomiony")
-            else:
+            if rc != 0:
                 failed.append((name, out))
-                msg(f"❌ **{name}** — błąd (exit {rc})")
 
         if failed:
-            msg("---")
             msg("## 🔍 Analiza błędów")
             for name, out in failed:
                 analysis, solutions = _analyze_launch_error(name, out)
@@ -1062,6 +1230,27 @@ def on_action(data):
             diag_port(value.split("::",1)[1]); return
         if value.startswith("show_missing_env::"):
             show_missing_env(value.split("::",1)[1]); return
+        if value.startswith("ai_analyze::"):
+            cname = value.split("::",1)[1]
+            _tl_sid = getattr(_tl, 'sid', None)
+            def _ai_analyze_thread(name=cname):
+                _tl.sid = _tl_sid
+                try:
+                    out = subprocess.check_output(
+                        ["docker","logs","--tail","60",name],
+                        text=True, stderr=subprocess.STDOUT)
+                except Exception as e:
+                    msg(f"❌ Nie można pobrać logów: {e}"); return
+                progress("🧠 AI analizuje logi...")
+                prompt = (f"Kontener Docker `{name}` ma problem. Ostatnie logi:\n"
+                          f"```\n{out[-3000:]}\n```\n"
+                          "Określ przyczynę błędu i podaj konkretne kroki naprawy.")
+                reply = _llm_chat(prompt, system_prompt=_WIZARD_SYSTEM_PROMPT)
+                progress("🧠 AI", done=True)
+                msg(f"### 🧠 Analiza AI: `{name}`\n{reply}")
+                _tl.sid = None
+            threading.Thread(target=_ai_analyze_thread, daemon=True).start()
+            return
         if value.startswith("logs_stack::"):
             step_show_logs(value.split("::",1)[1]); return
         if value.startswith("fix_compose::"):
@@ -1086,9 +1275,28 @@ def on_action(data):
         handler = STEPS.get(value)
         if handler:
             handler(form)
-        else:
-            msg(f"⚠️ Nieznana akcja: `{value}`")
-            buttons([{"label":"← Wróć","value":"back"}])
+        elif value.strip():
+            # Free-text → route to LLM
+            _tl_sid = getattr(_tl, 'sid', None)
+            user_text = value.strip()
+            def _llm_thread():
+                _tl.sid = _tl_sid
+                if not _LLM_AVAILABLE or not _llm_config().get("api_key"):
+                    msg("⚠️ LLM niedostępne — ustaw `OPENROUTER_API_KEY` w `wizard/.env`")
+                    buttons([{"label":"⚙️ Konfiguracja","value":"settings"},{"label":"← Wróć","value":"back"}])
+                    return
+                progress("🧠 LLM myśli...")
+                history = [{"role": m["role"] if m["role"] != "bot" else "assistant",
+                            "content": m["text"]}
+                           for m in _conversation[-10:]
+                           if m.get("text") and m["role"] in ("user","bot")]
+                reply = _llm_chat(user_text,
+                                  system_prompt=_WIZARD_SYSTEM_PROMPT,
+                                  history=history[:-1])  # last is current msg
+                progress("🧠 LLM", done=True)
+                msg(reply)
+                _tl.sid = None
+            threading.Thread(target=_llm_thread, daemon=True).start()
     finally:
         _tl.sid = None
 
@@ -1205,6 +1413,120 @@ def api_processes():
     
     return json.dumps(processes)
 
+@app.route("/api/device-ips")
+def api_device_ips():
+    import re
+    local_ips = set(_local_interfaces())
+    do_scan = request.args.get("scan") == "1"
+
+    def _is_docker_internal(ip: str) -> bool:
+        p = ip.split(".")
+        if len(p) != 4: return False
+        a, b = int(p[0]), int(p[1])
+        return (a == 172 and 16 <= b <= 31) or (a == 10 and b in (0, 1, 88, 89))
+
+    # ── Used IPs (where already referenced) ──────────────────────────────────
+    used: dict[str, list[str]] = {}
+    # wizard/.env
+    env_ip = _devices_env_ip()
+    if env_ip:
+        used.setdefault(env_ip, []).append("devices/.env (RPI3_HOST)")
+    # wizard state
+    state_ip = _state.get("device_ip", "")
+    if state_ip and state_ip != env_ip:
+        used.setdefault(state_ip, []).append("wizard session")
+    # scan all *.env* files for IP-like values
+    for env_file in list(ROOT.glob("**/.env*")) + list(ROOT.glob("**/*.env")):
+        if ".venv" in str(env_file) or ".git" in str(env_file): continue
+        try:
+            for line in env_file.read_text(errors="ignore").splitlines():
+                m = re.match(r'^\w+=(\d+\.\d+\.\d+\.\d+)$', line.strip())
+                if m:
+                    ip = m.group(1)
+                    if ip not in local_ips:
+                        used.setdefault(ip, []).append(str(env_file.relative_to(ROOT)))
+        except: pass
+
+    # ── Docker containers with their IPs ─────────────────────────────────────
+    docker_entries = []
+    try:
+        names_out = subprocess.check_output(
+            ["docker","ps","--format","{{.Names}}"],
+            text=True, stderr=subprocess.DEVNULL).strip().splitlines()
+        for name in names_out:
+            try:
+                info = json.loads(subprocess.check_output(
+                    ["docker","inspect","--format",
+                     '{"ip":"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",'
+                     '"net":"{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}",'
+                     '"ports":"{{range $p,$_ := .NetworkSettings.Ports}}{{$p}} {{end}}",'
+                     '"status":"{{.State.Status}}"}',
+                     name], text=True, stderr=subprocess.DEVNULL))
+                ip = info.get("ip","").strip()
+                if ip:
+                    docker_entries.append({
+                        "name": name, "ip": ip,
+                        "network": info.get("net","").strip(),
+                        "ports": info.get("ports","").strip(),
+                        "status": info.get("status","unknown"),
+                        "used_in": used.get(ip, []),
+                        "is_local": ip in local_ips,
+                    })
+            except: pass
+    except: pass
+
+    # ── ARP / local network ───────────────────────────────────────────────────
+    arp = _arp_devices()
+    container_ips = {e["ip"] for e in docker_entries}
+    # Optional: ping-sweep the local subnet and add new IPs not in ARP
+    if do_scan:
+        seen_ips = {d["ip"] for d in arp} | local_ips | container_ips
+        swept = _subnet_ping_sweep()
+        for ip in swept:
+            if ip not in seen_ips:
+                arp.append({"ip": ip, "iface": "", "mac": "", "state": "REACHABLE"})
+                seen_ips.add(ip)
+
+    raw_arp = [d for d in arp if d["ip"] not in local_ips and d["ip"] not in container_ips]
+
+    # Probe hostnames + open ports in parallel
+    COMMON_PORTS = [22, 80, 443, 2200, 2201, 2202, 2203, 2222,
+                    3000, 5000, 6080, 8000, 8080, 8081, 8082, 8100, 8202, 9000]
+
+    def _probe(d: dict) -> dict:
+        ip = d["ip"]
+        hostname = ""
+        open_ports: list[int] = []
+        try:
+            h = _socket.gethostbyaddr(ip)[0]
+            if h != ip: hostname = h
+        except: pass
+        # port scan only for real (non-CNI) REACHABLE devices
+        if d.get("state") in ("REACHABLE","DELAY") and d.get("iface","") not in ("cni0","flannel.1","docker0"):
+            for port in COMMON_PORTS:
+                try:
+                    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+                        s.settimeout(0.35)
+                        if s.connect_ex((ip, port)) == 0:
+                            open_ports.append(port)
+                except: pass
+        return {**d, "hostname": hostname, "open_ports": open_ports,
+                "is_docker_internal": _is_docker_internal(ip),
+                "is_cni": d.get("iface","") in ("cni0","flannel.1","weave","calico"),
+                "used_in": used.get(ip, [])}
+
+    from concurrent.futures import ThreadPoolExecutor
+    arp_entries: list[dict] = []
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        arp_entries = list(ex.map(_probe, raw_arp))
+
+    return json.dumps({
+        "docker": docker_entries,
+        "arp": arp_entries,
+        "local_ips": list(local_ips),
+        "current": _state.get("device_ip", ""),
+    })
+
 @app.route("/api/process/<action>/<process_name>", methods=["POST"])
 def api_process_action(action, process_name):
     try:
@@ -1228,6 +1550,99 @@ def api_process_action(action, process_name):
             return json.dumps({"success": False, "message": f"Unknown action: {action}"})
     except Exception as e:
         return json.dumps({"success": False, "message": str(e)})
+
+def _run_action_sync(value: str, form: dict, timeout: float = 30.0) -> list[dict]:
+    """Run a wizard action synchronously (for REST API). Returns collected events."""
+    _tl.collector = []
+    _tl.sid = None
+    try:
+        # Inline the same dispatch logic as on_action
+        if value.startswith("logs::"):        step_show_logs(value.split("::",1)[1])
+        elif value.startswith("diag_port::"): diag_port(value.split("::",1)[1])
+        elif value.startswith("settings_group::"): step_settings(value.split("::",1)[1])
+        elif value.startswith("save_settings::"): step_save_settings(value.split("::",1)[1], form)
+        elif value.startswith("ai_analyze::"):
+            name = value.split("::",1)[1]
+            try:
+                out = subprocess.check_output(["docker","logs","--tail","60",name],
+                                              text=True, stderr=subprocess.STDOUT)
+            except Exception as e:
+                msg(f"❌ {e}"); out = ""
+            if out:
+                reply = _llm_chat(out[-3000:], system_prompt=_WIZARD_SYSTEM_PROMPT)
+                msg(f"### 🧠 AI: `{name}`\n{reply}")
+        else:
+            handler = STEPS.get(value)
+            if handler:
+                handler(form)
+            elif value.strip():
+                reply = _llm_chat(value, system_prompt=_WIZARD_SYSTEM_PROMPT)
+                msg(reply)
+            else:
+                msg(f"⚠️ Nieznana akcja: `{value}`")
+    finally:
+        collected = list(_tl.collector or [])
+        _tl.collector = None
+        _tl.sid = None
+    return collected
+
+def _events_to_rest(events: list[dict]) -> list[dict]:
+    """Convert raw collected events to a clean REST-friendly list."""
+    out = []
+    for e in events:
+        ev, d = e["event"], e["data"]
+        if ev == "message":
+            out.append({"type": "message", "role": d.get("role","bot"), "text": d.get("text","")})
+        elif ev == "widget":
+            wt = d.get("type","")
+            if wt == "buttons":
+                out.append({"type": "buttons",
+                            "items": [{"label": i["label"], "value": i["value"]}
+                                      for i in d.get("items",[])]})
+            elif wt == "progress":
+                out.append({"type": "progress", "label": d.get("label",""),
+                            "done": d.get("done",False), "error": d.get("error",False)})
+            elif wt == "status_row":
+                out.append({"type": "status_row", "items": d.get("items",[])})
+            elif wt in ("input","select","code"):
+                out.append({"type": wt, **{k:v for k,v in d.items() if k != "type"}})
+    return out
+
+@app.route("/api/action", methods=["POST"])
+def api_action():
+    """Synchronous action endpoint for CLI/REST clients."""
+    data = request.get_json(silent=True) or {}
+    value = str(data.get("action", data.get("message", data.get("value", "")))).strip()
+    form  = data.get("form", {})
+    if not value:
+        return json.dumps({"ok": False, "error": "Missing action/message"}), 400
+    events = _run_action_sync(value, form)
+    return json.dumps({"ok": True, "result": _events_to_rest(events)})
+
+@app.route("/api/logs/tail")
+def api_logs_tail():
+    """Return last N lines from the internal log buffer."""
+    n = min(int(request.args.get("n", 100)), 2000)
+    lines = list(_log_buffer)[-n:]
+    return json.dumps({"lines": lines, "total": len(_log_buffer)})
+
+@app.route("/api/health")
+def api_health():
+    """Return algorithmic health analysis of running containers."""
+    containers = docker_ps()
+    running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
+    failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
+    findings = []
+    for c in failing:
+        text, btns = _analyze_container_log(c["name"])
+        findings.append({"container": c["name"], "status": c["status"],
+                         "finding": text, "solutions": btns})
+    return json.dumps({
+        "ok": len(failing) == 0,
+        "running": len(running), "failing": len(failing),
+        "containers": containers,
+        "findings": findings,
+    })
 
 if __name__ == "__main__":
     print("🧙 Dockfra Wizard → http://localhost:5050")

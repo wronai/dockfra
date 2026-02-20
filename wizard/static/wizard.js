@@ -55,7 +55,7 @@ socket.on('disconnect', () => { connEl._state='disconnected'; connEl.textContent
 function renderMd(text){
   return text
     .replace(/^# (.+)$/gm,  '<h1>$1</h1>')
-    .replace(/^## (.+)$/gm, '<h2>$2</h2>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^### (.+)$/gm,'<h3>$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g,  '<code>$1</code>')
@@ -124,12 +124,12 @@ function collectForm(){
   return form;
 }
 
-function sendAction(value){
+function sendAction(value, label){
   const form = collectForm();
   const div = document.createElement('div');
   div.className = 'msg user';
-  const label = value.replace(/^[^:]+::/,'');
-  div.innerHTML = `<div class="avatar">👤</div><div class="bubble">${label}</div>`;
+  const display = label || value.replace(/^[^:]+::/,'');
+  div.innerHTML = `<div class="avatar">👤</div><div class="bubble">${display}</div>`;
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
   socket.emit('action', {value, form});
@@ -145,7 +145,7 @@ function renderButtons(d){
     const b = document.createElement('button');
     b.className = 'btn';
     b.textContent = item.label;
-    b.onclick = () => sendAction(item.value);
+    b.onclick = () => sendAction(item.value, item.label);
     wrap.appendChild(b);
   });
   widgets.appendChild(wrap);
@@ -182,6 +182,22 @@ function renderInput(d){
   inp.value = d.value || '';
   inp.dataset.name = d.name;
   inp.id = 'field_'+d.name;
+  // ── IP Picker modal button ────────────────────────────────────────────────
+  if(d.modal_type === 'ip_picker'){
+    const wrap = document.createElement('div');
+    wrap.className = 'field-input-wrap';
+    wrap.appendChild(inp);
+    const pickBtn = document.createElement('button');
+    pickBtn.type = 'button';
+    pickBtn.className = 'eye-btn';
+    pickBtn.innerHTML = '🔍';
+    pickBtn.title = 'Wybierz z listy urządzeń';
+    pickBtn.addEventListener('click', () => openIpPickerModal(inp));
+    pickBtn.addEventListener('mousedown', e => e.preventDefault());
+    wrap.appendChild(pickBtn);
+    field.appendChild(wrap);
+  }
+
   // ── Eye toggle for password fields ───────────────────────────────────────
   if(d.secret){
     const wrap = document.createElement('div');
@@ -445,14 +461,237 @@ document.getElementById('copy-processes').addEventListener('click', () => {
     .catch(() => { document.getElementById('copy-processes').textContent = '❌ Failed'; });
 });
 
+// ── IP Picker Modal ───────────────────────────────────────────────────────────
+function openIpPickerModal(targetInput) {
+  // Remove any existing modal
+  const existing = document.getElementById('ip-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ip-modal-overlay';
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-header">
+      <span>🔍 Wybierz IP urządzenia</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="modal-scan-btn" title="Skanuj całą podsieć (wolniej)">📡 Skanuj sieć</button>
+        <button class="modal-refresh-btn" title="Odśwież ARP">🔄</button>
+        <button class="modal-close-btn" title="Zamknij">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-loading">⏳ Wykrywanie urządzeń…</div>
+    </div>`;
+
+  modal.querySelector('.modal-close-btn').addEventListener('click', () => overlay.remove());
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const body = modal.querySelector('.modal-body');
+
+  async function loadIps(scan=false) {
+    const msg = scan ? '⏳ Skanuję podsieć — może potrwać ~10s…' : '⏳ Wykrywanie urządzeń…';
+    body.innerHTML = `<div class="modal-loading">${msg}</div>`;
+    const url = scan ? '/api/device-ips?scan=1' : '/api/device-ips';
+    try {
+      const data = await fetch(url).then(r => r.json());
+      renderIpModal(body, data, targetInput, overlay);
+    } catch(e) {
+      body.innerHTML = `<div class="modal-loading" style="color:var(--red)">❌ Błąd: ${e.message}</div>`;
+    }
+  }
+
+  modal.querySelector('.modal-refresh-btn').addEventListener('click', () => loadIps(false));
+  modal.querySelector('.modal-scan-btn').addEventListener('click',    () => loadIps(true));
+  loadIps();
+}
+
+function renderIpModal(body, data, targetInput, overlay) {
+  const stateIcon = { REACHABLE:'🟢', DELAY:'🟡', PROBE:'🟡', STALE:'🟠', FAILED:'🔴', UNKNOWN:'⚪' };
+  const current = targetInput.value;
+  body.innerHTML = '';
+
+  function portLabel(p) {
+    const names = {22:'SSH',80:'HTTP',443:'HTTPS',2200:'SSH-dev',2201:'SSH-mon',2202:'SSH-mgr',
+      2203:'SSH-auto',2222:'SSH',3000:'dev',5000:'Flask',6080:'VNC',
+      8000:'HTTP',8080:'HTTP',8081:'API',8082:'mobile',8100:'',8202:'',9000:''};
+    return names[p] ? `${p}<small>/${names[p]}</small>` : `${p}`;
+  }
+
+  function makeRow(ip, mainHtml, d) {
+    const row = document.createElement('div');
+    row.className = 'modal-ip-row' + (ip === current ? ' selected' : '');
+
+    // hostname
+    const hostname = d.hostname
+      ? `<span class="modal-hostname" title="hostname">${d.hostname}</span>` : '';
+
+    // open ports (only show when no hostname or always for non-docker)
+    const portsHtml = (d.open_ports||[]).map(p =>
+      `<span class="modal-ports">${portLabel(p)}</span>`).join('');
+
+    // used-in badge
+    const usedBadge = (d.used_in||[]).length
+      ? `<span class="modal-badge used" title="${d.used_in.join(', ')}">📌 ${d.used_in[0].split('/').slice(-1)[0]}</span>` : '';
+
+    row.innerHTML = `
+      <div class="modal-ip-col">
+        <div class="modal-ip-main">${mainHtml}</div>
+        <div class="modal-ip-sub">${hostname}${portsHtml}</div>
+      </div>
+      <div class="modal-ip-meta">${usedBadge}</div>`;
+
+    row.addEventListener('click', () => {
+      targetInput.value = ip;
+      targetInput.dispatchEvent(new Event('input'));
+      overlay.remove();
+    });
+    return row;
+  }
+
+  function makeCollapsibleSection(title, items, renderFn, startCollapsed=false) {
+    const sec = document.createElement('div');
+    sec.className = 'modal-section';
+    const hdr = document.createElement('div');
+    hdr.className = 'modal-section-title' + (items.length > 3 ? ' collapsible' : '');
+    hdr.innerHTML = `<span>${title} (${items.length})</span>${items.length > 3 ? '<span class="modal-chevron">'+(startCollapsed?'▶':'▼')+'</span>' : ''}`;
+    const inner = document.createElement('div');
+    if (startCollapsed) inner.style.display = 'none';
+    if (items.length > 3) {
+      hdr.addEventListener('click', () => {
+        const open = inner.style.display !== 'none';
+        inner.style.display = open ? 'none' : '';
+        hdr.querySelector('.modal-chevron').textContent = open ? '▶' : '▼';
+      });
+    }
+    items.forEach(item => inner.appendChild(renderFn(item)));
+    sec.appendChild(hdr);
+    sec.appendChild(inner);
+    return sec;
+  }
+
+  // ── Docker containers ──────────────────────────────────────────────────────
+  if (data.docker && data.docker.length) {
+    const sec = makeCollapsibleSection('🐋 Kontenery Docker', data.docker, c => {
+      const dot = c.status === 'running' ? '🟢' : '🔴';
+      const net = c.network ? `<span class="modal-net">${c.network}</span>` : '';
+      const ports = c.ports ? c.ports.trim().split(/\s+/).map(p =>
+        `<span class="modal-ports">${p}</span>`).join('') : '';
+      const main = `${dot} <strong>${c.ip}</strong> <span class="modal-name">${c.name}</span> ${net}`;
+      const d = {hostname: '', open_ports: [], used_in: c.used_in||[]};
+      const row = makeRow(c.ip, main, d);
+      // inject ports into sub line for docker
+      const sub = row.querySelector('.modal-ip-sub');
+      if (sub && ports) sub.innerHTML += ports;
+      return row;
+    });
+    body.appendChild(sec);
+  }
+
+  // ── Separate ARP into real devices vs CNI pods ────────────────────────────
+  const arpReal = (data.arp||[]).filter(d => !d.is_cni && !d.is_docker_internal);
+  const arpCni  = (data.arp||[]).filter(d => d.is_cni);
+  const arpInt  = (data.arp||[]).filter(d => !d.is_cni && d.is_docker_internal);
+
+  if (arpReal.length) {
+    const sec = makeCollapsibleSection('📡 Sieć lokalna – ARP', arpReal, d => {
+      const icon = stateIcon[d.state] || '⚪';
+      const iface = d.iface ? `<span class="modal-net">${d.iface}</span>` : '';
+      const state = `<span class="modal-state ${d.state.toLowerCase()}">${d.state}</span>`;
+      const main = `${icon} <strong>${d.ip}</strong> ${iface} ${state}`;
+      return makeRow(d.ip, main, d);
+    });
+    body.appendChild(sec);
+  }
+
+  if (arpCni.length) {
+    const sec = makeCollapsibleSection('☸️ Kubernetes / CNI pods', arpCni, d => {
+      const icon = stateIcon[d.state] || '⚪';
+      const state = `<span class="modal-state ${d.state.toLowerCase()}">${d.state}</span>`;
+      const main = `${icon} <strong>${d.ip}</strong> <span class="modal-net">${d.iface||''}</span> ${state}`;
+      return makeRow(d.ip, main, d);
+    }, true /* start collapsed */);
+    body.appendChild(sec);
+  }
+
+  if (arpInt.length) {
+    const sec = makeCollapsibleSection('🐋 Docker-internal', arpInt, d => {
+      const icon = stateIcon[d.state] || '⚪';
+      const main = `${icon} <strong>${d.ip}</strong> <span class="modal-net">${d.iface||''}</span>`;
+      return makeRow(d.ip, main, d);
+    }, true);
+    body.appendChild(sec);
+  }
+
+  if (!data.docker?.length && !arpReal.length && !arpCni.length) {
+    body.innerHTML = '<div class="modal-loading">⚠️ Nie znaleziono żadnych urządzeń. Uruchom kontenery lub sprawdź sieć.</div>';
+  }
+}
+
+// ── Log colorization ─────────────────────────────────────────────────────────
+function classifyLogLine(text) {
+  const t = text;
+  // Docker build layer #N
+  if (/^#\d+/.test(t)) {
+    if (/\bDONE\b/.test(t))                                    return 'log-done';
+    if (/error|failed/i.test(t))                               return 'log-err';
+    if (/Downloading|Pulling|Fetching|Installing|COPY|RUN /i.test(t)) return 'log-pull';
+    return 'log-build';
+  }
+  // Container lifecycle
+  if (/Restart(ing)?\s*\(|\brestarting\b/i.test(t))           return 'log-restart';
+  if (/🔴|\bStopped\b/.test(t))                               return 'log-restart';
+  // Errors
+  if (/\b(error|fatal|traceback|exception|failed|exit code [^0]|bind for|port is already|cannot|no such file|permission denied|connection refused|oci runtime|unhealthy)\b/i.test(t)) return 'log-err';
+  // Warnings  
+  if (/\b(warning|warn|deprecated|notice)\b/i.test(t))        return 'log-warn';
+  // Success / healthy
+  if (/\b(successfully|started|created|healthy|done|built|running|🟢|✅|up \d+)\b/i.test(t)) return 'log-ok';
+  // Downloads
+  if (/\b(downloading|pulling|fetching|━━)\b/i.test(t))       return 'log-pull';
+  // pip noise (metadata, notice lines)
+  if (/^\s*[#│]|\[notice\]|whl\.metadata|eta 0:00:00/.test(t)) return 'log-dim';
+  return '';
+}
+
+function highlightLogText(text) {
+  return text
+    .replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, '<span class="lh-ip">$1</span>')
+    .replace(/:(\d{2,5})\b/g, ':<span class="lh-port">$1</span>')
+    .replace(/\bdockfra-[\w-]+\b/g, s => `<span class="lh-svc">${s}</span>`)
+    .replace(/(\/[\w.\-/]+\.(py|yml|yaml|json|env|sh|conf|log))/g, '<span class="lh-path">$1</span>');
+}
+
 // ── Log panel (streaming) ─────────────────────────────────────────────────────
 socket.on('log_line', d => {
   if (d.id && document.querySelector(`[data-log-id="${d.id}"]`)) return;
+  const cls = classifyLogLine(d.text);
   const l = document.createElement('div');
-  l.className = 'log-line' + (d.text.includes('Error')||d.text.includes('error')||d.text.startsWith('E ')?' err':'');
+  l.className = 'log-line' + (cls ? ' ' + cls : '');
   if (d.id) l.setAttribute('data-log-id', d.id);
-  l.textContent = d.text;
+  // Use innerHTML with highlights only for non-dim lines to avoid XSS-noise tradeoff
+  if (cls !== 'log-dim') {
+    l.innerHTML = highlightLogText(d.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  } else {
+    l.textContent = d.text;
+  }
   logOut.appendChild(l);
   logOut.scrollTop = logOut.scrollHeight;
-  while(logOut.children.length > 500) logOut.removeChild(logOut.firstChild);
+  while(logOut.children.length > 800) logOut.removeChild(logOut.firstChild);
 });
+
+// ── Chat input bar ────────────────────────────────────────────────────────────
+const chatInput = document.getElementById('chat-input');
+const chatSend  = document.getElementById('chat-send');
+function submitChatInput() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  chatInput.value = '';
+  sendAction(text);
+}
+chatSend.addEventListener('click', submitChatInput);
+chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitChatInput(); } });
