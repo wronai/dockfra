@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dockfra"
+dynamic = ["version"]
+description = "Docker infrastructure setup wizard with web UI and CLI"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["docker", "infrastructure", "devops", "wizard", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+]
+dependencies = [
+    "flask>=3.0",
+    "flask-socketio>=5.3",
+    "gevent>=23.0",
+    "gevent-websocket>=0.10",
+    "psutil>=5.9",
+    "docker>=7.0",
+]
+
+[project.optional-dependencies]
+dev = ["build", "twine", "pytest"]
+
+[project.urls]
+Homepage   = "https://github.com/wronai/dockfra"
+Repository = "https://github.com/wronai/dockfra"
+Issues     = "https://github.com/wronai/dockfra/issues"
+
+[project.scripts]
+dockfra     = "dockfra.__main__:main"
+dockfra-cli = "dockfra.__main__:_cli_entry"
+
+[tool.setuptools]
+packages = ["dockfra"]
+
+[tool.setuptools.package-data]
+dockfra = [
+    "static/*",
+    "templates/*",
+    "*.env.example",
+    "llm_client.py",
+]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }

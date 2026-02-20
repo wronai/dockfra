@@ -44,7 +44,7 @@ SCRIPTS   := $(ROOT)/scripts
 init: ## Full initialization (keys, env, network) and start wizard
 	@bash $(ROOT)/init.sh $(ENVIRONMENT)
 	@echo "🧙 Starting Dockfra Wizard..."
-	@bash $(ROOT)/wizard/run.sh &
+	@dockfra --root $(ROOT) &
 	@sleep 2
 	@echo "🌐 Opening Dockfra Wizard in browser..."
 	@if command -v xdg-open > /dev/null 2>&1; then \
@@ -311,11 +311,11 @@ clean-keys: ## Remove generated SSH keys
 
 .PHONY: wizard
 wizard: ## Start interactive setup wizard at http://localhost:5050
-	@bash $(ROOT)/wizard/run.sh
+	@dockfra --root $(ROOT)
 
 .PHONY: wizard-bg
 wizard-bg: ## Start wizard in background
-	@bash $(ROOT)/wizard/run.sh &
+	@dockfra --root $(ROOT) &
 	@sleep 1 && xdg-open http://localhost:5050 2>/dev/null || open http://localhost:5050 2>/dev/null || echo "Open: http://localhost:5050"
 
 .PHONY: dashboard

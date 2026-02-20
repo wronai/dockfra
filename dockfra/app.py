@@ -163,7 +163,7 @@ def _schema_defaults() -> dict:
     return {e["key"]: e["default"] for e in ENV_SCHEMA}
 
 def load_env() -> dict:
-    """Load wizard/.env, create from .env.example if missing."""
+    """Load dockfra/.env, create from .env.example if missing."""
     example = WIZARD_DIR / ".env.example"
     if not WIZARD_ENV.exists() and example.exists():
         WIZARD_ENV.write_text(example.read_text())
@@ -177,7 +177,7 @@ def load_env() -> dict:
     return data
 
 def save_env(updates: dict):
-    """Write updates to wizard/.env preserving comments and unknown keys."""
+    """Write updates to dockfra/.env preserving comments and unknown keys."""
     existing: dict[str, str] = {}
     lines_out: list[str] = []
     if WIZARD_ENV.exists():
@@ -849,7 +849,7 @@ def step_settings(group: str = ""):
     groups = list(dict.fromkeys(e["group"] for e in ENV_SCHEMA))
     if not group:
         msg("## ⚙️ Ustawienia — wybierz sekcję")
-        msg("Kliknij sekcję aby edytować jej zmienne. Wszystko zapisywane do `wizard/.env`.")
+        msg("Kliknij sekcję aby edytować jej zmienne. Wszystko zapisywane do `dockfra/.env`.")
         btn_items = []
         for g in groups:
             g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
@@ -885,7 +885,7 @@ def step_settings(group: str = ""):
 
 
 def step_save_settings(group: str, form: dict):
-    """Save edited group back to _state and wizard/.env."""
+    """Save edited group back to _state and dockfra/.env."""
     clear_widgets()
     entries = [e for e in ENV_SCHEMA if e["group"] == group]
     env_updates: dict[str, str] = {}
@@ -903,7 +903,7 @@ def step_save_settings(group: str, form: dict):
         val = _state.get(sk, "")
         display = mask(val) if e["type"] == "password" and val else (val or "(puste)")
         lines.append(f"{e['key']} = {display}")
-    msg(f"✅ **{group}** — zapisano do `wizard/.env`\n" + "\n".join(f"- `{l}`" for l in lines))
+    msg(f"✅ **{group}** — zapisano do `dockfra/.env`\n" + "\n".join(f"- `{l}`" for l in lines))
     buttons([
         {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
         {"label": "← Sekcje",        "value": "settings"},
@@ -978,7 +978,7 @@ def step_save_creds(form):
             _state[sk] = val
             env_updates[env_key] = val
     save_env(env_updates)
-    msg("✅ Zapisano i zaktualizowano `wizard/.env`.")
+    msg("✅ Zapisano i zaktualizowano `dockfra/.env`.")
     key = _state.get("openrouter_key","")
     msg(f"- Git: `{_state.get('git_name','')}` <{_state.get('git_email','')}>")
     msg(f"- SSH: `{_state.get('github_key','')}`")
@@ -1708,7 +1708,7 @@ def fix_acme_storage():
     except Exception as e:
         msg(f"⚠️ Nie można zapisać do app/.env: {e}")
 
-    # Also persist to wizard/.env and _state
+    # Also persist to dockfra/.env and _state
     _state["acme_storage"] = acme_value
     save_env({"ACME_STORAGE": acme_value})
 
