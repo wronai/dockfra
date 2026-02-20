@@ -330,6 +330,8 @@ def api_ssh_options(kind, role="developer"):
     elif kind == "files":
         ri = _SSH_ROLES.get(role, {})
         container = ri.get("container", cname(f"ssh-{role}"))
+        options = []
+        # Try docker exec first (container running)
         try:
             out = subprocess.check_output(
                 ["docker", "exec", container,
@@ -346,10 +348,68 @@ def api_ssh_options(kind, role="developer"):
                  "!", "-path", "*/.git/*"],
                 text=True, stderr=subprocess.DEVNULL, timeout=6)
             paths = sorted(p.strip() for p in out.splitlines() if p.strip())
-            options = []
             for p in paths[:120]:
                 rel = p.replace("/workspace/app/", "", 1)
                 options.append({"value": rel, "label": rel})
+        except Exception:
+            pass
+        # Fallback: scan local app/ directory
+        if not options:
+            import glob as _glob2
+            app_dir = ROOT / "app"
+            if app_dir.is_dir():
+                exts = (".py",".js",".ts",".tsx",".jsx",".css",".html",".yml",".yaml")
+                skip = {"node_modules", "__pycache__", ".git", ".venv", "dist", "build"}
+                for f in sorted(app_dir.rglob("*")):
+                    if not f.is_file(): continue
+                    if any(p in f.parts for p in skip): continue
+                    if f.suffix not in exts: continue
+                    try:
+                        rel = str(f.relative_to(app_dir))
+                        options.append({"value": rel, "label": rel})
+                        if len(options) >= 120: break
+                    except ValueError:
+                        pass
+        return json.dumps({"options": options})
+
+    elif kind == "containers":
+        # Running containers for SVC/TARGET params
+        try:
+            out = subprocess.check_output(
+                ["docker", "ps", "--format", "{{.Names}}\t{{.Status}}"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5)
+            options = []
+            prefix = _state.get("app_name", "") or ""
+            for line in out.splitlines():
+                parts = line.split("\t", 1)
+                name = parts[0].strip()
+                status = parts[1].strip() if len(parts) > 1 else ""
+                # Short name: strip project prefix
+                short = name
+                for pfx in (prefix + "-", "dockfra-", "management-", "app-"):
+                    if short.startswith(pfx):
+                        short = short[len(pfx):]
+                        break
+                icon = "✅" if "Up" in status else "⚠️"
+                options.append({"value": short, "label": f"{icon} {short}"})
+            return json.dumps({"options": options})
+        except Exception as e:
+            return json.dumps({"options": [], "error": str(e)})
+
+    elif kind == "branches":
+        # Git branches from app/ repo
+        try:
+            app_dir = ROOT / "app"
+            scan_dir = app_dir if (app_dir / ".git").exists() else ROOT
+            out = subprocess.check_output(
+                ["git", "-C", str(scan_dir), "branch", "-a",
+                 "--format=%(refname:short)"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5)
+            branches = list(dict.fromkeys(
+                b.strip().replace("origin/", "")
+                for b in out.splitlines() if b.strip()
+            ))[:20]
+            options = [{"value": b, "label": b} for b in branches]
             return json.dumps({"options": options})
         except Exception as e:
             return json.dumps({"options": [], "error": str(e)})

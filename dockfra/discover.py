@@ -23,8 +23,10 @@ _PARAM_HINTS = {
     "ARTIFACT":("Ścieżka artefaktu", "/artifacts/app.tar.gz"),
 }
 _PARAM_OPTIONS_API = {
-    "T": "/api/ssh-options/tickets",
-    "F": "/api/ssh-options/files/{role}",
+    "T":      "/api/ssh-options/tickets",
+    "F":      "/api/ssh-options/files/{role}",
+    "SVC":    "/api/ssh-options/containers",
+    "TARGET": "/api/ssh-options/containers",
 }
 _FALLBACK_ICONS = {"developer": "🔧", "manager": "👤", "monitor": "📡", "autopilot": "🤖"}
 _FALLBACK_PORTS = {"developer": "2200", "manager": "2202", "monitor": "2201", "autopilot": "2203"}
