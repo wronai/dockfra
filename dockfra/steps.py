@@ -6,6 +6,7 @@ def step_welcome():
     _state["step"] = "welcome"
     cfg = detect_config()
     _state.update({k:v for k,v in cfg.items() if v})
+    _refresh_ssh_roles()  # re-scan now that _state has git_repo_url
     msg("# 👋 Dockfra Setup Wizard")
     all_missing = [e for e in ENV_SCHEMA
                    if e.get("required_for")
@@ -469,11 +470,17 @@ def step_do_launch(form):
                 )
             if sections:
                 msg("---\n## 🗺️ Co możesz teraz zrobić?\nWybierz rolę poniżej aby zobaczyć dostępne akcje.")
+            # Re-read roles at this point (state is fully loaded)
+            _refresh_ssh_roles()
             # Build buttons dynamically from discovered roles
             post_btns = []
             for role, ri in _SSH_ROLES.items():
                 p = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
                 post_btns.append({"label": f"{ri['icon']} SSH {role.capitalize()}", "value": f"ssh_info::{role}::{p}"})
+            # Virtual developer: app/ not cloned yet but GIT_REPO_URL is set
+            if "developer" not in _SSH_ROLES and not (ROOT / "app").is_dir() and _state.get("git_repo_url"):
+                dev_port = _state.get("ssh_developer_port", "2200")
+                post_btns.insert(0, {"label": "🔧 SSH Developer", "value": f"ssh_info::developer::{dev_port}"})
             post_btns += [
                 {"label": "🔑 Setup GitHub + LLM",  "value": "post_launch_creds"},
                 {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},

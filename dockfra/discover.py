@@ -172,13 +172,24 @@ def _refresh_ssh_roles():
 
 def _get_role(role: str):
     """Get role data, falling back to a minimal stub."""
-    return _SSH_ROLES.get(role, {
+    if role in _SSH_ROLES:
+        return _SSH_ROLES[role]
+    # Virtual developer: app/ not cloned yet but GIT_REPO_URL is set
+    if role == "developer" and not APP.is_dir() and _state.get("git_repo_url"):
+        return {
+            "container": cname("ssh-developer"), "user": "developer",
+            "port": _state.get("ssh_developer_port", "2200"),
+            "icon": "🔧", "title": "Developer — SSH Workspace",
+            "makefile": "", "commands": [], "cmd_meta": {},
+            "virtual": True,
+        }
+    return {
         "container": cname(f"ssh-{role}"), "user": role,
         "port": _FALLBACK_PORTS.get(role, "2222"),
         "icon": _FALLBACK_ICONS.get(role, "🖥️"),
         "title": role.capitalize(), "makefile": "",
         "commands": [], "cmd_meta": {},
-    })
+    }
 
 
 def _step_ssh_info(value: str):
