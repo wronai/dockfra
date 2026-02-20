@@ -48,7 +48,7 @@ applyLang();
 // ── Socket ────────────────────────────────────────────────────────────────────
 const socket = io({transports:['websocket','polling']});
 
-socket.on('connect',    () => { connEl._state='connected';    connEl.textContent = t('connected'); });
+socket.on('connect',    () => { connEl._state='connected';    connEl.textContent = t('connected'); loadLogs(); });
 socket.on('disconnect', () => { connEl._state='disconnected'; connEl.textContent = t('disconnected'); });
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
@@ -96,12 +96,21 @@ async function loadLogs() {
 
 // ── Ticket card renderer ──────────────────────────────────────────────────────
 function tryRenderTickets(text) {
-  // Match lines like: ○ T-0001 — Fix login bug  or  ◐ T-0002 — ...
-  const ticketRe = /([○◐●]?)\s*(T-\d+)\s*[—\-]+\s*(.+)/g;
+  // Match format_ticket output: "  ○ T-0001   🟡 Title → developer"
+  // Also match: "○ T-0001 — Title" (legacy/inline format)
+  const ticketRe = /([○◐●])\s+(T-\d{4,})\s+[🔴🟠🟡🟢⚪]?\s*(.+?)\s*(?:→\s*\w+)?$/gm;
   const tickets = [];
   let m;
   while ((m = ticketRe.exec(text)) !== null) {
-    tickets.push({ icon: m[1]||'○', id: m[2], title: m[3].trim() });
+    const title = m[3].replace(/→\s*\S+$/, '').trim();
+    if (title) tickets.push({ icon: m[1], id: m[2], title });
+  }
+  // Also try legacy dash format: T-0001 — Title
+  if (tickets.length === 0) {
+    const legacyRe = /([○◐●]?)\s*(T-\d+)\s*[—\-]+\s*(.+)/g;
+    while ((m = legacyRe.exec(text)) !== null) {
+      tickets.push({ icon: m[1]||'○', id: m[2], title: m[3].trim() });
+    }
   }
   if (tickets.length === 0) return null;
   const wrap = document.createElement('div');
@@ -758,35 +767,48 @@ const statsPanel = document.getElementById('stats-panel');
 async function updateStats() {
   if (!statsPanel || statsPanel.style.display === 'none') return;
   try {
-    const s = await fetch('/api/stats').then(r => r.json());
+    const [s, tickets] = await Promise.all([
+      fetch('/api/stats').then(r => r.json()),
+      fetch('/api/tickets').then(r => r.json()),
+    ]);
     let html = '';
-    // Tickets summary
-    const tk = s.tickets || {};
-    html += '<div class="stats-section"><div class="stats-title">🎫 Tickety</div>';
-    if (tk.total > 0) {
-      html += `<div class="stats-row"><span class="stats-num">${tk.total}</span> razem</div>`;
-      const bs = tk.by_status || {};
-      const statusIcons = {open:'○',in_progress:'◐',closed:'●'};
-      html += '<div class="stats-badges">';
-      for (const [st,c] of Object.entries(bs)) {
-        const cls = st === 'open' ? 'badge-accent' : st === 'in_progress' ? 'badge-yellow' : 'badge-muted';
-        html += `<span class="stats-badge ${cls}">${statusIcons[st]||'?'} ${st.replace('_',' ')}: ${c}</span>`;
-      }
-      html += '</div>';
+
+    // ── Ticket list as cards ──────────────────────────────────────────────────
+    html += '<div class="stats-section">';
+    html += '<div class="stats-title-row"><span class="stats-title">🎫 Tickety</span>';
+    html += `<button class="stats-action" onclick="sendAction('ticket_create_wizard','📝 Utwórz ticket')">+ Nowy</button></div>`;
+    if (tickets.length === 0) {
+      html += '<div class="stats-empty" style="padding:12px 0">Brak ticketów.<br>Kliknij <strong>+ Nowy</strong> aby dodać.</div>';
     } else {
-      html += '<div class="stats-empty">Brak ticketów. <button class="stats-action" onclick="sendAction(\'ticket_create_wizard\',\'📝 Utwórz ticket\')">📝 Utwórz</button></div>';
+      const statusIcon = {open:'○',in_progress:'◐',closed:'●'};
+      const statusCls  = {open:'badge-accent',in_progress:'badge-yellow',closed:'badge-muted'};
+      const prioIcon   = {critical:'🔴',high:'🟠',normal:'🟡',low:'🟢'};
+      tickets.forEach(tk => {
+        const si = statusIcon[tk.status]||'○';
+        const sc = statusCls[tk.status]||'badge-muted';
+        const pi = prioIcon[tk.priority]||'⚪';
+        const ghLink = tk.github_issue_number
+          ? `<a class="ticket-gh-link" href="https://github.com/${tk.github_repo||''}/issues/${tk.github_issue_number}" target="_blank" title="GitHub #${tk.github_issue_number}">🔗 GH#${tk.github_issue_number}</a>`
+          : '';
+        html += `<div class="stats-ticket-card" data-id="${tk.id}">
+          <div class="stats-ticket-header">
+            <span class="stats-ticket-id"><span class="stats-badge ${sc}">${si} ${tk.id}</span></span>
+            <span class="stats-ticket-prio">${pi}</span>
+            ${ghLink}
+          </div>
+          <div class="stats-ticket-title">${tk.title}</div>
+          ${tk.description ? `<div class="stats-ticket-desc">${tk.description.slice(0,80)}${tk.description.length>80?'…':''}</div>` : ''}
+          <div class="stats-ticket-actions">
+            <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
+            <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}">🤖 Impl</button>
+            <button class="ticket-btn ticket-btn-done" data-action="ssh_cmd::developer::ticket-done::${tk.id}">✅ Done</button>
+          </div>
+        </div>`;
+      });
     }
     html += '</div>';
 
-    // Containers
-    const ct = s.containers || {};
-    html += '<div class="stats-section"><div class="stats-title">🐳 Kontenery</div>';
-    html += `<div class="stats-badges">`;
-    html += `<span class="stats-badge badge-green">✅ ${ct.running||0} OK</span>`;
-    if (ct.failing > 0) html += `<span class="stats-badge badge-red">🔴 ${ct.failing} błędów</span>`;
-    html += `</div></div>`;
-
-    // Git
+    // ── Git ───────────────────────────────────────────────────────────────────
     const g = s.git || {};
     if (g.branch) {
       html += '<div class="stats-section"><div class="stats-title">📂 Git</div>';
@@ -795,20 +817,25 @@ async function updateStats() {
       html += '</div>';
     }
 
-    // Integrations
+    // ── Containers ────────────────────────────────────────────────────────────
+    const ct = s.containers || {};
+    html += '<div class="stats-section"><div class="stats-title">🐳 Kontenery</div><div class="stats-badges">';
+    html += `<span class="stats-badge badge-green">✅ ${ct.running||0} OK</span>`;
+    if (ct.failing > 0) html += `<span class="stats-badge badge-red">🔴 ${ct.failing} błędów</span>`;
+    html += '</div></div>';
+
+    // ── Integrations ──────────────────────────────────────────────────────────
     const intg = s.integrations || {};
-    html += '<div class="stats-section"><div class="stats-title">🔗 Integracje</div><div class="stats-badges">';
+    html += '<div class="stats-section"><div class="stats-title-row"><span class="stats-title">🔗 Integracje</span>';
+    html += `<button class="stats-action" onclick="sendAction('integrations_setup','🔗 Integracje')">Konfiguruj</button></div><div class="stats-badges">`;
     let anyIntg = false;
     for (const [name, ok] of Object.entries(intg)) {
       if (ok) { html += `<span class="stats-badge badge-green">✅ ${name}</span>`; anyIntg = true; }
     }
-    if (!anyIntg) {
-      html += `<span class="stats-badge badge-muted">⚠️ brak</span>`;
-      html += `<button class="stats-action" onclick="sendAction('integrations_setup','🔗 Integracje')">Konfiguruj</button>`;
-    }
+    if (!anyIntg) html += `<span class="stats-badge badge-muted">⚠️ brak</span>`;
     html += '</div></div>';
 
-    // Suggestions
+    // ── Suggestions ───────────────────────────────────────────────────────────
     const sugg = s.suggestions || [];
     if (sugg.length > 0) {
       html += '<div class="stats-section"><div class="stats-title">💡 Propozycje</div>';
@@ -822,6 +849,11 @@ async function updateStats() {
     }
 
     statsPanel.innerHTML = html;
+
+    // Delegate ticket-btn clicks inside stats panel
+    statsPanel.querySelectorAll('.ticket-btn[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => sendAction(btn.dataset.action, btn.textContent.trim()));
+    });
   } catch(e) {
     statsPanel.innerHTML = '<div style="color:var(--red);font-size:.7rem;padding:8px">Błąd ładowania statystyk</div>';
   }

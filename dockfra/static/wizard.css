@@ -264,3 +264,15 @@ header .sub{color:var(--muted);font-size:.85rem}
 .stats-suggestion:hover{border-color:var(--accent);background:var(--bg2)}
 .stats-sugg-icon{font-size:.9rem;flex-shrink:0}
 .stats-sugg-text{font-size:.73rem;color:var(--text);line-height:1.3}
+.stats-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.stats-title-row .stats-title{margin-bottom:0}
+.stats-ticket-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;flex-direction:column;gap:4px}
+.stats-ticket-card:hover{border-color:var(--accent)}
+.stats-ticket-header{display:flex;align-items:center;gap:6px}
+.stats-ticket-id{flex:1}
+.stats-ticket-prio{font-size:.8rem;flex-shrink:0}
+.stats-ticket-title{font-size:.8rem;color:var(--text);font-weight:500;line-height:1.3}
+.stats-ticket-desc{font-size:.72rem;color:var(--muted);line-height:1.4}
+.stats-ticket-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.ticket-gh-link{font-size:.68rem;color:var(--accent);text-decoration:none;padding:1px 6px;border:1px solid rgba(124,131,245,.3);border-radius:4px;white-space:nowrap}
+.ticket-gh-link:hover{background:rgba(124,131,245,.15)}
