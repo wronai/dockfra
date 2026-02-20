@@ -7,7 +7,7 @@ name = "dockfra"
 dynamic = ["version"]
 description = "Docker infrastructure setup wizard with web UI and CLI"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
 requires-python = ">=3.10"
 keywords = ["docker", "infrastructure", "devops", "wizard", "cli"]
 classifiers = [
@@ -15,7 +15,6 @@ classifiers = [
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -48,6 +47,9 @@ dockfra-cli = "dockfra.__main__:_cli_entry"
 
 [tool.setuptools]
 packages = ["dockfra"]
+
+[tool.setuptools.package-dir]
+dockfra = "."
 
 [tool.setuptools.package-data]
 dockfra = [
