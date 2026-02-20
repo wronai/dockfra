@@ -393,7 +393,7 @@ def step_do_launch(form):
                     "Przeglądarkowy pulpit z podglądem dashboardu i logów."
                 )
             if sections:
-                msg("---\n## 🗺️ Co możesz teraz zrobić?\n\n" + "\n\n".join(sections))
+                msg("---\n## 🗺️ Co możesz teraz zrobić?\nWybierz rolę poniżej aby zobaczyć dostępne akcje.")
             # Build buttons dynamically from discovered roles
             post_btns = []
             for role, ri in _SSH_ROLES.items():

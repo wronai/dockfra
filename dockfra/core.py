@@ -24,7 +24,7 @@ __all__ = [
     # Helpers
     'detect_config', '_emit_log_error', 'run_cmd', 'docker_ps',
     'mask', 'msg', 'widget', 'buttons', 'text_input', 'select',
-    'code_block', 'status_row', 'progress', 'clear_widgets',
+    'code_block', 'status_row', 'progress', 'action_grid', 'clear_widgets',
     '_env_status_summary',
     '_arp_devices', '_devices_env_ip', '_docker_container_env',
     '_local_interfaces', '_subnet_ping_sweep',
@@ -448,6 +448,7 @@ def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
 def progress(label, done=False, error=False): widget({"type":"progress","label":label,"done":done,"error":error})
+def action_grid(run_value, commands, label=""): widget({"type":"action_grid","run_value":run_value,"commands":commands,"label":label})
 def clear_widgets():                _sid_emit("clear_widgets", {})
 
 # ── steps ────────────────────────────────────────────────────────────────────

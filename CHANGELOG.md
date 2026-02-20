@@ -1,3 +1,24 @@
+## [1.0.19] - 2026-02-20
+
+### Summary
+
+feat(docs): configuration management system
+
+### Other
+
+- build: update Makefile
+- docker: update Dockerfile
+- scripts: update entrypoint.sh
+- scripts: update ask.sh
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+- docker: update Dockerfile
+- ... and 34 more
+
+
 ## [1.0.18] - 2026-02-20
 
 ### Summary

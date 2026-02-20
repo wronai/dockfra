@@ -115,6 +115,7 @@ socket.on('widget', d => {
   else if (d.type === 'code')       renderCode(d);
   else if (d.type === 'status_row') renderStatus(d);
   else if (d.type === 'progress')   renderProgress(d);
+  else if (d.type === 'action_grid') renderActionGrid(d);
 });
 
 function collectForm(){
@@ -133,6 +134,54 @@ function sendAction(value, label){
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
   socket.emit('action', {value, form});
+}
+
+function renderActionGrid(d){
+  const existing = widgets.querySelector('.w-action-grid');
+  if(existing) existing.remove();
+  const grid = document.createElement('div');
+  grid.className = 'w-action-grid';
+  if(d.label){ const lbl=document.createElement('div'); lbl.className='w-action-grid-label'; lbl.textContent=d.label; grid.appendChild(lbl); }
+  d.commands.forEach(cmd => {
+    const card = document.createElement('div');
+    card.className = 'action-card';
+    const info = document.createElement('div');
+    info.className = 'action-card-info';
+    info.innerHTML = `<span class="action-card-cmd">${cmd.cmd}</span><span class="action-card-desc">${cmd.desc}</span>`;
+    card.appendChild(info);
+    let argInput = null;
+    if(cmd.params && cmd.params.length > 0){
+      argInput = document.createElement('input');
+      argInput.type = 'text';
+      argInput.className = 'action-card-input';
+      argInput.placeholder = cmd.placeholder || cmd.params.join(', ');
+      argInput.title = cmd.hint || cmd.params.join(', ');
+      argInput.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); runCard(); } });
+      card.appendChild(argInput);
+    }
+    const runBtn = document.createElement('button');
+    runBtn.className = 'btn action-card-run';
+    runBtn.textContent = '▶';
+    runBtn.title = cmd.desc;
+    function runCard(){
+      const arg = argInput ? argInput.value.trim() : '';
+      if(cmd.params && cmd.params.length > 0 && !arg){
+        argInput.focus(); argInput.classList.add('input-required');
+        setTimeout(()=>argInput.classList.remove('input-required'), 1200);
+        return;
+      }
+      const display = arg ? `${cmd.cmd} ${arg}` : cmd.cmd;
+      const div = document.createElement('div');
+      div.className = 'msg user';
+      div.innerHTML = `<div class="avatar">👤</div><div class="bubble">${display}</div>`;
+      chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+      socket.emit('action', {value: d.run_value, form: {ssh_cmd: cmd.cmd, ssh_arg: arg}});
+    }
+    runBtn.onclick = runCard;
+    card.appendChild(runBtn);
+    grid.appendChild(card);
+  });
+  widgets.appendChild(grid);
 }
 
 function renderButtons(d){

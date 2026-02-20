@@ -76,7 +76,7 @@ def _parse_ssh_motd(path: Path, role: str):
 def _discover_extra_scripts(ssh_dir: Path, known_targets: set):
     """Find .sh scripts not already covered by Makefile targets."""
     extra = {}
-    for sub in ("scripts", "manager-scripts", "deploy-scripts", "autopilot-scripts"):
+    for sub in ("scripts",):
         sd = ssh_dir / sub
         if not sd.is_dir():
             continue
@@ -164,64 +164,42 @@ def _get_role(role: str):
 
 
 def _step_ssh_info(value: str):
-    """Handle ssh_info::role::port button — show SSH connection card."""
+    """Handle ssh_info::role::port button — show action grid for role commands."""
     parts = value.split("::")
     role = parts[1] if len(parts) > 1 else "developer"
     port = parts[2] if len(parts) > 2 else "2200"
     info = _get_role(role)
-    if not info["commands"]:
+    if not info["cmd_meta"]:
         msg(f"❓ Nieznana rola lub brak komend: `{role}`")
         return
+    clear_widgets()
     ssh_cmd = f"ssh {info['user']}@localhost -p {port}"
-    mk = info["makefile"]
-    rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in info["commands"])
-    msg(
-        f"## {info['icon']} {info['title']}\n\n"
-        f"**SSH:**\n```\n{ssh_cmd}\n```\n"
-        + (f"**Makefile:** `{mk}` — `make -f {mk} help`\n\n" if mk else "\n")
-        + f"| Komenda (w kontenerze) | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
-    )
-    # Build role buttons dynamically from discovered roles
+    msg(f"## {info['icon']} {info['title']}\n`{ssh_cmd}`")
+
+    cmds_data = []
+    for cmd, meta in info["cmd_meta"].items():
+        desc, params, hint, placeholder = meta
+        cmds_data.append({
+            "cmd": cmd, "desc": desc,
+            "params": params, "hint": hint, "placeholder": placeholder,
+        })
+    run_value = f"run_ssh_cmd::{role}::{info['container']}::{info['user']}"
+    action_grid(run_value, cmds_data)
+
     role_btns = []
     for r, ri in sorted(_SSH_ROLES.items()):
         p = _state.get(f"SSH_{r.upper()}_PORT", ri["port"])
         role_btns.append({"label": f"{ri['icon']} SSH {r.capitalize()}", "value": f"ssh_info::{r}::{p}"})
-    role_btns.append({"label": f"📟 Konsola ({role})", "value": f"ssh_console::{role}::{port}"})
     role_btns.append({"label": "🏠 Menu", "value": "back"})
     buttons(role_btns)
 
 
 def step_ssh_console(value: str):
-    """Show command-runner panel: select + arg input + Run button."""
-    parts  = value.split("::")
-    role   = parts[1] if len(parts) > 1 else "developer"
-    port   = parts[2] if len(parts) > 2 else "2200"
-    ri     = _get_role(role)
-    cmds   = ri["cmd_meta"]
-    clear_widgets()
-    msg(f"## {ri['icon']} {ri['title']} — konsola komend")
-
-    options = [{"value": k, "label": v[0]} for k, v in cmds.items()]
-    hint_map = {k: v[2] for k, v in cmds.items()}
-    arg_placeholder_map = {k: v[3] for k, v in cmds.items()}
-    first_cmd = options[0]["value"] if options else ""
-    first_hint = cmds[first_cmd][2] if first_cmd and cmds[first_cmd][2] else ""
-    first_ph   = cmds[first_cmd][3] if first_cmd else ""
-
-    _sid_emit("widget", {
-        "type": "select", "name": "ssh_cmd", "label": "Komenda",
-        "options": options, "value": first_cmd,
-        "hint_map": hint_map, "arg_placeholder_map": arg_placeholder_map,
-    })
-    _sid_emit("widget", {
-        "type": "input", "name": "ssh_arg", "label": "Argument (opcjonalny)",
-        "placeholder": first_ph, "value": "", "hint": first_hint,
-    })
-    buttons([
-        {"label": "▶️ Uruchom",      "value": f"run_ssh_cmd::{role}::{ri['container']}::{ri['user']}"},
-        {"label": "◀ Info",         "value": f"ssh_info::{role}::{port}"},
-        {"label": "🏠 Menu",         "value": "back"},
-    ])
+    """Alias — redirect to action grid view."""
+    parts = value.split("::")
+    role  = parts[1] if len(parts) > 1 else "developer"
+    port  = parts[2] if len(parts) > 2 else "2200"
+    _step_ssh_info(f"ssh_info::{role}::{port}")
 
 
 def run_ssh_cmd(value: str, form: dict):
@@ -268,10 +246,10 @@ def run_ssh_cmd(value: str, form: dict):
                 msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
         except Exception as e:
             msg(f"❌ Błąd: {e}")
+        port = _state.get(f"SSH_{role.upper()}_PORT", _get_role(role)["port"])
         buttons([
-            {"label": "▶️ Uruchom ponownie", "value": f"run_ssh_cmd::{role}::{container}::{user}"},
-            {"label": "📟 Konsola",           "value": f"ssh_console::{role}"},
-            {"label": "🏠 Menu",              "value": "back"},
+            {"label": f"{_get_role(role)['icon']} Wróć do akcji", "value": f"ssh_info::{role}::{port}"},
+            {"label": "🏠 Menu",                                   "value": "back"},
         ])
         _tl.sid = None
     threading.Thread(target=_run, daemon=True).start()

@@ -1,0 +1,28 @@
+# shared/Dockerfile.ssh-base — Universal base for all SSH role containers
+# Build once:  docker build -t dockfra-ssh-base -f shared/Dockerfile.ssh-base shared/
+# Usage:       FROM dockfra-ssh-base  (in each ssh-*/Dockerfile)
+#
+# Each role Dockerfile adds: ARG SSH_USER=<role>, user creation, COPY scripts.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Common packages (all roles need these)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server openssh-client git curl jq nano vim tree sudo \
+    python3 python3-pip ca-certificates && \
+    pip3 install --break-system-packages requests pyyaml && \
+    rm -rf /var/lib/apt/lists/*
+
+# SSH hardening (AllowUsers added per-role in child Dockerfile)
+RUN mkdir -p /run/sshd /shared/tickets /shared/llm && \
+    sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config && \
+    sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+# Shared entrypoint init (sourced by each role's entrypoint.sh)
+COPY ssh-base-init.sh /ssh-base-init.sh
+RUN chmod +x /ssh-base-init.sh
+
+EXPOSE 2222
+CMD ["/entrypoint.sh"]

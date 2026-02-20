@@ -71,17 +71,22 @@ init-devices: ## Initialize devices stack (ssh-rpi3, vnc-rpi3)
 # DOCKER COMPOSE
 # ═══════════════════════════════════════════════════════════════
 
+.PHONY: build-ssh-base
+build-ssh-base: ## Build shared SSH base image (used by all ssh-* roles)
+	@docker build -q -t dockfra-ssh-base -f $(ROOT)/shared/Dockerfile.ssh-base $(ROOT)/shared/ >/dev/null
+	@echo "✅ SSH base image ready"
+
 .PHONY: up
 up: up-app up-mgmt up-devices ## Start all stacks (app + management + devices)
 	@echo "✅ All stacks running"
 
 .PHONY: up-app
-up-app: ## Start app stack
+up-app: build-ssh-base ## Start app stack
 	@cd $(APP) && docker compose up -d
 	@echo "✅ App stack started"
 
 .PHONY: up-mgmt
-up-mgmt: ## Start management stack
+up-mgmt: build-ssh-base ## Start management stack
 	@cd $(MGMT) && docker compose up -d
 	@echo "✅ Management stack started"
 
