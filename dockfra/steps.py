@@ -519,8 +519,11 @@ def step_do_launch(form):
                 dev_port = _state.get("ssh_developer_port", "2200")
                 post_btns.insert(0, {"label": "🔧 SSH Developer", "value": f"ssh_info::developer::{dev_port}"})
             post_btns += [
-                {"label": "🔑 Setup GitHub + LLM",  "value": "post_launch_creds"},
-                {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
+                {"label": "📝 Utwórz ticket",        "value": "ticket_create_wizard"},
+                {"label": "📊 Statystyki projektu",   "value": "project_stats"},
+                {"label": "🔗 Integracje zadań",      "value": "integrations_setup"},
+                {"label": "🔑 Setup GitHub + LLM",    "value": "post_launch_creds"},
+                {"label": "📦 Wdróż na urządzenie",   "value": "deploy_device"},
             ]
             buttons(post_btns)
     threading.Thread(target=run,daemon=True).start()

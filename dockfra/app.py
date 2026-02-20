@@ -564,6 +564,265 @@ def api_process_action(action, process_name):
     except Exception as e:
         return json.dumps({"success": False, "message": str(e)})
 
+def _step_ticket_create_wizard(form):
+    """Show ticket creation form in the wizard chat."""
+    clear_widgets()
+    msg("## 📝 Utwórz nowy ticket")
+    from .core import text_input, select
+    text_input("ticket_title", "Tytuł ticketu", "Fix login bug", "")
+    text_input("ticket_desc", "Opis (opcjonalny)", "Szczegółowy opis zadania...", "")
+    select("ticket_priority", "Priorytet", [
+        {"value": "low", "label": "🟢 Low"},
+        {"value": "normal", "label": "🟡 Normal"},
+        {"value": "high", "label": "🟠 High"},
+        {"value": "critical", "label": "🔴 Critical"},
+    ], "normal")
+    select("ticket_assigned", "Przydziel do", [
+        {"value": "developer", "label": "🔧 Developer"},
+        {"value": "monitor", "label": "📡 Monitor"},
+        {"value": "autopilot", "label": "🤖 Autopilot"},
+    ], "developer")
+    buttons([
+        {"label": "✅ Utwórz ticket", "value": "ticket_create_do"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+def _step_ticket_create_do(form):
+    """Actually create the ticket from form data."""
+    title = form.get("ticket_title", "").strip()
+    if not title:
+        msg("❌ Tytuł ticketu jest wymagany.")
+        return
+    clear_widgets()
+    d = ROOT / "shared" / "tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.chmod(0o1777)
+    except OSError:
+        pass
+    import glob as _g
+    nums = []
+    for f in _g.glob(str(d / "T-*.json")):
+        try:
+            nums.append(int(_os.path.basename(f).replace(".json", "").split("-")[1]))
+        except (IndexError, ValueError):
+            pass
+    ticket_id = f"T-{max(nums, default=0) + 1:04d}"
+    from datetime import datetime, timezone
+    ticket = {
+        "id": ticket_id,
+        "title": title,
+        "description": form.get("ticket_desc", ""),
+        "status": "open",
+        "priority": form.get("ticket_priority", "normal"),
+        "assigned_to": form.get("ticket_assigned", "developer"),
+        "labels": [],
+        "created_by": "manager",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "comments": [],
+        "github_issue_number": None,
+    }
+    try:
+        (d / f"{ticket_id}.json").write_text(json.dumps(ticket, indent=2))
+        msg(f"## ✅ Ticket utworzony!\n\n"
+            f"**{ticket_id}** — {title}\n"
+            f"Priorytet: {ticket['priority']} | Przydzielony: {ticket['assigned_to']}")
+    except Exception as e:
+        msg(f"❌ Błąd tworzenia ticketu: {e}")
+    buttons([
+        {"label": "📝 Utwórz kolejny", "value": "ticket_create_wizard"},
+        {"label": "📋 Lista ticketów", "value": "ssh_cmd::manager::ticket-list::"},
+        {"label": "🔗 Sync do GitHub/Jira", "value": "ticket_sync"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+def _step_integrations_setup():
+    """Show integrations configuration form."""
+    clear_widgets()
+    env = load_env()
+    msg("## 🔗 Integracje z systemami zadań\n\n"
+        "Skonfiguruj połączenia z zewnętrznymi systemami zarządzania zadaniami.\n"
+        "Tickety będą synchronizowane automatycznie.")
+    from .core import text_input
+    # GitHub
+    msg("### GitHub Issues")
+    text_input("GITHUB_TOKEN", "GitHub Personal Access Token", "ghp_xxx...", env.get("GITHUB_TOKEN", ""), sec=True)
+    text_input("GITHUB_REPO", "Repozytorium (owner/repo)", "myorg/myapp", env.get("GITHUB_REPO", ""))
+    # Jira
+    msg("### Jira Cloud")
+    text_input("JIRA_URL", "Jira URL", "https://your-org.atlassian.net", env.get("JIRA_URL", ""))
+    text_input("JIRA_EMAIL", "Jira Email", "user@company.com", env.get("JIRA_EMAIL", ""))
+    text_input("JIRA_TOKEN", "Jira API Token", "xxx...", env.get("JIRA_TOKEN", ""), sec=True)
+    text_input("JIRA_PROJECT", "Jira Project Key", "PROJ", env.get("JIRA_PROJECT", ""))
+    # Trello
+    msg("### Trello")
+    text_input("TRELLO_KEY", "Trello API Key", "xxx...", env.get("TRELLO_KEY", ""), sec=True)
+    text_input("TRELLO_TOKEN", "Trello Token", "xxx...", env.get("TRELLO_TOKEN", ""), sec=True)
+    text_input("TRELLO_BOARD", "Trello Board ID", "board_id", env.get("TRELLO_BOARD", ""))
+    text_input("TRELLO_LIST", "Trello List ID (for new cards)", "list_id", env.get("TRELLO_LIST", ""))
+    # Linear
+    msg("### Linear")
+    text_input("LINEAR_TOKEN", "Linear API Token", "lin_api_xxx...", env.get("LINEAR_TOKEN", ""), sec=True)
+    text_input("LINEAR_TEAM", "Linear Team ID", "team_id", env.get("LINEAR_TEAM", ""))
+    buttons([
+        {"label": "💾 Zapisz integracje", "value": "integrations_save"},
+        {"label": "🔄 Synchronizuj teraz", "value": "ticket_sync"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+def _step_integrations_save(form):
+    """Save integration credentials to .env."""
+    integration_keys = [
+        "GITHUB_TOKEN", "GITHUB_REPO",
+        "JIRA_URL", "JIRA_EMAIL", "JIRA_TOKEN", "JIRA_PROJECT",
+        "TRELLO_KEY", "TRELLO_TOKEN", "TRELLO_BOARD", "TRELLO_LIST",
+        "LINEAR_TOKEN", "LINEAR_TEAM",
+    ]
+    updates = {}
+    for k in integration_keys:
+        val = form.get(k, "").strip()
+        if val:
+            updates[k] = val
+    if updates:
+        save_env(updates)
+        configured = []
+        if updates.get("GITHUB_TOKEN") and updates.get("GITHUB_REPO"):
+            configured.append("GitHub Issues")
+        if updates.get("JIRA_URL") and updates.get("JIRA_TOKEN"):
+            configured.append("Jira")
+        if updates.get("TRELLO_KEY") and updates.get("TRELLO_TOKEN"):
+            configured.append("Trello")
+        if updates.get("LINEAR_TOKEN"):
+            configured.append("Linear")
+        msg(f"## ✅ Integracje zapisane\n\nSkonfigurowano: **{', '.join(configured) if configured else 'brak'}**")
+    else:
+        msg("⚠️ Brak danych do zapisania.")
+    buttons([
+        {"label": "🔄 Synchronizuj teraz", "value": "ticket_sync"},
+        {"label": "🔗 Edytuj integracje", "value": "integrations_setup"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+def _step_ticket_sync():
+    """Sync tickets with configured external services."""
+    clear_widgets()
+    progress("🔄 Synchronizuję tickety z zewnętrznymi usługami...")
+    env = load_env()
+    for k in ("GITHUB_TOKEN", "GITHUB_REPO", "JIRA_URL", "JIRA_EMAIL", "JIRA_TOKEN",
+              "JIRA_PROJECT", "TRELLO_KEY", "TRELLO_TOKEN", "TRELLO_BOARD", "TRELLO_LIST",
+              "LINEAR_TOKEN", "LINEAR_TEAM"):
+        val = env.get(k, "") or _os.environ.get(k, "")
+        if val:
+            _os.environ[k] = val
+    try:
+        import sys as _s
+        _s.path.insert(0, str(ROOT / "shared" / "lib"))
+        import importlib
+        ts = importlib.import_module("ticket_system")
+        importlib.reload(ts)
+        results = ts.sync_all()
+        progress("🔄 Synchronizacja", done=True)
+        lines = []
+        for svc, info in results.items():
+            if info.get("ok"):
+                lines.append(f"✅ **{svc.capitalize()}** — pobrano {info.get('pulled', 0)} nowych ticketów")
+            else:
+                lines.append(f"❌ **{svc.capitalize()}** — {info.get('error', 'błąd')}")
+        if not results:
+            lines.append("⚠️ Brak skonfigurowanych integracji. Kliknij **🔗 Konfiguruj integracje** aby dodać.")
+        msg("## 🔄 Wyniki synchronizacji\n\n" + "\n".join(lines))
+    except Exception as e:
+        progress("🔄 Synchronizacja", error=True)
+        msg(f"❌ Błąd synchronizacji: {e}")
+    buttons([
+        {"label": "📝 Utwórz ticket", "value": "ticket_create_wizard"},
+        {"label": "🔗 Konfiguruj integracje", "value": "integrations_setup"},
+        {"label": "📊 Statystyki", "value": "project_stats"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+def _step_project_stats():
+    """Show project statistics in the chat."""
+    clear_widgets()
+    msg("## 📊 Statystyki projektu")
+    # Tickets
+    d = ROOT / "shared" / "tickets"
+    tickets = []
+    if d.exists():
+        for p in sorted(d.glob("T-*.json")):
+            try:
+                tickets.append(json.loads(p.read_text()))
+            except Exception:
+                pass
+    by_status = {}
+    by_prio = {}
+    by_assignee = {}
+    for t in tickets:
+        by_status[t["status"]] = by_status.get(t["status"], 0) + 1
+        by_prio[t["priority"]] = by_prio.get(t["priority"], 0) + 1
+        by_assignee[t["assigned_to"]] = by_assignee.get(t["assigned_to"], 0) + 1
+    status_icons = {"open": "○", "in_progress": "◐", "closed": "●"}
+    prio_icons = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}
+
+    ticket_lines = f"**Razem:** {len(tickets)} ticketów\n"
+    if by_status:
+        ticket_lines += " | ".join(f"{status_icons.get(s,'?')} {s}: **{c}**" for s, c in by_status.items()) + "\n"
+    if by_prio:
+        ticket_lines += " | ".join(f"{prio_icons.get(p,'⚪')} {p}: **{c}**" for p, c in by_prio.items()) + "\n"
+    if by_assignee:
+        ticket_lines += " | ".join(f"{a}: **{c}**" for a, c in by_assignee.items())
+    msg(f"### 🎫 Tickety\n{ticket_lines}")
+
+    # Containers
+    containers = docker_ps()
+    running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
+    failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
+    msg(f"### 🐳 Kontenery\n"
+        f"**Razem:** {len(containers)} | ✅ Działające: **{len(running)}** | 🔴 Problemy: **{len(failing)}**")
+
+    # Git
+    try:
+        app_dir = ROOT / "app"
+        git_dir = app_dir if (app_dir / ".git").exists() else ROOT
+        branch = subprocess.check_output(
+            ["git", "-C", str(git_dir), "branch", "--show-current"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        log_out = subprocess.check_output(
+            ["git", "-C", str(git_dir), "log", "--oneline", "-5"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        commits_today = subprocess.check_output(
+            ["git", "-C", str(git_dir), "rev-list", "--count", "--since=midnight", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        msg(f"### 📂 Git\n"
+            f"**Gałąź:** `{branch}` | **Commity dziś:** {commits_today}\n"
+            f"```\n{log_out}\n```")
+    except Exception:
+        msg("### 📂 Git\n⚠️ Brak repozytorium git lub błąd odczytu.")
+
+    # Integrations
+    env = load_env()
+    int_status = []
+    if env.get("GITHUB_TOKEN") and env.get("GITHUB_REPO"):
+        int_status.append("✅ GitHub Issues")
+    if env.get("JIRA_URL") and env.get("JIRA_TOKEN"):
+        int_status.append("✅ Jira")
+    if env.get("TRELLO_KEY") and env.get("TRELLO_TOKEN"):
+        int_status.append("✅ Trello")
+    if env.get("LINEAR_TOKEN"):
+        int_status.append("✅ Linear")
+    if not int_status:
+        int_status.append("⚠️ Brak skonfigurowanych integracji")
+    msg(f"### 🔗 Integracje\n{' | '.join(int_status)}")
+
+    buttons([
+        {"label": "📝 Utwórz ticket", "value": "ticket_create_wizard"},
+        {"label": "🔗 Konfiguruj integracje", "value": "integrations_setup"},
+        {"label": "🔄 Synchronizuj tickety", "value": "ticket_sync"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+
 def _dispatch(value: str, form: dict):
     """Shared dispatch logic for both SocketIO and REST actions."""
     if value.startswith("logs::"):          step_show_logs(value.split("::",1)[1]); return True
