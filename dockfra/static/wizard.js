@@ -752,6 +752,81 @@ async function updateServices() {
   }
 }
 
+// ── Stats tab ──────────────────────────────────────────────────────────────────
+const statsPanel = document.getElementById('stats-panel');
+
+async function updateStats() {
+  if (!statsPanel || statsPanel.style.display === 'none') return;
+  try {
+    const s = await fetch('/api/stats').then(r => r.json());
+    let html = '';
+    // Tickets summary
+    const tk = s.tickets || {};
+    html += '<div class="stats-section"><div class="stats-title">🎫 Tickety</div>';
+    if (tk.total > 0) {
+      html += `<div class="stats-row"><span class="stats-num">${tk.total}</span> razem</div>`;
+      const bs = tk.by_status || {};
+      const statusIcons = {open:'○',in_progress:'◐',closed:'●'};
+      html += '<div class="stats-badges">';
+      for (const [st,c] of Object.entries(bs)) {
+        const cls = st === 'open' ? 'badge-accent' : st === 'in_progress' ? 'badge-yellow' : 'badge-muted';
+        html += `<span class="stats-badge ${cls}">${statusIcons[st]||'?'} ${st.replace('_',' ')}: ${c}</span>`;
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="stats-empty">Brak ticketów. <button class="stats-action" onclick="sendAction(\'ticket_create_wizard\',\'📝 Utwórz ticket\')">📝 Utwórz</button></div>';
+    }
+    html += '</div>';
+
+    // Containers
+    const ct = s.containers || {};
+    html += '<div class="stats-section"><div class="stats-title">🐳 Kontenery</div>';
+    html += `<div class="stats-badges">`;
+    html += `<span class="stats-badge badge-green">✅ ${ct.running||0} OK</span>`;
+    if (ct.failing > 0) html += `<span class="stats-badge badge-red">🔴 ${ct.failing} błędów</span>`;
+    html += `</div></div>`;
+
+    // Git
+    const g = s.git || {};
+    if (g.branch) {
+      html += '<div class="stats-section"><div class="stats-title">📂 Git</div>';
+      html += `<div class="stats-row"><code>${g.branch}</code> · ${g.commits_today||0} commitów dziś</div>`;
+      if (g.last_commit) html += `<div class="stats-row stats-dim">${g.last_commit}</div>`;
+      html += '</div>';
+    }
+
+    // Integrations
+    const intg = s.integrations || {};
+    html += '<div class="stats-section"><div class="stats-title">🔗 Integracje</div><div class="stats-badges">';
+    let anyIntg = false;
+    for (const [name, ok] of Object.entries(intg)) {
+      if (ok) { html += `<span class="stats-badge badge-green">✅ ${name}</span>`; anyIntg = true; }
+    }
+    if (!anyIntg) {
+      html += `<span class="stats-badge badge-muted">⚠️ brak</span>`;
+      html += `<button class="stats-action" onclick="sendAction('integrations_setup','🔗 Integracje')">Konfiguruj</button>`;
+    }
+    html += '</div></div>';
+
+    // Suggestions
+    const sugg = s.suggestions || [];
+    if (sugg.length > 0) {
+      html += '<div class="stats-section"><div class="stats-title">💡 Propozycje</div>';
+      sugg.forEach(sg => {
+        html += `<button class="stats-suggestion" onclick="sendAction('${sg.action}','${sg.icon} ${sg.text.replace(/'/g,"\\'")}')">
+          <span class="stats-sugg-icon">${sg.icon}</span>
+          <span class="stats-sugg-text">${sg.text}</span>
+        </button>`;
+      });
+      html += '</div>';
+    }
+
+    statsPanel.innerHTML = html;
+  } catch(e) {
+    statsPanel.innerHTML = '<div style="color:var(--red);font-size:.7rem;padding:8px">Błąd ładowania statystyk</div>';
+  }
+}
+
 // ── Panel tab switching ────────────────────────────────────────────────────────
 document.querySelectorAll('.panel-tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -760,11 +835,14 @@ document.querySelectorAll('.panel-tab').forEach(tab => {
     const target = tab.dataset.tab;
     processesList.style.display = target === 'processes' ? '' : 'none';
     servicesList.style.display  = target === 'services'  ? '' : 'none';
+    if (statsPanel) statsPanel.style.display = target === 'stats' ? '' : 'none';
     if (target === 'services') updateServices();
+    if (target === 'stats') updateStats();
   });
 });
 
 setInterval(() => { if (servicesList.style.display !== 'none') updateServices(); }, 8000);
+setInterval(() => { if (statsPanel && statsPanel.style.display !== 'none') updateStats(); }, 15000);
 
 // ── Copy buttons ──────────────────────────────────────────────────────────────
 function flashCopyBtn(btn, originalText) {

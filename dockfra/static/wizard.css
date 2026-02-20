@@ -241,3 +241,26 @@ header .sub{color:var(--muted);font-size:.85rem}
 .modal-state.unknown{background:var(--bg3);color:var(--muted)}
 .modal-badge{font-size:.68rem;border-radius:4px;padding:2px 7px;white-space:nowrap}
 .modal-badge.used{background:rgba(124,131,245,.15);color:var(--accent);border:1px solid rgba(124,131,245,.3)}
+
+/* ── Stats panel ──────────────────────────────────────────────────────────── */
+.stats-section{padding:8px 0;border-bottom:1px solid var(--border)}
+.stats-section:last-child{border-bottom:none}
+.stats-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;font-weight:600}
+.stats-row{font-size:.78rem;color:var(--text);padding:2px 0;display:flex;align-items:center;gap:6px}
+.stats-row code{background:var(--bg3);border-radius:4px;padding:1px 6px;font-size:.75rem;color:var(--accent)}
+.stats-dim{font-size:.7rem;color:var(--muted);font-family:'Cascadia Code','Fira Code',monospace}
+.stats-num{font-size:1.1rem;font-weight:700;color:var(--accent)}
+.stats-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.stats-badge{font-size:.68rem;padding:2px 8px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);white-space:nowrap}
+.badge-accent{border-color:rgba(124,131,245,.3);color:var(--accent);background:rgba(124,131,245,.1)}
+.badge-yellow{border-color:rgba(251,191,36,.3);color:var(--yellow);background:rgba(251,191,36,.1)}
+.badge-green{border-color:rgba(74,222,128,.3);color:var(--green);background:rgba(74,222,128,.1)}
+.badge-red{border-color:rgba(248,113,113,.3);color:var(--red);background:rgba(248,113,113,.1)}
+.badge-muted{color:var(--muted)}
+.stats-empty{font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+.stats-action{background:none;border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:.7rem;padding:2px 10px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.stats-action:hover{background:var(--accent);color:#fff}
+.stats-suggestion{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-top:3px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;text-align:left}
+.stats-suggestion:hover{border-color:var(--accent);background:var(--bg2)}
+.stats-sugg-icon{font-size:.9rem;flex-shrink:0}
+.stats-sugg-text{font-size:.73rem;color:var(--text);line-height:1.3}

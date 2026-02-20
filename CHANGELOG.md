@@ -1,3 +1,17 @@
+## [1.0.29] - 2026-02-21
+
+### Summary
+
+docs(docs): deep code analysis engine with 2 supporting modules
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/templates/index.html
+
+
 ## [1.0.28] - 2026-02-20
 
 ### Summary

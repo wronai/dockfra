@@ -39,6 +39,7 @@ from .fixes import (
 from .discover import (
     _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES, _refresh_ssh_roles,
 )
+import os as _os, sys as _sys
 
 STEPS = {
     "welcome":          lambda f: step_welcome(),
@@ -996,7 +997,6 @@ def api_health():
     })
 
 # ── Ticket CRUD API (wizard-side, bypasses container permissions) ──────────────
-import sys as _sys, os as _os
 
 def _tickets_dir():
     """Return tickets directory, ensuring it exists with proper permissions."""
