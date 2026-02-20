@@ -493,13 +493,13 @@ for _e in ENV_SCHEMA:
 _STATE_TO_ENV = {v: k for k, v in _ENV_TO_STATE.items()}
 
 def reset_state():
-    global _state, _conversation, _logs
+    global _state
     env = load_env()
     _state = {"step": "welcome"}
     for env_key, state_key in _ENV_TO_STATE.items():
         _state[state_key] = env.get(env_key, "")
-    _conversation = []
-    _logs = []
+    _conversation.clear()
+    _logs.clear()
 
 reset_state()
 

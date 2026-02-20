@@ -1,3 +1,16 @@
+## [1.0.31] - 2026-02-21
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update shared/lib/ticket_system.py
+
+
 ## [1.0.30] - 2026-02-21
 
 ### Summary
