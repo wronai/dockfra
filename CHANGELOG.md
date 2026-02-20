@@ -1,3 +1,16 @@
+## [1.0.13] - 2026-02-20
+
+### Summary
+
+feat(wizard): configuration management system
+
+### Other
+
+- update project.functions.toon
+- update project.toon-schema.json
+- update wizard/app.py
+
+
 ## [1.0.12] - 2026-02-20
 
 ### Summary

@@ -263,30 +263,56 @@ def _env_status_summary() -> str:
 
 
 def _arp_devices() -> list[dict]:
-    """Return [{ip, mac, iface}] from ARP cache / ip-neigh."""
+    """Return [{ip, mac, iface, state}] sorted REACHABLE first."""
     import re
-    devices = []
+    devices: list[dict] = []
     seen: set[str] = set()
-    # ip neigh (Linux)
+    # ip neigh includes connection state (REACHABLE / STALE / DELAY / FAILED)
     try:
         out = subprocess.check_output(["ip","neigh"], text=True, stderr=subprocess.DEVNULL)
         for line in out.splitlines():
-            m = re.match(r'^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+).*lladdr\s+(\S+)', line)
+            m = re.match(r'^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+(\S+))?\s+(\S+)$', line.strip())
             if m and m.group(1) not in seen:
-                devices.append({"ip": m.group(1), "iface": m.group(2), "mac": m.group(3)})
+                devices.append({"ip": m.group(1), "iface": m.group(2),
+                                 "mac": m.group(3) or "", "state": m.group(4) or "UNKNOWN"})
                 seen.add(m.group(1))
     except: pass
-    # arp -a fallback
     if not devices:
         try:
             out = subprocess.check_output(["arp","-a"], text=True, stderr=subprocess.DEVNULL)
             for line in out.splitlines():
                 m = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
                 if m and m.group(1) not in seen and m.group(1) != "0.0.0.0":
-                    devices.append({"ip": m.group(1), "iface": "", "mac": ""})
+                    devices.append({"ip": m.group(1), "iface": "", "mac": "", "state": "UNKNOWN"})
                     seen.add(m.group(1))
         except: pass
-    return devices[:12]
+    order = {"REACHABLE": 0, "DELAY": 1, "PROBE": 1, "STALE": 2, "UNKNOWN": 3, "FAILED": 4}
+    devices.sort(key=lambda d: order.get(d["state"], 3))
+    return devices[:16]
+
+def _devices_env_ip() -> str:
+    """Read RPI3_HOST from devices/.env.local or devices/.env."""
+    for path in [DEVS / ".env.local", DEVS / ".env"]:
+        if path.exists():
+            for line in path.read_text().splitlines():
+                line = line.strip()
+                if line.startswith("RPI3_HOST="):
+                    val = line.split("=", 1)[1].strip()
+                    if val: return val
+    return ""
+
+def _docker_container_env(container: str, var: str) -> str:
+    """Extract an env var value from a running Docker container."""
+    try:
+        out = subprocess.check_output(
+            ["docker","inspect","--format",
+             "{{range .Config.Env}}{{println .}}{{end}}", container],
+            text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            if line.startswith(var + "="):
+                return line.split("=", 1)[1].strip()
+    except: pass
+    return ""
 
 def _local_interfaces() -> list[str]:
     """Return host IPs (non-loopback)."""
@@ -334,36 +360,53 @@ def _detect_suggestions() -> dict:
         s[key] = {"value": "", "hint": "kliknij chip aby wstawić",
                   "chips": [{"label": g, "value": g} for g in gens]}
 
-    # ── Device IP ─────────────────────────────────────────────────────────────
-    devices = _arp_devices()
+    # ── Device IP (priority chain) ────────────────────────────────────────────
     local_ips = set(_local_interfaces())
-    # exclude own IPs and docker bridge 172.17.x.x from chips
-    dev_chips = [{"label": f"{d['ip']}  {('— '+d['iface']) if d['iface'] else ''}".strip(),
-                  "value": d["ip"]}
-                 for d in devices if d["ip"] not in local_ips and not d["ip"].startswith("172.17.")]
-    # Docker network subnets as hint
-    docker_subnets: list[str] = []
-    try:
-        nets = subprocess.check_output(
-            ["docker","network","ls","--format","{{.Name}}"],
-            text=True, stderr=subprocess.DEVNULL).strip().splitlines()
-        for net in nets:
-            if net in ("bridge","host","none"): continue
-            try:
-                sub = subprocess.check_output(
-                    ["docker","network","inspect", net,
-                     "--format","{{range .IPAM.Config}}{{.Subnet}} {{end}}"],
-                    text=True, stderr=subprocess.DEVNULL).strip()
-                if sub: docker_subnets.extend(sub.split())
-            except: pass
-    except: pass
-    hint_parts = []
-    if dev_chips:    hint_parts.append(f"znaleziono {len(dev_chips)} urządzeń w ARP")
-    if docker_subnets: hint_parts.append("Docker: " + ", ".join(docker_subnets[:3]))
+    def _is_docker_internal(ip: str) -> bool:
+        p = ip.split(".")
+        if len(p) != 4: return False
+        a, b = int(p[0]), int(p[1])
+        return (a == 172 and 16 <= b <= 31) or (a == 10 and b in (0, 1, 88, 89))
+
+    # L1: devices stack env files
+    env_ip = _devices_env_ip()
+    # L2: running devices-stack container
+    docker_ip = ""
+    for cname in ["dockfra-ssh-rpi3", "ssh-rpi3"]:
+        docker_ip = _docker_container_env(cname, "RPI3_HOST")
+        if docker_ip: break
+    best_ip = env_ip or docker_ip or ""
+
+    # L3: ARP cache — REACHABLE first, icons by state
+    arp = _arp_devices()
+    state_icon = {"REACHABLE": "🟢", "DELAY": "🟡", "PROBE": "🟡",
+                  "STALE": "🟠", "FAILED": "🔴", "UNKNOWN": "⚪"}
+    chips: list[dict] = []
+    for ip, src in [(env_ip, "devices/.env"), (docker_ip, "docker ssh-rpi3")]:
+        if ip and ip not in {c["value"] for c in chips}:
+            chips.append({"label": f"📌 {ip}  ({src})", "value": ip})
+    for d in arp:
+        if d["ip"] in local_ips or _is_docker_internal(d["ip"]): continue
+        if d["ip"] in {c["value"] for c in chips}: continue
+        icon = state_icon.get(d["state"], "⚪")
+        iface = f" — {d['iface']}" if d["iface"] else ""
+        chips.append({"label": f"{icon} {d['ip']}{iface}", "value": d["ip"]})
+        if len(chips) >= 10: break
+
+    reachable = sum(1 for d in arp
+                    if d["state"] == "REACHABLE"
+                    and d["ip"] not in local_ips
+                    and not _is_docker_internal(d["ip"]))
+    hint_parts: list[str] = []
+    if env_ip:          hint_parts.append(f"devices/.env: {env_ip}")
+    elif docker_ip:     hint_parts.append(f"z kontenera ssh-rpi3: {docker_ip}")
+    if reachable:       hint_parts.append(f"{reachable} aktywnych w sieci")
+    elif chips and not env_ip and not docker_ip:
+                        hint_parts.append("urządzenia z ARP cache")
     s["DEVICE_IP"] = {
-        "value": "",
-        "hint": " · ".join(hint_parts) if hint_parts else "wpisz IP urządzenia docelowego",
-        "chips": dev_chips[:8],
+        "value": best_ip,
+        "hint":  " · ".join(hint_parts) if hint_parts else "wpisz IP urządzenia docelowego",
+        "chips": chips,
     }
 
     # ── App name from project path ────────────────────────────────────────────

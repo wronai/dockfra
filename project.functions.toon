@@ -1,0 +1,197 @@
+project: dockfra
+generated: "2026-02-20T19:01:38.784609"
+modules[14]{path,lang,items}:
+  wizard/app.py,python,64
+  wizard/static/wizard.js,javascript,20
+  shared/lib/__init__.py,python,0
+  shared/lib/llm_client.py,python,4
+  shared/lib/ticket_system.py,python,14
+  management/shared/lib/__init__.py,python,0
+  management/shared/lib/llm_client.py,python,4
+  management/shared/lib/ticket_system.py,python,14
+  management/shared/lib/logger.py,python,6
+  app/backend/app.py,python,8
+  app/mobile-backend/app.py,python,4
+  app/desktop-app/server.py,python,3
+  app/desktop-app/src/main.py,python,2
+  app/backend/tests/test_api.py,python,11
+
+function_details:
+  wizard/app.py:
+    functions[64]{name,kind,sig,loc,async,lines,cc,does}:
+      _sid_emit,function,"(event, data)",11-17,false,7,2,"Emit to current SID if inside a handler, broadcast otherwise."
+      _schema_defaults,function,() -> dict,93-94,false,2,2,schema defaults
+      load_env,function,() -> dict,96-108,false,13,8,"Load wizard/.env, create from .env.example if missing."
+      save_env,function,"(updates:dict)",110-137,false,28,13,Write updates to wizard/.env preserving comments and unknown keys.
+      reset_state,function,(),180-187,false,8,2,reset state
+      detect_config,function,(),192-211,false,20,11,detect config
+      run_cmd,function,"(cmd, cwd=None)",213-223,false,11,3,starts cmd
+      docker_ps,function,(),225-235,false,11,5,docker ps
+      mask,function,(k),237-237,false,1,2,mask
+      msg,function,"(text, role='bot')",239-242,false,4,1,msg
+      widget,function,(w),243-243,false,1,1,widget
+      buttons,function,"(items, label='')",244-244,false,1,1,buttons
+      text_input,function,"(n, l, ph='', v='', sec=False, hint='', chips=None)",245-245,false,1,2,text input
+      select,function,"(n, l, opts, v='')",246-246,false,1,1,retrieves
+      code_block,function,(t),247-247,false,1,1,code block
+      status_row,function,(items),248-248,false,1,1,status row
+      progress,function,"(label, done=False, error=False)",249-249,false,1,1,progress
+      clear_widgets,function,(),250-250,false,1,1,deletes widgets
+      _env_status_summary,function,() -> str,253-262,false,10,6,"One-line summary: which required vars are missing."
+      _arp_devices,function,"() -> list[dict]",265-291,false,27,13,"Return [{ip, mac, iface, state}] sorted REACHABLE first."
+      _devices_env_ip,function,() -> str,293-302,false,10,6,Read RPI3_HOST from devices/.env.local or devices/.env.
+      _docker_container_env,function,"(container:str, var:str) -> str",304-315,false,12,4,Extract an env var value from a running Docker container.
+      _local_interfaces,function,"() -> list[str]",317-326,false,10,3,Return host IPs (non-loopback).
+      _detect_suggestions,function,() -> dict,328-422,false,95,31,Auto-detect suggested values for form fields.
+      _emit_missing_fields,function,"(missing:list[dict])",424-442,false,19,6,"Emit input/select widgets for each missing env var, with smart suggestions."
+      step_welcome,function,(),444-467,false,24,7,step welcome
+      step_status,function,(),469-483,false,15,3,step status
+      step_pick_logs,function,(),485-493,false,9,3,step pick logs
+      step_show_logs,function,(container),495-502,false,8,2,step show logs
+      step_settings,function,"(group:str='')",504-536,false,33,15,Show env editor for a specific group or group selector.
+      step_save_settings,function,"(group:str, form:dict)",539-562,false,24,9,Save edited group back to _state and wizard/.env.
+      preflight_check,function,"(stacks:list[str]) -> list[dict]",565-576,false,12,6,Return list of missing required vars for the given stacks.
+      step_preflight_fill,function,"(stacks:list[str])",579-604,false,26,7,Show inline form for all missing required vars before launching.
+      step_setup_creds,function,(),607-619,false,13,4,step setup creds
+      step_save_creds,function,(form),621-638,false,18,4,step save creds
+      step_launch_all,function,(),640-654,false,15,1,step launch all
+      _analyze_launch_error,function,"(name:str, output:str) -> tuple[str, list]",656-706,false,51,22,"Parse docker compose output and return (analysis_text, solution_buttons)."
+      step_do_launch,function,(form),709-763,false,55,7,step do launch
+      step_deploy_device,function,(),765-776,false,12,1,step deploy device
+      _save_device_form,function,(form),778-784,false,7,2,caches device form
+      step_test_device,function,(form),786-808,false,23,2,step test device
+      step_do_deploy,function,(form),810-850,false,41,2,step do deploy
+      _update_device_env,function,"(ip, user, port)",852-865,false,14,11,updates device env
+      step_launch_devices,function,(form=None),867-883,false,17,1,step launch devices
+      step_post_launch_creds,function,(),885-899,false,15,5,step post launch creds
+      step_run_post_creds,function,(),901-921,false,21,1,step run post creds
+      diag_port,function,"(port_num:str)",924-940,false,17,1,diag port
+      show_missing_env,function,"(stack_name:str)",943-956,false,14,4,show missing env
+      retry_launch,function,(form=None),959-960,false,2,1,retry launch
+      fix_vnc_port,function,(),963-972,false,10,4,fix vnc port
+      fix_docker_perms,function,(),975-982,false,8,1,fix docker perms
+      on_connect,function,(),1008-1030,false,23,4,handles connect
+      on_disconnect,function,(),1033-1034,false,2,1,handles disconnect
+      on_action,function,(data),1037-1076,false,40,14,handles action
+      index,function,(),1080-1081,false,2,1,index
+      dashboard,function,(),1084-1085,false,2,1,dashboard
+      api_containers,function,(),1088-1089,false,2,1,api containers
+      api_logs,function,(container),1092-1099,false,8,2,api logs
+      api_events,function,(),1102-1109,false,8,4,api events
+      api_env,function,(),1112-1125,false,14,4,api env
+      api_env_post,function,(),1128-1137,false,10,8,api env post
+      api_history,function,(),1140-1145,false,6,1,api history
+      api_processes,function,(),1148-1189,false,42,10,api processes
+      api_process_action,function,"(action, process_name)",1192-1213,false,22,8,api process action
+  wizard/static/wizard.js:
+    functions[20]{name,kind,sig,loc,async,lines,cc,does}:
+      t,function,(k),32-32,false,1,1,t
+      applyLang,function,(),33-42,false,10,1,apply lang
+      renderMd,function,(text),55-63,false,9,1,formats md
+      loadLogs,function,(),66-80,true,15,1,retrieves logs
+      copyMessage,function,(button),96-106,false,11,1,copy message
+      collectForm,function,(),120-125,false,6,1,collect form
+      sendAction,function,(value),127-136,false,10,1,sends action
+      renderButtons,function,(d),138-152,false,15,1,formats buttons
+      flushForm,function,(),158-162,false,5,1,flush form
+      getOrCreateForm,function,(),164-172,false,9,1,retrieves or create form
+      renderInput,function,(d),174-239,false,66,1,formats input
+      renderSelect,function,(d),241-257,false,17,1,formats select
+      renderCode,function,(d),259-264,false,6,1,formats code
+      renderStatus,function,(d),266-278,false,13,1,formats status
+      renderProgress,function,(d),280-295,false,16,1,formats progress
+      setupResizeHandle,function,"(handle, leftPanel, rightPanel)",306-316,false,11,1,initializes resize handle
+      restorePanelWidths,function,(),342-351,false,10,1,restore panel widths
+      updateProcesses,function,(),355-393,true,39,1,updates processes
+      executeProcessAction,function,"(action, processName)",395-404,true,10,1,starts process action
+      flashCopyBtn,function,"(btn, originalText)",410-415,false,6,1,flash copy btn
+  shared/lib/llm_client.py:
+    functions[4]{name,kind,sig,loc,async,lines,cc,does}:
+      get_config,function,(),17-25,false,9,1,Load LLM config from environment.
+      chat,function,"(user_message, system_prompt=None, model=None, history=None)",28-76,false,49,9,Send a message to the LLM and return the response text.
+      chat_stream,function,"(user_message, system_prompt=None, model=None)",79-83,false,5,1,Non-streaming wrapper that prints response progressively.
+      list_models,function,(),86-97,false,12,1,List popular OpenRouter models.
+  shared/lib/ticket_system.py:
+    functions[14]{name,kind,sig,loc,async,lines,cc,does}:
+      _ensure_dir,function,(),21-22,false,2,1,ensure dir
+      _now,function,(),25-26,false,2,1,now
+      _ticket_path,function,(ticket_id),29-30,false,2,1,ticket path
+      _next_id,function,(),33-43,false,11,3,next id
+      create,function,"(title, description='', priority='normal', assigned_to='developer', labels=None, created_by='manager')",48-70,false,23,2,Create a new ticket.
+      get,function,(ticket_id),73-79,false,7,2,Get a ticket by ID.
+      update,function,(ticket_id),82-93,false,12,5,Update ticket fields.
+      add_comment,function,"(ticket_id, author, text)",96-109,false,14,2,Add a comment to a ticket.
+      list_tickets,function,"(status=None, assigned_to=None, priority=None)",112-126,false,15,8,List tickets with optional filters.
+      close,function,"(ticket_id, closed_by='manager')",129-132,false,4,1,Close a ticket.
+      _github_api,function,"(method, endpoint, data=None)",137-162,false,26,6,Make a GitHub API request.
+      push_to_github,function,(ticket_id),165-190,false,26,5,Create a GitHub Issue from a local ticket.
+      pull_from_github,function,(),193-220,false,28,8,Pull open GitHub Issues and create local tickets for new ones.
+      format_ticket,function,"(t, verbose=False)",225-236,false,12,4,Format ticket for display.
+  management/shared/lib/llm_client.py:
+    functions[4]{name,kind,sig,loc,async,lines,cc,does}:
+      get_config,function,(),17-25,false,9,1,Load LLM config from environment.
+      chat,function,"(user_message, system_prompt=None, model=None, history=None)",28-76,false,49,9,Send a message to the LLM and return the response text.
+      chat_stream,function,"(user_message, system_prompt=None, model=None)",79-83,false,5,1,Non-streaming wrapper that prints response progressively.
+      list_models,function,(),86-97,false,12,1,List popular OpenRouter models.
+  management/shared/lib/ticket_system.py:
+    functions[14]{name,kind,sig,loc,async,lines,cc,does}:
+      _ensure_dir,function,(),21-22,false,2,1,ensure dir
+      _now,function,(),25-26,false,2,1,now
+      _ticket_path,function,(ticket_id),29-30,false,2,1,ticket path
+      _next_id,function,(),33-43,false,11,3,next id
+      create,function,"(title, description='', priority='normal', assigned_to='developer', labels=None, created_by='manager')",48-70,false,23,2,Create a new ticket.
+      get,function,(ticket_id),73-79,false,7,2,Get a ticket by ID.
+      update,function,(ticket_id),82-93,false,12,5,Update ticket fields.
+      add_comment,function,"(ticket_id, author, text)",96-109,false,14,2,Add a comment to a ticket.
+      list_tickets,function,"(status=None, assigned_to=None, priority=None)",112-126,false,15,8,List tickets with optional filters.
+      close,function,"(ticket_id, closed_by='manager')",129-132,false,4,1,Close a ticket.
+      _github_api,function,"(method, endpoint, data=None)",137-162,false,26,6,Make a GitHub API request.
+      push_to_github,function,(ticket_id),165-190,false,26,5,Create a GitHub Issue from a local ticket.
+      pull_from_github,function,(),193-220,false,28,8,Pull open GitHub Issues and create local tickets for new ones.
+      format_ticket,function,"(t, verbose=False)",225-236,false,12,4,Format ticket for display.
+  management/shared/lib/logger.py:
+    functions[6]{name,kind,sig,loc,async,lines,cc,does}:
+      _write,function,"(level:str, message:str, data:dict=None)",17-35,false,19,3,logs
+      info,function,"(message:str)",38-39,false,2,2,info
+      warn,function,"(message:str)",41-42,false,2,2,warn
+      error,function,"(message:str)",44-45,false,2,2,error
+      action,function,"(message:str)",47-49,false,3,2,Log a significant decision or action taken by the service.
+      decision,function,"(message:str, reasoning:str='')",51-54,false,4,3,Log an LLM-driven or autonomous decision.
+  app/backend/app.py:
+    functions[8]{name,kind,sig,loc,async,lines,cc,does}:
+      get_db_conn,function,(),39-45,false,7,1,Get PostgreSQL connection.
+      get_redis_conn,function,(),48-54,false,7,1,Get Redis connection.
+      health,function,(),58-67,false,10,1,Main health check endpoint.
+      db_status,function,(),71-83,false,13,2,PostgreSQL health check.
+      redis_status,function,(),87-98,false,12,2,Redis health check.
+      info,function,(),102-113,false,12,1,System info endpoint.
+      echo,function,(),117-120,false,4,2,Echo endpoint for testing.
+      init_db,function,(),125-147,false,23,3,Initialize DB tables if not exists (runs once).
+  app/mobile-backend/app.py:
+    functions[4]{name,kind,sig,loc,async,lines,cc,does}:
+      health,function,(),23-30,false,8,1,health
+      config,function,(),34-46,false,13,1,Return client configuration for mobile/desktop apps.
+      sync,function,(),50-61,false,12,2,Sync endpoint for mobile/desktop clients.
+      register_device,function,(),65-73,false,9,2,Register a device (mobile/desktop/RPi3).
+  app/desktop-app/server.py:
+    functions[3]{name,kind,sig,loc,async,lines,cc,does}:
+      ArtifactHandler.__init__,method,(),15-16,false,2,1,creates
+      ArtifactHandler.do_GET,method,(),18-40,false,23,6,do get
+      ArtifactHandler._json_response,method,"(data, code=200)",42-48,false,7,1,json response
+  app/desktop-app/src/main.py:
+    functions[2]{name,kind,sig,loc,async,lines,cc,does}:
+      check_backend,function,(),19-27,false,9,2,Check backend connectivity.
+      main,function,(),30-62,false,33,3,Main desktop application entry point.
+  app/backend/tests/test_api.py:
+    functions[11]{name,kind,sig,loc,async,lines,cc,does}:
+      client,function,(),22-26,false,5,1,Flask test client.
+      TestHealthEndpoints.test_health_returns_200,method,(client),32-37,false,6,1,checks health returns 200
+      TestHealthEndpoints.test_health_has_version,method,(client),39-43,false,5,1,checks health has version
+      TestHealthEndpoints.test_health_has_deploy_mode,method,(client),45-48,false,4,1,checks health has deploy mode
+      TestHealthEndpoints.test_health_has_timestamp,method,(client),50-53,false,4,1,checks health has timestamp
+      TestInfoEndpoint.test_info_returns_200,method,(client),59-61,false,3,1,checks info returns 200
+      TestInfoEndpoint.test_info_has_services,method,(client),63-68,false,6,1,checks info has services
+      TestEchoEndpoint.test_echo_post,method,(client),74-81,false,8,1,checks echo post
+      TestEchoEndpoint.test_echo_empty_post,method,(client),83-85,false,3,1,checks echo empty post
+      TestDBStatusEndpoint.test_db_status_returns_response,method,(client),91-97,false,7,1,checks db status returns response
+      TestRedisStatusEndpoint.test_redis_status_returns_response,method,(client),103-108,false,6,1,checks redis status returns response
