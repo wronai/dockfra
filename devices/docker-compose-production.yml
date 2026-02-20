@@ -1,0 +1,89 @@
+##############################################################
+# DOCKFRA DEVICES — Production Environment
+#
+# No external network — management connects via SSH tunneling
+# ssh-rpi3 is the deploy channel to physical RPi3 device
+##############################################################
+
+networks:
+  rpi3-net:
+    driver: bridge
+  desktop-net:
+    driver: bridge
+
+volumes:
+  ssh-keys:
+  vnc-data:
+  desktop-app-data:
+
+services:
+
+  ssh-rpi3:
+    build: { context: ./ssh-rpi3 }
+    container_name: dockfra-ssh-rpi3-prod
+    hostname: ssh-rpi3
+    restart: always
+    networks: [rpi3-net, desktop-net]
+    ports:
+      - "${SSH_RPI3_PORT:-2224}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - RPI3_HOST=${RPI3_HOST}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+      - APP_NAME=${APP_NAME}
+      - DEPLOY_MODE=production
+    volumes:
+      - ssh-keys:/keys
+      - desktop-app-data:/artifacts:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  vnc-rpi3:
+    build: { context: ./vnc-rpi3 }
+    container_name: dockfra-vnc-rpi3-prod
+    hostname: vnc-rpi3
+    restart: always
+    networks: [rpi3-net]
+    ports:
+      - "${VNC_RPI3_PORT:-6080}:6080"
+    environment:
+      - VNC_PASSWORD=${RPI3_VNC_PASSWORD}
+      - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1280}
+      - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-720}
+      - RPI3_HOST=${RPI3_HOST}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+    volumes:
+      - vnc-data:/root/.vnc
+      - ssh-keys:/keys:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6080/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

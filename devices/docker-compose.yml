@@ -1,0 +1,79 @@
+##############################################################
+# DOCKFRA DEVICES — Local Environment
+#
+# Services:
+#   ssh-rpi3  (:2224) — SSH deploy channel to RPi3
+#   vnc-rpi3  (:6080) — Web VNC access to RPi3
+#
+# Access via ssh-developer (app stack):
+#   ssh developer@localhost -p 2200
+#   push-to-rpi3.sh <artifact>
+#   run-on-rpi3.sh <command>
+#
+# Network: dockfra-shared (external, connects to app/management stacks)
+##############################################################
+
+networks:
+  dockfra-shared:
+    external: true
+  rpi3-net:
+    driver: bridge
+  desktop-net:
+    driver: bridge
+
+volumes:
+  ssh-keys:
+  vnc-data:
+  desktop-app-data:
+
+services:
+
+  ssh-rpi3:
+    build: { context: ./ssh-rpi3 }
+    container_name: dockfra-ssh-rpi3
+    hostname: ssh-rpi3
+    restart: unless-stopped
+    networks: [dockfra-shared, rpi3-net, desktop-net]
+    ports:
+      - "${SSH_RPI3_PORT:-2224}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
+      - RPI3_HOST=${RPI3_HOST:-127.0.0.1}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+      - APP_NAME=${APP_NAME:-dockfra}
+      - DEPLOY_MODE=${DEPLOY_MODE:-local}
+    volumes:
+      - ssh-keys:/keys
+      - desktop-app-data:/artifacts:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  vnc-rpi3:
+    build: { context: ./vnc-rpi3 }
+    container_name: dockfra-vnc-rpi3
+    hostname: vnc-rpi3
+    restart: unless-stopped
+    networks: [dockfra-shared, rpi3-net]
+    ports:
+      - "${VNC_RPI3_PORT:-6080}:6080"
+    environment:
+      - VNC_PASSWORD=${RPI3_VNC_PASSWORD:-rpi3vnc}
+      - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1280}
+      - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-720}
+      - RPI3_HOST=${RPI3_HOST:-127.0.0.1}
+      - RPI3_USER=${RPI3_USER:-pi}
+      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
+    volumes:
+      - vnc-data:/root/.vnc
+      - ssh-keys:/keys:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

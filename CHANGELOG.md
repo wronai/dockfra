@@ -1,3 +1,28 @@
+## [1.0.4] - 2026-02-20
+
+### Summary
+
+feat(build): configuration management system
+
+### Test
+
+- scripts: update run-tests.sh
+
+### Other
+
+- build: update Makefile
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- scripts: update deploy.sh
+- scripts: update init.sh
+- scripts: update setup-keys.sh
+- docker: update Dockerfile
+- scripts: update entrypoint-rpi3.sh
+- ... and 2 more
+
+
 ## [1.0.3] - 2026-02-20
 
 ### Summary

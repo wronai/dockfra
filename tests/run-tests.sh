@@ -62,8 +62,10 @@ t "management compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(ope
 t "management compose: 3 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml')); assert len(d['services'])==3, len(d['services'])\""
 t "management prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$MGMT/docker-compose-production.yml'))\""
 t "app compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose.yml'))\""
-t "app compose: 10 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml')); assert len(d['services'])==10, len(d['services'])\""
+t "app compose: 8 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml')); assert len(d['services'])==8, len(d['services'])\""
 t "app prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose-production.yml'))\""
+t "devices compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$PROJECT/devices/docker-compose.yml'))\""
+t "devices compose: 2 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$PROJECT/devices/docker-compose.yml')); assert len(d['services'])==2, len(d['services'])\""
 
 # ═══ 5. NETWORK ISOLATION ═══
 echo ""; echo "  5. NETWORK ISOLATION"
@@ -101,8 +103,8 @@ t "frontend Dockerfile" "test -f '$APP/frontend/Dockerfile'"
 t "backend Dockerfile" "test -f '$APP/backend/Dockerfile'"
 t "mobile-backend Dockerfile" "test -f '$APP/mobile-backend/Dockerfile'"
 t "desktop-app Dockerfile" "test -f '$APP/desktop-app/Dockerfile'"
-t "ssh-rpi3 Dockerfile" "test -f '$APP/ssh-rpi3/Dockerfile'"
-t "vnc-rpi3 Dockerfile" "test -f '$APP/vnc-rpi3/Dockerfile'"
+t "ssh-rpi3 Dockerfile" "test -f '$PROJECT/devices/ssh-rpi3/Dockerfile'"
+t "vnc-rpi3 Dockerfile" "test -f '$PROJECT/devices/vnc-rpi3/Dockerfile'"
 
 # ═══ 7. PER-SERVICE .ENV ═══
 echo ""; echo "  7. PER-SERVICE ENV FILES"

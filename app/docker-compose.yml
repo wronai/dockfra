@@ -10,13 +10,12 @@
 #   db            (:5432) — PostgreSQL
 #   redis         (:6379) — Redis cache
 #   traefik       (:80/:443/:8080) — Reverse proxy
-#   ssh-rpi3      (:2224) — RPi3 deploy channel
-#   vnc-rpi3      (:6080) — VNC access to RPi3
 #
-# NOTE: ssh-frontend and ssh-backend removed.
-# Access backend/frontend via: ssh developer@:2200, then: docker exec -it dockfra-backend bash
+# NOTE: ssh-frontend, ssh-backend, ssh-rpi3, vnc-rpi3 removed.
+# - backend/frontend access: ssh developer@:2200, then: docker exec -it dockfra-backend bash
+# - RPi3/VNC: see devices/ stack
 #
-# Network: dockfra-shared (external, connects to management stack)
+# Network: dockfra-shared (external, connects to management + devices stacks)
 ##############################################################
 
 networks:
@@ -30,10 +29,6 @@ networks:
     driver: bridge
   mobile-net:
     driver: bridge
-  desktop-net:
-    driver: bridge
-  rpi3-net:
-    driver: bridge
   dev-net:
     driver: bridge
 
@@ -46,7 +41,6 @@ volumes:
   redis-data:
   traefik-certs:
   ssh-keys:
-  vnc-data:
   developer-workspace:
   git-repo:
   shared-tickets:
@@ -264,51 +258,3 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ═══════════════════════════════════════════
-  # SSH BASTION — RPi3 only
-  # ═══════════════════════════════════════════
-
-  ssh-rpi3:
-    build: { context: ./ssh-rpi3 }
-    container_name: dockfra-ssh-rpi3
-    hostname: ssh-rpi3
-    restart: unless-stopped
-    networks: [rpi3-net, dev-net, desktop-net]
-    ports:
-      - "${SSH_RPI3_PORT:-2224}:2222"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - SSH_DEPLOY_USER=${SSH_DEPLOY_USER:-deployer}
-      - RPI3_HOST=${RPI3_HOST}
-      - RPI3_USER=${RPI3_USER:-pi}
-      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
-      - APP_NAME=${APP_NAME}
-      - DEPLOY_MODE=${DEPLOY_MODE}
-    volumes:
-      - ssh-keys:/keys
-      - desktop-app-data:/artifacts:ro
-
-  vnc-rpi3:
-    build: { context: ./vnc-rpi3 }
-    container_name: dockfra-vnc-rpi3
-    hostname: vnc-rpi3
-    restart: unless-stopped
-    networks: [rpi3-net, proxy-net]
-    ports:
-      - "${VNC_RPI3_PORT:-6080}:6080"
-    environment:
-      - VNC_PASSWORD=${RPI3_VNC_PASSWORD:-rpi3vnc}
-      - DISPLAY_WIDTH=1280
-      - DISPLAY_HEIGHT=720
-      - RPI3_HOST=${RPI3_HOST}
-      - RPI3_USER=${RPI3_USER:-pi}
-      - RPI3_SSH_PORT=${RPI3_SSH_PORT:-22}
-    volumes:
-      - vnc-data:/root/.vnc
-      - ssh-keys:/keys:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.vnc.rule=Host(`vnc.${DOMAIN:-localhost}`)"
-      - "traefik.http.routers.vnc.entrypoints=web"
-      - "traefik.http.services.vnc.loadbalancer.server.port=6080"

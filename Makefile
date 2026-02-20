@@ -4,11 +4,13 @@
 #
 # Usage:
 #   make init              — Full setup (local)
-#   make up                — Start both stacks
+#   make up                — Start all stacks (app + management + devices)
 #   make setup-github      — Copy GitHub SSH keys to developer
 #   make setup-llm         — Configure LLM (OpenRouter + getv)
 #   make setup-dev-tools   — Install aider, Continue.dev, LiteLLM
 #   make ssh-developer     — SSH into developer container
+#   make up-devices        — Start devices stack (ssh-rpi3, vnc-rpi3)
+#   make deploy-rpi3       — Deploy artifact to RPi3
 #
 # ═══════════════════════════════════════════════════════════════
 
@@ -30,6 +32,7 @@ export DEVELOPER_CONTAINER DEVELOPER_USER GITHUB_SSH_KEY LLM_MODEL LITELLM_PORT
 ROOT      := $(shell pwd)
 APP       := $(ROOT)/app
 MGMT      := $(ROOT)/management
+DEVICES   := $(ROOT)/devices
 SCRIPTS   := $(ROOT)/scripts
 
 # ═══════════════════════════════════════════════════════════════
@@ -48,13 +51,17 @@ init-app: ## Initialize app stack only
 init-mgmt: ## Initialize management stack only
 	@bash $(MGMT)/scripts/init.sh $(ENVIRONMENT)
 
+.PHONY: init-devices
+init-devices: ## Initialize devices stack (ssh-rpi3, vnc-rpi3)
+	@bash $(DEVICES)/scripts/init.sh $(ENVIRONMENT)
+
 # ═══════════════════════════════════════════════════════════════
 # DOCKER COMPOSE
 # ═══════════════════════════════════════════════════════════════
 
 .PHONY: up
-up: up-app up-mgmt ## Start both stacks
-	@echo "✅ Both stacks running"
+up: up-app up-mgmt up-devices ## Start all stacks (app + management + devices)
+	@echo "✅ All stacks running"
 
 .PHONY: up-app
 up-app: ## Start app stack
@@ -66,17 +73,27 @@ up-mgmt: ## Start management stack
 	@cd $(MGMT) && docker compose up -d
 	@echo "✅ Management stack started"
 
+.PHONY: up-devices
+up-devices: ## Start devices stack (ssh-rpi3, vnc-rpi3)
+	@cd $(DEVICES) && docker compose up -d
+	@echo "✅ Devices stack started"
+
+.PHONY: down-devices
+down-devices: ## Stop devices stack
+	@cd $(DEVICES) && docker compose down
+
 .PHONY: up-prod
-up-prod: ## Start both stacks (production)
+up-prod: ## Start all stacks (production)
 	@cd $(APP) && docker compose -f docker-compose-production.yml up -d
 	@cd $(MGMT) && docker compose -f docker-compose-production.yml up -d
 	@echo "✅ Production stacks started"
 
 .PHONY: down
-down: ## Stop both stacks
+down: ## Stop all stacks
 	@cd $(MGMT) && docker compose down 2>/dev/null || true
 	@cd $(APP) && docker compose down 2>/dev/null || true
-	@echo "✅ Both stacks stopped"
+	@cd $(DEVICES) && docker compose down 2>/dev/null || true
+	@echo "✅ All stacks stopped"
 
 .PHONY: down-app
 down-app: ## Stop app stack
@@ -101,6 +118,9 @@ ps: ## Show running containers
 	@echo ""
 	@echo "── MANAGEMENT ──"
 	@cd $(MGMT) && docker compose ps 2>/dev/null || echo "  (not running)"
+	@echo ""
+	@echo "── DEVICES ──"
+	@cd $(DEVICES) && docker compose ps 2>/dev/null || echo "  (not running)"
 
 .PHONY: logs
 logs: ## Tail logs (both stacks)
@@ -164,6 +184,27 @@ ssh-autopilot: ## SSH into autopilot container
 .PHONY: ssh-monitor
 ssh-monitor: ## SSH into monitor container
 	@ssh monitor@localhost -p 2201 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+
+.PHONY: ssh-rpi3
+ssh-rpi3: ## SSH into ssh-rpi3 container (devices stack)
+	@ssh deployer@localhost -p 2224 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+
+.PHONY: vnc-rpi3
+vnc-rpi3: ## Open VNC web UI for RPi3 in browser
+	@echo "Open: http://localhost:6080"
+	@xdg-open http://localhost:6080 2>/dev/null || open http://localhost:6080 2>/dev/null || true
+
+# ═══════════════════════════════════════════════════════════════
+# DEVICES — RPi3 deploy
+# ═══════════════════════════════════════════════════════════════
+
+.PHONY: deploy-rpi3
+deploy-rpi3: ## Deploy artifact to RPi3: make deploy-rpi3 ARTIFACT=/artifacts/app.tar.gz
+	@bash $(DEVICES)/scripts/deploy.sh $(ARTIFACT)
+
+.PHONY: setup-devices-keys
+setup-devices-keys: ## Copy SSH keys into devices stack
+	@bash $(DEVICES)/scripts/setup-keys.sh
 
 # ═══════════════════════════════════════════════════════════════
 # LLM TOOLS (remote execution inside developer)
