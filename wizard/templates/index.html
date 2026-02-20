@@ -22,12 +22,26 @@ header .sub{color:var(--muted);font-size:.85rem}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .main{display:flex;flex:1;overflow:hidden;position:relative}
-.chat-panel{width:40%;display:flex;flex-direction:column;min-width:200px}
-.log-panel{width:60%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
+.chat-panel{width:25%;display:flex;flex-direction:column;min-width:200px}
+.processes-panel{width:20%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
+.log-panel{width:55%;min-width:200px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative}
 .resize-handle{position:absolute;top:0;bottom:0;width:4px;background:transparent;cursor:col-resize;z-index:10}
 .resize-handle:hover{background:var(--accent)}
 .resize-handle.left{left:-2px}
 .resize-handle.right{right:-2px}
+.processes-panel h3{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)}
+#processes-list{flex:1;overflow-y:auto;padding:10px 14px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.75rem;line-height:1.6}
+.process-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)}
+.process-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.process-status.running{background:var(--green)}
+.process-status.stopped{background:var(--red)}
+.process-status.unknown{background:var(--muted)}
+.process-name{font-size:.7rem;color:var(--text)}
+.process-details{font-size:.65rem;color:var(--muted);margin-left:auto}
+.msg{position:relative}
+.msg-copy{position:absolute;top:5px;right:5px;width:20px;height:20px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:.7rem;opacity:0;transition:opacity .2s}
+.msg:hover .msg-copy{display:flex;opacity:1}
+.msg-copy:hover{background:var(--accent);color:#fff}
 .log-panel h3{padding:10px 14px;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)}
 #log-output{flex:1;overflow-y:auto;padding:10px 14px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.75rem;color:#6ee7b7;line-height:1.6}
 .log-line{white-space:pre-wrap;word-break:break-all}
@@ -102,7 +116,12 @@ header .sub{color:var(--muted);font-size:.85rem}
     <div id="chat"></div>
     <div id="widgets"></div>
   </div>
-  <div class="resize-handle right" id="resize-handle"></div>
+  <div class="resize-handle right" id="resize-handle-chat"></div>
+  <div class="processes-panel" id="processes-panel">
+    <h3>⚙️ Processes</h3>
+    <div id="processes-list"></div>
+  </div>
+  <div class="resize-handle right" id="resize-handle-logs"></div>
   <div class="log-panel" id="log-panel">
     <h3>📋 Execution log <button id="copy-logs" style="float:right;font-size:0.7rem;padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;">📋 Copy</button></h3>
     <div id="log-output"></div>
@@ -114,6 +133,7 @@ const chat    = document.getElementById('chat');
 const widgets = document.getElementById('widgets');
 const logOut  = document.getElementById('log-output');
 const connEl  = document.getElementById('conn-status');
+const processesList = document.getElementById('processes-list');
 
 const socket = io({transports:['websocket','polling']});
 
@@ -140,6 +160,7 @@ async function loadHistory() {
     // Clear current content
     chat.innerHTML = '';
     logOut.innerHTML = '';
+    widgets.innerHTML = '';
     
     // Load conversation
     data.conversation.forEach(msg => {
@@ -185,10 +206,33 @@ socket.on('message', d => {
   if (d.id) div.setAttribute('data-msg-id', d.id);
   div.innerHTML = `
     <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
-    <div class="bubble">${renderMd(d.text)}</div>`;
+    <div class="bubble">${renderMd(d.text)}</div>
+    <div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
 });
+
+// Copy message function
+function copyMessage(button) {
+  const msgDiv = button.closest('.msg');
+  const bubble = msgDiv.querySelector('.bubble');
+  const text = bubble.textContent || bubble.innerText;
+  
+  navigator.clipboard.writeText(text).then(() => {
+    const originalText = button.textContent;
+    button.textContent = '✅';
+    button.style.background = 'var(--accent)';
+    button.style.color = '#fff';
+    
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.style.background = '';
+      button.style.color = '';
+    }, 1500);
+  }).catch(err => {
+    console.error('Failed to copy message:', err);
+  });
+}
 
 // ── Widgets ────────────────────────────────────────────────────────────────
 socket.on('clear_widgets', () => { widgets.innerHTML = ''; });
@@ -326,74 +370,138 @@ function renderProgress(d){
 }
 
 // ── Panel resizing ───────────────────────────────────────────────────────────
-const resizeHandle = document.getElementById('resize-handle');
+const resizeHandleChat = document.getElementById('resize-handle-chat');
+const resizeHandleLogs = document.getElementById('resize-handle-logs');
 const chatPanel = document.getElementById('chat-panel');
+const processesPanel = document.getElementById('processes-panel');
 const logPanel = document.getElementById('log-panel');
 const mainContainer = document.querySelector('.main');
 let isResizing = false;
+let activeHandle = null;
 let startX = 0;
-let startLogWidth = 0;
+let startWidths = {};
 
-resizeHandle.addEventListener('mousedown', (e) => {
-  isResizing = true;
-  startX = e.clientX;
-  startLogWidth = logPanel.offsetWidth;
-  
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-  document.body.style.pointerEvents = 'none'; // Prevent text selection during resize
-  resizeHandle.style.pointerEvents = 'auto'; // Allow handle to be clicked
-  e.preventDefault();
-});
+function setupResizeHandle(handle, leftPanel, rightPanel) {
+  handle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    activeHandle = handle;
+    startX = e.clientX;
+    startWidths = {
+      left: leftPanel.offsetWidth,
+      right: rightPanel.offsetWidth
+    };
+    
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.body.style.pointerEvents = 'none';
+    handle.style.pointerEvents = 'auto';
+    e.preventDefault();
+  });
+}
+
+setupResizeHandle(resizeHandleChat, chatPanel, processesPanel);
+setupResizeHandle(resizeHandleLogs, processesPanel, logPanel);
 
 document.addEventListener('mousemove', (e) => {
-  if (!isResizing) return;
+  if (!isResizing || !activeHandle) return;
   
   const deltaX = e.clientX - startX;
   const containerWidth = mainContainer.offsetWidth;
-  const newLogWidth = startLogWidth - deltaX;
-  
-  // Constrain log panel width (min 200px, max 80% of container)
   const minPanelWidth = 200;
-  const maxLogWidth = containerWidth * 0.8;
   
-  if (newLogWidth >= minPanelWidth && newLogWidth <= maxLogWidth) {
-    logPanel.style.width = newLogWidth + 'px';
-    // Chat panel automatically fills remaining space with flex: 1
+  if (activeHandle === resizeHandleChat) {
+    // Resize between chat and processes
+    const newChatWidth = startWidths.left + deltaX;
+    const newProcessesWidth = startWidths.right - deltaX;
+    
+    if (newChatWidth >= minPanelWidth && newProcessesWidth >= minPanelWidth) {
+      chatPanel.style.width = newChatWidth + 'px';
+      processesPanel.style.width = newProcessesWidth + 'px';
+    }
+  } else if (activeHandle === resizeHandleLogs) {
+    // Resize between processes and logs
+    const newProcessesWidth = startWidths.left + deltaX;
+    const newLogWidth = startWidths.right - deltaX;
+    
+    if (newProcessesWidth >= minPanelWidth && newLogWidth >= minPanelWidth) {
+      processesPanel.style.width = newProcessesWidth + 'px';
+      logPanel.style.width = newLogWidth + 'px';
+    }
   }
 });
 
 document.addEventListener('mouseup', () => {
   if (isResizing) {
     isResizing = false;
+    activeHandle = null;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     document.body.style.pointerEvents = '';
     
-    // Save the preferred log width to localStorage
-    const logWidth = logPanel.offsetWidth;
-    localStorage.setItem('dockfra-log-width', logWidth);
+    // Save panel widths
+    localStorage.setItem('dockfra-chat-width', chatPanel.offsetWidth);
+    localStorage.setItem('dockfra-processes-width', processesPanel.offsetWidth);
+    localStorage.setItem('dockfra-log-width', logPanel.offsetWidth);
   }
 });
 
 // Restore saved widths on page load
 function restorePanelWidths() {
-  const savedLogWidth = localStorage.getItem('dockfra-log-width');
   const containerWidth = mainContainer.offsetWidth;
+  const savedChatWidth = localStorage.getItem('dockfra-chat-width');
+  const savedProcessesWidth = localStorage.getItem('dockfra-processes-width');
+  const savedLogWidth = localStorage.getItem('dockfra-log-width');
   
-  if (savedLogWidth) {
-    const logWidth = Math.min(Math.max(parseInt(savedLogWidth), 200), containerWidth * 0.8);
-    logPanel.style.width = logWidth + 'px';
-    // Chat panel automatically fills remaining space with flex: 1
+  if (savedChatWidth && savedProcessesWidth && savedLogWidth) {
+    chatPanel.style.width = savedChatWidth + 'px';
+    processesPanel.style.width = savedProcessesWidth + 'px';
+    logPanel.style.width = savedLogWidth + 'px';
   } else {
-    // Set default 40/60 split if no saved preference
-    logPanel.style.width = '60%';
-    chatPanel.style.width = '40%';
+    // Default split: 25% chat, 20% processes, 55% logs
+    chatPanel.style.width = '25%';
+    processesPanel.style.width = '20%';
+    logPanel.style.width = '55%';
   }
 }
 
 // Restore widths after page load
 setTimeout(restorePanelWidths, 100);
+
+// ── Processes panel ───────────────────────────────────────────────────────────
+async function updateProcesses() {
+  try {
+    const response = await fetch('/api/processes');
+    const processes = await response.json();
+    
+    processesList.innerHTML = '';
+    
+    processes.forEach(process => {
+      const item = document.createElement('div');
+      item.className = 'process-item';
+      
+      const statusClass = process.status === 'running' ? 'running' : 
+                         process.status === 'stopped' ? 'stopped' : 'unknown';
+      
+      item.innerHTML = `
+        <div class="process-status ${statusClass}"></div>
+        <span class="process-name">${process.name}</span>
+        <span class="process-details">${process.details}</span>
+      `;
+      
+      processesList.appendChild(item);
+    });
+    
+    if (processes.length === 0) {
+      processesList.innerHTML = '<div style="color:var(--muted);font-size:.7rem;">No processes found</div>';
+    }
+  } catch (error) {
+    processesList.innerHTML = '<div style="color:var(--red);font-size:.7rem;">Error loading processes</div>';
+  }
+}
+
+// Update processes every 5 seconds
+setInterval(updateProcesses, 5000);
+updateProcesses(); // Initial load
 
 // ── Copy logs functionality ───────────────────────────────────────────────────
 document.getElementById('copy-logs').addEventListener('click', () => {

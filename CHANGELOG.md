@@ -1,3 +1,16 @@
+## [1.0.8] - 2026-02-20
+
+### Summary
+
+feat(wizard): deep code analysis engine with 2 supporting modules
+
+### Other
+
+- update wizard/app.py
+- update wizard/requirements.txt
+- update wizard/templates/index.html
+
+
 ## [1.0.7] - 2026-02-20
 
 ### Summary

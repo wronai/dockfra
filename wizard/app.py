@@ -111,7 +111,6 @@ def step_welcome():
     buttons([
         {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
         {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-        {"label":"📊 Status kontenerów",         "value":"status"},
         {"label":"🔑 Konfiguruj credentials",   "value":"setup_creds"},
     ])
 
@@ -456,6 +455,49 @@ def api_history():
         "logs": _logs,
         "current_step": _state.get("step", "welcome")
     })
+
+@app.route("/api/processes")
+def api_processes():
+    processes = []
+    
+    # Check Docker containers
+    try:
+        containers = docker_ps()
+        for container in containers:
+            status = "running" if "Up" in container["status"] else "stopped"
+            processes.append({
+                "name": container["name"],
+                "status": status,
+                "details": container["status"],
+                "type": "container"
+            })
+    except:
+        pass
+    
+    # Check wizard process
+    try:
+        import psutil
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if 'python' in proc.info['name'] and '5050' in ' '.join(proc.info['cmdline'] or []):
+                    processes.append({
+                        "name": "wizard",
+                        "status": "running",
+                        "details": f"PID {proc.info['pid']}",
+                        "type": "process"
+                    })
+                    break
+            except:
+                continue
+    except ImportError:
+        processes.append({
+            "name": "wizard",
+            "status": "unknown",
+            "details": "psutil not available",
+            "type": "process"
+        })
+    
+    return json.dumps(processes)
 
 if __name__ == "__main__":
     print("🧙 Dockfra Wizard → http://localhost:5050")
