@@ -342,6 +342,11 @@ def step_do_launch(form):
                          {"label":"🏠 Menu","value":"back"}])
                 return
             msg(f"✅ Sklonowano do `{app_dir}`")
+            for stub in ["ssh-developer/.env"]:
+                p = app_dir / stub
+                if not p.exists():
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.touch()
             _refresh_ssh_roles()
         elif (app_dir / ".git").exists():
             progress("🔄 Aktualizuję app/ (git pull)…")

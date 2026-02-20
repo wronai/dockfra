@@ -526,6 +526,12 @@ def _dispatch(value: str, form: dict):
                     return
                 progress("clone", done=True)
                 msg(f"✅ Sklonowano do `{app_dir}`")
+            # Create missing .env stubs required by docker-compose env_file directives
+            for stub in ["ssh-developer/.env"]:
+                p = app_dir / stub
+                if not p.exists():
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.touch()
             _refresh_ssh_roles()
             step_do_launch({"stacks": "app", "environment": _state.get("environment", "local")})
         threading.Thread(target=_clone_and_launch, daemon=True).start()
