@@ -269,6 +269,21 @@ function renderSelect(d){
     sel.appendChild(opt);
   });
   field.appendChild(sel);
+  // Dynamic hint + arg placeholder when hint_map is provided
+  if(d.hint_map){
+    const hint = document.createElement('div');
+    hint.className = 'field-hint';
+    hint.id = 'hint_'+d.name;
+    hint.textContent = d.hint_map[sel.value] || '';
+    field.appendChild(hint);
+    sel.addEventListener('change', () => {
+      hint.textContent = d.hint_map[sel.value] || '';
+      if(d.arg_placeholder_map){
+        const argEl = document.getElementById('field_ssh_arg');
+        if(argEl){ argEl.placeholder = d.arg_placeholder_map[sel.value] || ''; argEl.value = ''; }
+      }
+    });
+  }
   form.appendChild(field);
 }
 

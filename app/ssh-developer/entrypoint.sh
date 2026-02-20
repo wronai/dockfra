@@ -7,7 +7,16 @@ mkdir -p "$DH/.ssh" /shared/tickets
 [ -f /keys/deployer.pub ] && cp /keys/deployer.pub "$DH/.ssh/authorized_keys" && chmod 600 "$DH/.ssh/authorized_keys"
 [ -f /keys/deployer ] && cp /keys/deployer "$DH/.ssh/id_rsa" && chmod 600 "$DH/.ssh/id_rsa"
 
-chown -R developer:developer "$DH/.ssh"
+# Copy extra authorized keys from read-only mount (if any)
+if [ -d "$DH/.ssh/extra" ]; then
+    for k in "$DH/.ssh/extra"/*.pub; do
+        [ -f "$k" ] && cat "$k" >> "$DH/.ssh/authorized_keys" 2>/dev/null || true
+    done
+fi
+
+# Chown .ssh but ignore errors on read-only mounts (extra/ is :ro)
+chown -R developer:developer "$DH/.ssh" 2>/dev/null || \
+    find "$DH/.ssh" -maxdepth 1 -exec chown developer:developer {} \; 2>/dev/null || true
 
 # Git setup
 su - developer -c "git config --global user.name developer; git config --global user.email dev@local; git config --global init.defaultBranch main"

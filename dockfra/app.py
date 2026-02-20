@@ -1145,10 +1145,45 @@ def step_do_launch(form):
             buttons(fix_btns)
         else:
             msg("## ✅ Infrastruktura gotowa!")
+            # Read configured ports (with defaults)
+            dev_port  = _state.get("SSH_DEVELOPER_PORT",  "2200")
+            mgr_port  = _state.get("SSH_MANAGER_PORT",    "2202")
+            mon_port  = _state.get("SSH_MONITOR_PORT",    "2201")
+            auto_port = _state.get("SSH_AUTOPILOT_PORT",  "2203")
+            vnc_port  = _state.get("DESKTOP_VNC_PORT",    "6081")
+            # Determine which SSH containers are actually running
+            running_names = {c["name"] for c in all_containers if "Up" in c["status"] or "healthy" in c["status"]}
+            sections = []
+            # Build sections from _SSH_ROLE_INFO (single source of truth)
+            _role_container = {
+                "developer": ("dockfra-ssh-developer", dev_port),
+                "manager":   ("dockfra-ssh-manager",   mgr_port),
+                "monitor":   ("dockfra-ssh-monitor",   mon_port),
+                "autopilot": ("dockfra-ssh-autopilot", auto_port),
+            }
+            for role, (cname, port) in _role_container.items():
+                if cname not in running_names:
+                    continue
+                info = _SSH_ROLE_INFO[role]
+                rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in info["commands"])
+                sections.append(
+                    f"### {info['icon']} {info['title']}  "
+                    f"`ssh {info['user']}@localhost -p {port}`\n"
+                    f"| Komenda | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
+                )
+            if "dockfra-desktop" in running_names:
+                sections.append(
+                    f"### 🖥️ Desktop (noVNC)  [http://localhost:{vnc_port}](http://localhost:{vnc_port})\n"
+                    "Przeglądarkowy pulpit z podglądem dashboardu i logów."
+                )
+            if sections:
+                msg("---\n## 🗺️ Co możesz teraz zrobić?\n\n" + "\n\n".join(sections))
             buttons([
-                {"label": "🔑 Setup GitHub + LLM", "value": "post_launch_creds"},
+                {"label": "🔧 SSH Developer",      "value": f"ssh_info::developer::{dev_port}"},
+                {"label": "👤 SSH Manager",         "value": f"ssh_info::manager::{mgr_port}"},
+                {"label": "📡 SSH Monitor",         "value": f"ssh_info::monitor::{mon_port}"},
+                {"label": "🔑 Setup GitHub + LLM",  "value": "post_launch_creds"},
                 {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
-                {"label": "🏠 Menu",                "value": "back"},
             ])
     threading.Thread(target=run,daemon=True).start()
 
@@ -1830,6 +1865,237 @@ def fix_docker_perms():
     buttons([{"label":"🔄 Spróbuj ponownie","value":"retry_launch"},{"label":"🏠 Menu","value":"back"}])
 
 
+_SSH_ROLE_INFO = {
+    "developer": {
+        "user":  "developer",
+        "icon":  "🔧",
+        "title": "Developer — Ticket-Driven Workspace",
+        "makefile": "app/ssh-developer/Makefile",
+        "commands": [
+            ("`my-tickets`",            "Lista moich zadań",                  "`make developer-tickets`"),
+            ("`ticket-work <T-XXXX>`",  "Zacznij pracę nad ticketem",         "`make -f app/ssh-developer/Makefile ticket-work T=T-0001`"),
+            ("`ticket-done <T-XXXX>`",  "Oznacz ticket jako gotowy",          "`make -f app/ssh-developer/Makefile ticket-done T=T-0001`"),
+            ("`implement <T-XXXX>`",    "AI-assisted implementacja",          "`make -f app/ssh-developer/Makefile implement T=T-0001`"),
+            ("`ask <pytanie>`",         "Zapytaj LLM o kod",                  "`make developer-ask Q=\"pytanie\"`"),
+            ("`review <plik>`",         "AI code review",                     "`make -f app/ssh-developer/Makefile review F=src/main.py`"),
+            ("`test-local`",            "Uruchom testy",                      "`make -f app/ssh-developer/Makefile test-local`"),
+            ("`commit-push <msg>`",     "Git commit + push",                  "`make -f app/ssh-developer/Makefile commit-push MSG=\"msg\"`"),
+        ],
+    },
+    "manager": {
+        "user":  "manager",
+        "icon":  "👤",
+        "title": "Manager — Project Control Center",
+        "makefile": "management/ssh-manager/Makefile",
+        "commands": [
+            ("`status`",                     "Przegląd wszystkich serwisów",  "`make manager-status`"),
+            ("`ticket-create <tytuł>`",      "Utwórz zadanie",                "`make ticket-create TITLE=\"tytuł\"`"),
+            ("`ticket-list`",                "Lista ticketów",                "`make ticket-list`"),
+            ("`ticket-show <T-XXXX>`",       "Szczegóły ticketu",             "`make -f management/ssh-manager/Makefile ticket-show T=T-0001`"),
+            ("`plan <feature>`",             "Wygeneruj plan przez LLM",      "`make -f management/ssh-manager/Makefile plan FEATURE=\"opis\"`"),
+            ("`ask <pytanie>`",              "Zapytaj asystenta",             "`make manager-ask Q=\"pytanie\"`"),
+            ("`ssh-to developer`",           "Przeskocz do developera",       "`make ssh-developer`"),
+            ("`config-show <serwis>`",       "Pokaż konfigurację serwisu",    "`make -f management/ssh-manager/Makefile config-show SVC=developer`"),
+        ],
+    },
+    "monitor": {
+        "user":  "monitor",
+        "icon":  "📡",
+        "title": "Monitor — Deploy & Health Orchestrator",
+        "makefile": "management/ssh-monitor/Makefile",
+        "commands": [
+            ("`status`",        "Stan całej infrastruktury",    "`make monitor-status`"),
+            ("`deploy-all`",    "Wdróż na wszystkie targety",   "`make deploy-all`"),
+            ("`deploy-backend`","Deploy tylko backend",          "`make -f management/ssh-monitor/Makefile deploy-backend`"),
+            ("`verify`",        "Health check po wdrożeniu",    "`make -f management/ssh-monitor/Makefile verify`"),
+            ("`analyze-logs`",  "AI analiza logów",             "`make -f management/ssh-monitor/Makefile analyze-logs`"),
+            ("`ask <pytanie>`", "Zapytaj LLM o infrastrukturę", "`make monitor-ask Q=\"pytanie\"`"),
+        ],
+    },
+    "autopilot": {
+        "user":  "autopilot",
+        "icon":  "🤖",
+        "title": "Autopilot — Autonomous Orchestrator",
+        "makefile": "management/ssh-autopilot/Makefile",
+        "commands": [
+            ("`pilot-status`",       "Decyzje i stan autopilota",    "`make autopilot-status`"),
+            ("`pilot-run`",          "Jeden cykl ręcznie",           "`make -f management/ssh-autopilot/Makefile pilot-run`"),
+            ("`pilot-plan`",         "Wygeneruj plan projektu LLM",  "`make -f management/ssh-autopilot/Makefile pilot-plan`"),
+            ("`create-from-plan`",   "Utwórz tickety z planu",       "`make -f management/ssh-autopilot/Makefile create-from-plan`"),
+            ("`pilot-log`",          "Podgląd logu daemona",         "`make -f management/ssh-autopilot/Makefile pilot-log`"),
+        ],
+    },
+}
+
+def _step_ssh_info(value: str):
+    """Handle ssh_info::role::port button — show SSH connection card."""
+    parts = value.split("::")
+    role = parts[1] if len(parts) > 1 else "developer"
+    port = parts[2] if len(parts) > 2 else "2200"
+    info = _SSH_ROLE_INFO.get(role)
+    if not info:
+        msg(f"❓ Nieznana rola: `{role}`")
+        return
+    ssh_cmd = f"ssh {info['user']}@localhost -p {port}"
+    mk = info.get('makefile', '')
+    rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in info["commands"])
+    msg(
+        f"## {info['icon']} {info['title']}\n\n"
+        f"**SSH:**\n```\n{ssh_cmd}\n```\n"
+        + (f"**Makefile:** `{mk}` — `make -f {mk} help`\n\n" if mk else "\n")
+        + f"| Komenda (w kontenerze) | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
+    )
+    buttons([
+        {"label": f"🔧 SSH Developer", "value": f"ssh_info::developer::{_state.get('SSH_DEVELOPER_PORT','2200')}"},
+        {"label": f"👤 SSH Manager",   "value": f"ssh_info::manager::{_state.get('SSH_MANAGER_PORT','2202')}"},
+        {"label": f"📡 SSH Monitor",   "value": f"ssh_info::monitor::{_state.get('SSH_MONITOR_PORT','2201')}"},
+        {"label": f"🤖 SSH Autopilot", "value": f"ssh_info::autopilot::{_state.get('SSH_AUTOPILOT_PORT','2203')}"},
+        {"label": f"📟 Konsola ({role})", "value": f"ssh_console::{role}::{port}"},
+        {"label": "🏠 Menu",           "value": "back"},
+    ])
+
+
+# ── SSH command runner metadata ────────────────────────────────────────────────
+# Maps role → {cmd: (label, [param_names], hint, placeholder)}
+_SSH_CMD_META = {
+    "developer": {
+        "my-tickets":    ("📋 Lista moich zadań",        [],        "", ""),
+        "ticket-work":   ("🎫 Zacznij ticket",           ["T"],     "Ticket ID", "T-0001"),
+        "ticket-done":   ("✅ Zakończ ticket",           ["T"],     "Ticket ID", "T-0001"),
+        "implement":     ("🤖 AI implementacja",         ["T"],     "Ticket ID", "T-0001"),
+        "ask":           ("💬 Zapytaj LLM",              ["Q"],     "Pytanie do asystenta", "Jak naprawić X?"),
+        "review":        ("🔍 Code review (AI)",         ["F"],     "Ścieżka pliku", "src/main.py"),
+        "test-local":    ("🧪 Uruchom testy",            [],        "", ""),
+        "check-services":("🩺 Sprawdź serwisy",          [],        "", ""),
+        "commit-push":   ("📤 Commit + push",            ["MSG"],   "Wiadomość commita", "feat: add feature"),
+    },
+    "manager": {
+        "status":          ("📊 Status serwisów",        [],        "", ""),
+        "ticket-create":   ("🎫 Utwórz ticket",          ["TITLE"], "Tytuł ticketu", "Fix login bug"),
+        "ticket-list":     ("📋 Lista ticketów",         [],        "", ""),
+        "ticket-show":     ("🔎 Szczegóły ticketu",      ["T"],     "Ticket ID", "T-0001"),
+        "ticket-push":     ("📤 Push ticket do GitHub",  ["T"],     "Ticket ID", "T-0001"),
+        "ticket-pull":     ("📥 Pull ticketów",          [],        "", ""),
+        "plan":            ("🗺️ Wygeneruj plan (LLM)",   ["F"],     "Opis funkcji", "user authentication"),
+        "ask":             ("💬 Zapytaj asystenta",      ["Q"],     "Pytanie", "Jak zoptymalizować X?"),
+        "config-developer":("⚙️ Konfiguruj developer",   [],        "", ""),
+        "config-monitor":  ("⚙️ Konfiguruj monitor",     [],        "", ""),
+        "config-show":     ("👁 Pokaż config serwisu",   ["SVC"],   "Nazwa serwisu", "developer"),
+        "ssh-to":          ("🔗 SSH do innego węzła",    ["T"],     "Cel: developer|monitor|autopilot", "developer"),
+    },
+    "monitor": {
+        "status":          ("📊 Stan infrastruktury",    [],        "", ""),
+        "deploy-all":      ("🚀 Wdróż na wszystkie",     [],        "", ""),
+        "deploy-backend":  ("🚀 Deploy backend",         [],        "", ""),
+        "deploy-frontend": ("🚀 Deploy frontend",        [],        "", ""),
+        "deploy-rpi3":     ("🚀 Deploy RPi3",            [],        "", ""),
+        "verify":          ("✅ Health check",           [],        "", ""),
+        "analyze-logs":    ("🧠 AI analiza logów",       [],        "", ""),
+        "ask":             ("💬 Zapytaj LLM",            ["Q"],     "Pytanie", "Dlaczego backend jest wolny?"),
+    },
+    "autopilot": {
+        "pilot-status":      ("📊 Stan autopilota",      [],        "", ""),
+        "pilot-run":         ("▶️ Jeden cykl ręcznie",   [],        "", ""),
+        "pilot-plan":        ("🗺️ Plan projektu (LLM)",  [],        "", ""),
+        "create-from-plan":  ("🎫 Tickety z planu",      [],        "", ""),
+    },
+}
+
+_ROLE_CONTAINER = {
+    "developer": ("dockfra-ssh-developer", "developer"),
+    "manager":   ("dockfra-ssh-manager",   "manager"),
+    "monitor":   ("dockfra-ssh-monitor",   "monitor"),
+    "autopilot": ("dockfra-ssh-autopilot", "autopilot"),
+}
+
+
+def step_ssh_console(value: str):
+    """Show command-runner panel: select + arg input + Run button."""
+    parts  = value.split("::")
+    role   = parts[1] if len(parts) > 1 else "developer"
+    port   = parts[2] if len(parts) > 2 else "2200"
+    cmds   = _SSH_CMD_META.get(role, {})
+    info   = _SSH_ROLE_INFO.get(role, {})
+    container, user = _ROLE_CONTAINER.get(role, ("dockfra-ssh-developer", "developer"))
+    clear_widgets()
+    msg(f"## {info.get('icon','🖥️')} {info.get('title','SSH')} — konsola komend")
+
+    options = [{"value": k, "label": v[0]} for k, v in cmds.items()]
+    hint_map = {k: v[2] for k, v in cmds.items()}
+    arg_placeholder_map = {k: v[3] for k, v in cmds.items()}
+    first_cmd = options[0]["value"] if options else ""
+    first_hint = cmds[first_cmd][2] if first_cmd and cmds[first_cmd][2] else ""
+    first_ph   = cmds[first_cmd][3] if first_cmd else ""
+
+    _sid_emit("widget", {
+        "type": "select", "name": "ssh_cmd", "label": "Komenda",
+        "options": options, "value": first_cmd,
+        "hint_map": hint_map, "arg_placeholder_map": arg_placeholder_map,
+    })
+    _sid_emit("widget", {
+        "type": "input", "name": "ssh_arg", "label": "Argument (opcjonalny)",
+        "placeholder": first_ph, "value": "", "hint": first_hint,
+    })
+    buttons([
+        {"label": "▶️ Uruchom",      "value": f"run_ssh_cmd::{role}::{container}::{user}"},
+        {"label": "◀ Info",         "value": f"ssh_info::{role}::{port}"},
+        {"label": "🏠 Menu",         "value": "back"},
+    ])
+
+
+def run_ssh_cmd(value: str, form: dict):
+    """Execute selected command via docker exec and stream output to chat."""
+    parts     = value.split("::")
+    role      = parts[1] if len(parts) > 1 else "developer"
+    container = parts[2] if len(parts) > 2 else "dockfra-ssh-developer"
+    user      = parts[3] if len(parts) > 3 else "developer"
+    cmd_name  = (form.get("ssh_cmd") or "").strip()
+    arg       = (form.get("ssh_arg") or "").strip()
+
+    if not cmd_name:
+        msg("❌ Wybierz komendę."); return
+
+    cmds   = _SSH_CMD_META.get(role, {})
+    meta   = cmds.get(cmd_name)
+    if not meta:
+        msg(f"❌ Nieznana komenda: `{cmd_name}`"); return
+
+    params = meta[1]
+    # Build the shell command
+    if params and arg:
+        # If the param suggests quoting (multi-word args), wrap in quotes
+        needs_quote = params[0] in ("Q", "TITLE", "MSG", "F", "FEATURE")
+        shell_arg   = f'"{arg}"' if needs_quote else arg
+        cmd_str = f"{cmd_name} {shell_arg}"
+    else:
+        cmd_str = cmd_name
+
+    label = meta[0]
+    msg(f"▶️ Uruchamiam: `{cmd_str}` na `{container}`")
+    _tl_sid = getattr(_tl, 'sid', None)
+
+    def _run():
+        _tl.sid = _tl_sid
+        try:
+            rc, out = run_cmd(
+                ["docker", "exec", "-u", user, container,
+                 "bash", "-lc", cmd_str],
+            )
+            if rc == 0:
+                msg(f"✅ `{cmd_str}` — zakończono.")
+            else:
+                msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
+        except Exception as e:
+            msg(f"❌ Błąd: {e}")
+        buttons([
+            {"label": "▶️ Uruchom ponownie", "value": f"run_ssh_cmd::{role}::{container}::{user}"},
+            {"label": "📟 Konsola",           "value": f"ssh_console::{role}"},
+            {"label": "🏠 Menu",              "value": "back"},
+        ])
+        _tl.sid = None
+    threading.Thread(target=_run, daemon=True).start()
+
+
 STEPS = {
     "welcome":          lambda f: step_welcome(),
     "back":             lambda f: step_welcome(),
@@ -1899,6 +2165,12 @@ def on_action(data):
             fix_network_overlap(value.split("::",1)[1]); return
         if value.startswith("fix_readonly_volume::"):
             fix_readonly_volume(value.split("::",1)[1]); return
+        if value.startswith("ssh_info::"):
+            _step_ssh_info(value); return
+        if value.startswith("ssh_console::"):
+            step_ssh_console(value); return
+        if value.startswith("run_ssh_cmd::"):
+            run_ssh_cmd(value, form); return
         if value.startswith("suggest_commands::"):
             step_suggest_commands(value.split("::",1)[1]); return
         if value.startswith("run_suggested_cmd::"):

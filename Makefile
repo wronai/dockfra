@@ -213,6 +213,48 @@ ssh-monitor: ## SSH into monitor container
 ssh-rpi3: ## SSH into ssh-rpi3 container (devices stack)
 	@ssh deployer@localhost -p 2224 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
 
+# ── Role command shortcuts (delegate to sub-Makefiles) ─────────
+
+.PHONY: developer-help manager-help monitor-help autopilot-help
+developer-help: ## Show developer commands
+	@$(MAKE) -f $(APP)/ssh-developer/Makefile help
+manager-help: ## Show manager commands
+	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile help
+monitor-help: ## Show monitor commands
+	@$(MAKE) -f $(MGMT)/ssh-monitor/Makefile help
+autopilot-help: ## Show autopilot commands
+	@$(MAKE) -f $(MGMT)/ssh-autopilot/Makefile help
+
+.PHONY: developer-tickets manager-status monitor-status autopilot-status
+developer-tickets: ## List developer tickets
+	@$(MAKE) -f $(APP)/ssh-developer/Makefile my-tickets
+manager-status: ## Manager: all services overview
+	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile status
+monitor-status: ## Monitor: full infrastructure status
+	@$(MAKE) -f $(MGMT)/ssh-monitor/Makefile status
+autopilot-status: ## Autopilot: show decisions & state
+	@$(MAKE) -f $(MGMT)/ssh-autopilot/Makefile pilot-status
+
+.PHONY: developer-ask manager-ask monitor-ask
+developer-ask: ## Ask LLM (developer): make developer-ask Q="your question"
+	@$(MAKE) -f $(APP)/ssh-developer/Makefile ask Q="$(Q)"
+manager-ask: ## Ask LLM (manager): make manager-ask Q="your question"
+	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile ask Q="$(Q)"
+monitor-ask: ## Ask LLM (monitor): make monitor-ask Q="your question"
+	@$(MAKE) -f $(MGMT)/ssh-monitor/Makefile ask Q="$(Q)"
+
+.PHONY: ticket-create
+ticket-create: ## Create ticket via manager: make ticket-create TITLE="Fix login bug"
+	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile ticket-create TITLE="$(TITLE)"
+
+.PHONY: ticket-list
+ticket-list: ## List all tickets (via manager)
+	@$(MAKE) -f $(MGMT)/ssh-manager/Makefile ticket-list
+
+.PHONY: deploy-all
+deploy-all: ## Deploy to all targets (via monitor)
+	@$(MAKE) -f $(MGMT)/ssh-monitor/Makefile deploy-all
+
 .PHONY: vnc-rpi3
 vnc-rpi3: ## Open VNC web UI for RPi3 in browser
 	@echo "Open: http://localhost:6080"

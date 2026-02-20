@@ -238,7 +238,7 @@ services:
       - DEVELOPER_LLM_API_KEY=${DEVELOPER_LLM_API_KEY}
       - LLM_MODEL=${DEVELOPER_LLM_MODEL:-gpt-4o-mini}
     volumes:
-      - ./ssh-developer/keys:/home/developer/.ssh/extra
+      - ./ssh-developer/keys:/home/developer/.ssh/extra:ro
       - ssh-keys:/keys:ro
       - developer-workspace:/home/developer/workspace
       - git-repo:/repo

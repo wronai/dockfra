@@ -31,7 +31,9 @@ if [ ! -f "$DEV_KEYS/deployer" ]; then
 fi
 
 # Create empty authorized_keys (will be populated from management)
-touch "$DEV_KEYS/authorized_keys"
-chmod 600 "$DEV_KEYS/authorized_keys"
+if [ ! -f "$DEV_KEYS/authorized_keys" ]; then
+    touch "$DEV_KEYS/authorized_keys"
+    chmod 600 "$DEV_KEYS/authorized_keys"
+fi
 
 echo "✅ Developer keys ready in: $DEV_KEYS"

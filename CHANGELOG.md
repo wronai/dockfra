@@ -1,3 +1,24 @@
+## [1.0.15] - 2026-02-20
+
+### Summary
+
+feat(build): configuration management system
+
+### Other
+
+- build: update Makefile
+- docker: update docker-compose.yml
+- scripts: update generate-developer-keys.sh
+- build: update Makefile
+- scripts: update entrypoint.sh
+- update dockfra/app.py
+- update dockfra/static/wizard.js
+- scripts: update sync-keys-to-developer.sh
+- build: update Makefile
+- build: update Makefile
+- ... and 1 more
+
+
 ## [1.0.14] - 2026-02-20
 
 ### Summary
