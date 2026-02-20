@@ -1,6 +1,6 @@
 """Wizard step functions — welcome, status, settings, launch, deploy."""
 from .core import *
-from .discover import _SSH_ROLES, _get_role
+from .discover import _SSH_ROLES, _get_role, _refresh_ssh_roles
 
 def step_welcome():
     _state["step"] = "welcome"
@@ -341,10 +341,12 @@ def step_do_launch(form):
                          {"label":"🏠 Menu","value":"back"}])
                 return
             msg(f"✅ Sklonowano do `{app_dir}`")
+            _refresh_ssh_roles()
         elif (app_dir / ".git").exists():
             progress("🔄 Aktualizuję app/ (git pull)…")
             subprocess.run(["git", "-C", str(app_dir), "pull", "--ff-only"],
                            capture_output=True)
+            _refresh_ssh_roles()
     elif needs_app and not app_repo_url and not app_dir.exists():
         msg("⚠️ Stack `app` wybrany, ale brak folderu `app/` i `GIT_REPO_URL` nie jest ustawiony.")
         buttons([{"label":"⚙️ Ustaw GIT_REPO_URL","value":"settings_group::Git"},

@@ -98,6 +98,19 @@ def _discover_ssh_roles():
     Returns unified dict: role → {container, user, port, icon, title, makefile, targets, commands}
     """
     roles = {}
+
+    # ── Virtual developer role when app/ not yet cloned ──────────────────────
+    # Show the developer role in the wizard even before app/ exists,
+    # so the user can trigger clone+launch from the UI.
+    if not APP.is_dir() and _state.get("git_repo_url"):
+        roles["developer"] = {
+            "container": cname("ssh-developer"), "user": "developer",
+            "port": _state.get("ssh_developer_port", "2200"),
+            "icon": "🔧", "title": "Developer — SSH Workspace",
+            "makefile": "", "commands": [], "cmd_meta": {},
+            "virtual": True,  # flag: app/ not cloned yet
+        }
+
     for parent in (APP, MGMT):
         if not parent.is_dir():
             continue
@@ -174,6 +187,26 @@ def _step_ssh_info(value: str):
     role = parts[1] if len(parts) > 1 else "developer"
     port = parts[2] if len(parts) > 2 else "2200"
     info = _get_role(role)
+
+    # ── Virtual developer: app/ not cloned yet — offer clone+launch ──────────
+    if info.get("virtual"):
+        clear_widgets()
+        repo_url = _state.get("git_repo_url", "")
+        branch   = _state.get("git_branch", "main") or "main"
+        msg(
+            f"## 🔧 Developer — SSH Workspace\n\n"
+            f"Repozytorium aplikacji nie jest jeszcze sklonowane lokalnie.\n\n"
+            f"**Repo:** `{repo_url}`  •  **Branch:** `{branch}`\n\n"
+            f"Kliknij **Sklonuj i uruchom** aby pobrać kod i uruchomić stack `app` "
+            f"(w tym kontener `ssh-developer`)."
+        )
+        buttons([
+            {"label": "📥 Sklonuj i uruchom app", "value": "clone_and_launch_app"},
+            {"label": "⚙️ Zmień GIT_REPO_URL",     "value": "settings_group::Git"},
+            {"label": "🏠 Menu",                    "value": "back"},
+        ])
+        return
+
     if not info["cmd_meta"]:
         msg(f"❓ Nieznana rola lub brak komend: `{role}`")
         return

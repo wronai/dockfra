@@ -37,7 +37,7 @@ from .fixes import (
     fix_acme_storage, fix_readonly_volume, fix_docker_perms,
 )
 from .discover import (
-    _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES,
+    _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES, _refresh_ssh_roles,
 )
 
 STEPS = {
@@ -504,6 +504,32 @@ def _dispatch(value: str, form: dict):
     if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
     if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
     if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
+    if value == "clone_and_launch_app":
+        def _clone_and_launch():
+            repo_url = _state.get("git_repo_url", "")
+            branch   = _state.get("git_branch", "main") or "main"
+            app_dir  = ROOT / "app"
+            if not repo_url:
+                msg("❌ `GIT_REPO_URL` nie jest ustawiony.")
+                buttons([{"label": "⚙️ Ustaw GIT_REPO_URL", "value": "settings_group::Git"}])
+                return
+            if not app_dir.exists() or not any(app_dir.iterdir()):
+                progress(f"📥 Klonuję {repo_url}…")
+                rc = subprocess.run(
+                    ["git", "clone", "--branch", branch, "--depth", "1", repo_url, str(app_dir)],
+                    capture_output=True, text=True)
+                if rc.returncode != 0:
+                    progress("clone", error=True)
+                    msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
+                    buttons([{"label": "⚙️ Zmień GIT_REPO_URL", "value": "settings_group::Git"},
+                             {"label": "🏠 Menu", "value": "back"}])
+                    return
+                progress("clone", done=True)
+                msg(f"✅ Sklonowano do `{app_dir}`")
+            _refresh_ssh_roles()
+            step_do_launch({"stacks": "app", "environment": _state.get("environment", "local")})
+        threading.Thread(target=_clone_and_launch, daemon=True).start()
+        return True
     if value.startswith("ssh_info::"):      _step_ssh_info(value); return True
     if value.startswith("ssh_console::"):   step_ssh_console(value); return True
     if value.startswith("run_ssh_cmd::"):   run_ssh_cmd(value, form); return True
