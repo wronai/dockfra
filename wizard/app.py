@@ -245,15 +245,51 @@ def detect_config():
             if l.startswith("RPI3_USER="): cfg["device_user"] = l.split("=",1)[1].strip()
     return cfg
 
+def _emit_log_error(line: str, fired: set):
+    """Check a single log line against _HEALTH_PATTERNS; emit chat alert if matched (debounced)."""
+    import re as _re
+    for pattern, sev, message, solutions in _HEALTH_PATTERNS:
+        key = pattern[:40]
+        if key in fired or sev not in ("err", "warn"):
+            continue
+        m = _re.search(pattern, line, _re.IGNORECASE)
+        if not m:
+            continue
+        fired.add(key)
+        port = ""
+        if m.lastindex:
+            try:
+                g = m.group(1)
+                if g and g.isdigit():
+                    port = g
+            except Exception:
+                pass
+        icon = "🔴" if sev == "err" else "🟡"
+        btns = []
+        for b in solutions:
+            val = b["value"].replace("__PORT__", port)
+            if "__NAME__" in val:
+                continue  # skip container-specific buttons during build stream
+            btns.append({**b, "value": val})
+        btns.append({"label": "📊 Status", "value": "status"})
+        _sid_emit("message", {"role": "bot",
+                               "text": f"{icon} **{message}**\n`{line.strip()[:160]}`"})
+        if btns:
+            _sid_emit("widget", {"type": "buttons", "items": btns})
+        break  # one alert per line
+
 def run_cmd(cmd, cwd=None):
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, cwd=str(cwd or ROOT))
     lines = []
+    _fired: set = set()
     for line in proc.stdout:
-        lines.append(line.rstrip())
+        text = line.rstrip()
+        lines.append(text)
         log_id = f"log-{len(_logs)}"
-        _logs.append({"id": log_id, "text": line.rstrip(), "timestamp": time.time()})
-        socketio.emit("log_line", {"id": log_id, "text": line.rstrip()})
+        _logs.append({"id": log_id, "text": text, "timestamp": time.time()})
+        _sid_emit("log_line", {"id": log_id, "text": text})
+        _emit_log_error(text, _fired)
     proc.wait()
     return proc.returncode, "\n".join(lines)
 
@@ -654,9 +690,6 @@ def step_status():
     running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
     failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
     msg(f"## 📊 Stan systemu — {len(running)} ✅ OK · {len(failing)} 🔴 problemów")
-    status_row([{"name":c["name"],
-                 "ok": "Up" in c["status"] and "Restarting" not in c["status"],
-                 "detail":c["status"]} for c in containers])
     if failing:
         msg(f"### 🔍 Analiza problemów ({len(failing)} kontenerów)")
         for c in failing:
@@ -921,7 +954,9 @@ def step_do_launch(form):
     if stacks in ("all","app"):        targets.append(("app",APP))
     if stacks in ("all","devices"):    targets.append(("devices",DEVS))
 
+    _launch_sid = getattr(_tl, 'sid', None)
     def run():
+        _tl.sid = _launch_sid  # propagate SID so _emit_log_error targets the right client
         subprocess.run(["docker","network","create","dockfra-shared"],capture_output=True)
         env_file_args = ["--env-file", str(WIZARD_ENV)] if WIZARD_ENV.exists() else []
         failed = []
@@ -942,16 +977,32 @@ def step_do_launch(form):
                 time.sleep(0.1)
         else:
             msg("## ✅ Wszystkie stacki uruchomione!")
-            containers = docker_ps()
-            dockfra = [c for c in containers if "dockfra" in c["name"]]
-            if dockfra:
-                status_row([{"name":c["name"],"ok":"Up" in c["status"],"detail":c["status"]} for c in dockfra])
-            socketio.emit("widget",{"type":"buttons","items":[
-                {"label":"🔑 Setup GitHub + LLM","value":"post_launch_creds"},
-                {"label":"📦 Wdróż na urządzenie","value":"deploy_device"},
-                {"label":"📊 Status","value":"status"},
-                {"label":"🏠 Menu","value":"back"},
-            ]})
+
+        # ── Post-launch health check ──────────────────────────────────────────
+        # docker compose up -d exits 0 even if containers crash on startup.
+        # Wait for containers to stabilise, then check their runtime status.
+        progress("⏳ Sprawdzam zdrowie kontenerów…")
+        time.sleep(8)
+        progress("⏳ Sprawdzam zdrowie kontenerów…", done=True)
+        all_containers = docker_ps()
+        restarting = [c for c in all_containers
+                      if "Restarting" in c["status"] or
+                         ("Exit" in c["status"] and c["status"] != "Exited (0)")]
+        if restarting:
+            msg(f"### ⚠️ {len(restarting)} kontener(ów) ma problemy po starcie:")
+            for c in restarting:
+                finding, btns = _analyze_container_log(c["name"])
+                msg(f"#### 🔴 `{c['name']}` — {c['status']}\n{finding}")
+                if btns:
+                    btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
+                    buttons(btns)
+                time.sleep(0.05)
+        _sid_emit("widget", {"type": "buttons", "items": [
+            {"label": "🔑 Setup GitHub + LLM", "value": "post_launch_creds"},
+            {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
+            {"label": "📊 Status",              "value": "status"},
+            {"label": "🏠 Menu",                "value": "back"},
+        ]})
     threading.Thread(target=run,daemon=True).start()
 
 def step_deploy_device():
