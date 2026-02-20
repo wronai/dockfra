@@ -208,14 +208,10 @@ def _step_ssh_info(value: str):
             f"## 🔧 Developer — SSH Workspace\n\n"
             f"Repozytorium aplikacji nie jest jeszcze sklonowane lokalnie.\n\n"
             f"**Repo:** `{repo_url}`  •  **Branch:** `{branch}`\n\n"
-            f"Kliknij **Sklonuj i uruchom** aby pobrać kod i uruchomić stack `app` "
-            f"(w tym kontener `ssh-developer`)."
+            f"[[📥 Sklonuj i uruchom app|clone_and_launch_app]]  "
+            f"[[⚙️ Zmień GIT_REPO_URL|settings_group::Git]]  "
+            f"[[🏠 Menu|back]]"
         )
-        buttons([
-            {"label": "📥 Sklonuj i uruchom app", "value": "clone_and_launch_app"},
-            {"label": "⚙️ Zmień GIT_REPO_URL",     "value": "settings_group::Git"},
-            {"label": "🏠 Menu",                    "value": "back"},
-        ])
         return
 
     if not info["cmd_meta"]:

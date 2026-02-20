@@ -108,6 +108,8 @@ header .sub{color:var(--muted);font-size:.85rem}
 .field-detect-btn:disabled{opacity:.45;cursor:default}
 .field-desc{display:none;font-size:.75rem;color:var(--muted);background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;line-height:1.5;margin-bottom:2px}
 .field-desc.open{display:block}
+.inline-action{display:inline-block;margin:2px 3px;padding:3px 10px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:.85rem;cursor:pointer;transition:all .15s;vertical-align:middle}
+.inline-action:hover{background:var(--accent);color:#fff}
 .field input,.field select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;width:100%}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field-input-wrap{position:relative;display:flex;align-items:center}

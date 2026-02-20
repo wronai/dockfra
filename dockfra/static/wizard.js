@@ -59,8 +59,23 @@ function renderMd(text){
     .replace(/^### (.+)$/gm,'<h3>$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g,  '<code>$1</code>')
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_, label, value) =>
+      `<button class="inline-action" data-action="${value.replace(/"/g,'&quot;')}">${label}</button>`)
     .replace(/\n/g, '<br>');
 }
+
+// Delegate inline-action clicks inside chat bubbles
+chat.addEventListener('click', e => {
+  const btn = e.target.closest('.inline-action');
+  if(!btn) return;
+  const value = btn.dataset.action;
+  if(!value) return;
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.innerHTML = '<div class="avatar">\ud83d\udc64</div><div class="bubble">'+btn.textContent+'</div>';
+  chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+  socket.emit('action', {value, form: {}});
+});
 
 // ── Load logs from history ────────────────────────────────────────────────────
 async function loadLogs() {
