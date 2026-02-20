@@ -1,0 +1,14 @@
+{
+  "id": "T-0002",
+  "title": "E2E test ticket",
+  "description": "Created via API test",
+  "status": "open",
+  "priority": "high",
+  "assigned_to": "developer",
+  "labels": [],
+  "created_by": "manager",
+  "created_at": "2026-02-20T23:32:24.342190+00:00",
+  "updated_at": "2026-02-20T23:32:24.342202+00:00",
+  "comments": [],
+  "github_issue_number": null
+}

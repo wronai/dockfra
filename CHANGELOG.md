@@ -1,37 +1,41 @@
-## [1.0.32] - 2026-02-21
+## [1.0.33] - 2026-02-21
 
 ### Summary
 
-refactor(tests): test module improvements
-
-### Test
-
-- update tests/test_e2e.py
-
-
-## [1.0.31] - 2026-02-21
-
-### Summary
-
-refactor(docs): configuration management system
+feat(docs): configuration management system
 
 ### Other
 
-- update dockfra/app.py
-- update dockfra/core.py
-- update shared/lib/ticket_system.py
+- update shared/tickets/T-0001.json
+- update shared/tickets/T-0002.json
 
 
-## [1.0.30] - 2026-02-21
+## [1.0.33] - 2026-02-21
 
 ### Summary
 
-docs(docs): configuration management system
+refactor(tickets): move ticket_system to dockfra package, add E2E tests, fix bugs
 
-### Other
+### Added
 
-- update dockfra/app.py
-- update dockfra/core.py
+- **`dockfra/tickets.py`** — canonical ticket module (CRUD, GitHub/Jira/Trello/Linear integrations, stats, sync)
+- **`tests/test_e2e.py`** — 36 E2E tests covering ticket module, all API endpoints (tickets, stats, health, history, containers, logs, sync, processes, env)
+- Integration env vars (GITHUB_TOKEN, JIRA_URL, etc.) in `_CORE_ENV_SCHEMA` + `_FIELD_META` descriptions
+- Stats panel (📊 tab) in wizard UI with ticket/container/git/integration stats + suggestions
+- Wizard-side ticket creation, integration setup, sync, and project stats dispatch handlers
+
+### Changed
+
+- **`shared/lib/ticket_system.py`** → thin wrapper: imports from `dockfra.tickets` when available, standalone fallback for containers
+- **`app.py`** — all ticket operations now use `dockfra.tickets` directly (no more `sys.path` hacks or inline file manipulation)
+- **`core.py`** — `reset_state()` uses `.clear()` instead of list reassignment (fixes reference breakage)
+- Post-launch buttons now include ticket creation, stats, and integrations
+
+### Fixed
+
+- **Empty logs panel** — `_logs`/`_conversation` references broken by `reset_state()` reassignment
+- **`NameError: cname not defined`** in `/api/ssh-options/files/developer`
+- **`PermissionError`** on `/shared/tickets/T-0001.json` — `chmod 1777` in ssh-base-init.sh + `_ensure_dir()`
 
 
 ## [1.0.29] - 2026-02-21
