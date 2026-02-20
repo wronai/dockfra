@@ -1,0 +1,19 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║              📡 MONITOR — Deploy & Health Orchestrator       ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Deploy:                                                     ║
+║    status         — Full infrastructure status               ║
+║    deploy-all     — Deploy to all targets via SSH            ║
+║    verify         — Post-deploy health check                 ║
+║                                                              ║
+║  AI Analysis:                                                ║
+║    ask <question> — Ask LLM about infrastructure             ║
+║    analyze-logs   — AI analysis of recent logs               ║
+║                                                              ║
+║  Daemon:                                                     ║
+║    monitor-log    — Watch auto-deploy daemon log             ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+

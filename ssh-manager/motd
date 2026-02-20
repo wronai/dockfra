@@ -1,0 +1,27 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║              👤 MANAGER — Project Control Center             ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Ticket Management:                                          ║
+║    ticket-create <title>     — Create ticket for developer   ║
+║    ticket-list               — List all tickets              ║
+║    ticket-show <T-XXXX>      — Show ticket details           ║
+║    ticket-push <T-XXXX>      — Push ticket to GitHub         ║
+║    ticket-pull               — Pull tickets from GitHub      ║
+║                                                              ║
+║  Service Configuration:                                      ║
+║    config-developer          — Update developer .env via SSH ║
+║    config-monitor            — Update monitor .env via SSH   ║
+║    config-show <service>     — Show service LLM config       ║
+║                                                              ║
+║  AI Assistant:                                               ║
+║    ask <question>            — Ask LLM for help              ║
+║    plan <feature>            — Generate ticket plan           ║
+║                                                              ║
+║  Status:                                                     ║
+║    status                    — All services overview          ║
+║    ssh-to <developer|monitor|autopilot>                      ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+

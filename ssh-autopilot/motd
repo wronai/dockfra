@@ -1,0 +1,22 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║              🤖 AUTOPILOT — Autonomous Orchestrator          ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Commands:                                                   ║
+║    pilot-status     — Show autopilot decisions & state       ║
+║    pilot-log        — Watch autopilot daemon log             ║
+║    pilot-run        — Trigger one autopilot cycle manually   ║
+║    pilot-plan       — Generate project plan via LLM          ║
+║                                                              ║
+║  Ticket Orchestration:                                       ║
+║    tickets list     — See all tickets                        ║
+║    create-from-plan — Create tickets from LLM plan           ║
+║                                                              ║
+║  Communication (via SSH):                                    ║
+║    ssh ssh-developer  — Check developer status               ║
+║    ssh ssh-monitor    — Check monitor status                 ║
+║                                                              ║
+║  Daemon: auto-cycle every ${AUTOPILOT_INTERVAL:-120}s       ║
+╚══════════════════════════════════════════════════════════════╝
+
