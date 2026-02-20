@@ -1,3 +1,17 @@
+## [1.0.20] - 2026-02-20
+
+### Summary
+
+refactor(goal): CLI interface with 2 supporting modules
+
+### Other
+
+- update management/shared/lib/__init__.py
+- update management/shared/lib/llm_client.py
+- update management/shared/lib/ticket_system.py
+- update shared/lib/logger.py
+
+
 ## [1.0.19] - 2026-02-20
 
 ### Summary
