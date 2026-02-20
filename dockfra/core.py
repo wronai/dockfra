@@ -227,6 +227,53 @@ def _parse_compose_env_vars() -> dict:
 
 _COMPOSE_VARS = _parse_compose_env_vars()
 
+# ── Field metadata: descriptions, autodetect flags, type overrides ──────────
+# Applied to ALL schema entries (core + discovered) by _build_env_schema.
+_FIELD_META: dict[str, dict] = {
+    "ENVIRONMENT":    {"desc": "Środowisko uruchamiania: local (Docker, bez proxy) lub production (Traefik + HTTPS + domeny)."},
+    "STACKS":         {"desc": "Które stacki uruchomić: 'all' = wszystkie znalezione foldery z docker-compose.yml."},
+    "GIT_NAME":       {"desc": "Imię i nazwisko do git commit — ustawiane w kontenerach dev (git config user.name)."},
+    "GIT_EMAIL":      {"desc": "Email git — ustawiany w kontenerach dev (git config user.email)."},
+    "GITHUB_SSH_KEY": {"desc": "Ścieżka do prywatnego klucza SSH GitHub (np. ~/.ssh/id_ed25519). Kopiowany do kontenera developer."},
+    "GIT_REPO_URL":   {"desc": "URL repozytorium projektu (SSH lub HTTPS). Np. git@github.com:firma/app.git — klonowane w kontenerach dev.", "autodetect": True},
+    "GIT_BRANCH":     {"desc": "Gałąź git do klonowania/checkoutu w kontenerze developer. Domyślnie: main.", "autodetect": True},
+    "OPENROUTER_API_KEY": {"desc": "Klucz API OpenRouter.ai — wymagany dla poleceń ask / implement / review w kontenerach SSH."},
+    "LLM_MODEL":      {"desc": "Model AI asystenta kodu. Gemini Flash 1.5 — szybki i tani. GPT-4o — najlepszy, droższy."},
+    "DEPLOY_MODE":    {"desc": "Tryb deployu: local (bez Traefik) lub production (z Traefik, HTTPS, domenami).",
+                       "type": "select", "options": [("local", "Local (bez proxy)"), ("production", "Production (Traefik+HTTPS)")]},
+    "APP_DEBUG":      {"desc": "Tryb debugowania: false = produkcja (ciche logi); true = szczegółowe logi i stack trace.",
+                       "type": "select", "options": [("false", "false (produkcja)"), ("true", "true (debug)")]},
+    "APP_NAME":       {"desc": "Nazwa aplikacji (lowercase). Prefix nazw kontenerów, domyślna baza danych i użytkownik PostgreSQL."},
+    "APP_VERSION":    {"desc": "Wersja aplikacji (semver). Używana w logach i artefaktach build.", "autodetect": True},
+    "POSTGRES_USER":  {"desc": "Nazwa użytkownika PostgreSQL. Zwykle taka sama jak APP_NAME."},
+    "POSTGRES_PASSWORD": {"desc": "Hasło PostgreSQL. Generuj losowe — kliknij chip aby wstawić."},
+    "POSTGRES_DB":    {"desc": "Nazwa bazy danych PostgreSQL. Zwykle taka sama jak APP_NAME."},
+    "POSTGRES_PORT":  {"desc": "Port PostgreSQL eksponowany na hoście (domyślnie 5432)."},
+    "REDIS_PASSWORD": {"desc": "Hasło Redis AUTH. Puste = brak uwierzytelniania (OK dla local)."},
+    "REDIS_PORT":     {"desc": "Port Redis eksponowany na hoście (domyślnie 6379)."},
+    "SECRET_KEY":     {"desc": "Tajny klucz kryptograficzny aplikacji (Django/Flask/FastAPI). Musi być losowy i unikalny. Nigdy nie udostępniaj."},
+    "ACME_EMAIL":     {"desc": "Email do certyfikatów TLS Let's Encrypt. Wymagany gdy ENVIRONMENT=production."},
+    "ACME_STORAGE":   {"desc": "Ścieżka pliku JSON Traefik dla certyfikatów ACME (np. /certs/acme.json)."},
+    "BACKEND_PORT":   {"desc": "Port HTTP backendu eksponowany na hoście. Dostępny: http://localhost:PORT."},
+    "MOBILE_BACKEND_PORT": {"desc": "Port mobile backendu eksponowany na hoście."},
+    "FRONTEND_HOST":  {"desc": "Domena frontendu w Traefik. Local: frontend.localhost; prod: myapp.com."},
+    "BACKEND_HOST":   {"desc": "Domena backendu w Traefik. Local: backend.localhost; prod: api.myapp.com."},
+    "MOBILE_HOST":    {"desc": "Domena mobile backendu w Traefik."},
+    "DESKTOP_HOST":   {"desc": "Domena kontenera desktop w Traefik."},
+    "DESKTOP_APP_PORT": {"desc": "Port aplikacji desktopowej eksponowany na hoście."},
+    "TRAEFIK_HTTP_PORT":  {"desc": "Port HTTP Traefika na hoście (domyślnie 80). Zmień jeśli 80 jest zajęty."},
+    "TRAEFIK_HTTPS_PORT": {"desc": "Port HTTPS Traefika na hoście (domyślnie 443). Zmień jeśli 443 jest zajęty."},
+    "TRAEFIK_DASHBOARD_PORT": {"desc": "Port dashboardu Traefik — http://localhost:PORT po uruchomieniu."},
+    "WIZARD_PORT":    {"desc": "Port Dockfra Wizarda na hoście. Zmień jeśli 5050 jest zajęty."},
+    "SSH_DEVELOPER_PORT": {"desc": "Port SSH kontenera developer. Połącz: ssh developer@localhost -p PORT."},
+    "DEVELOPER_LLM_API_KEY": {"desc": "Klucz API LLM dla asystenta w kontenerze developer. Zwykle = OPENROUTER_API_KEY."},
+    "DEVELOPER_LLM_MODEL":   {"desc": "Model LLM dla asystenta w kontenerze developer."},
+    "HEALTHCHECK_INTERVAL":  {"desc": "Czas między healthcheckami Docker (np. 30s, 1m)."},
+    "HEALTHCHECK_TIMEOUT":   {"desc": "Timeout odpowiedzi healthchecka Docker (np. 10s)."},
+    "HEALTHCHECK_RETRIES":   {"desc": "Ile nieudanych healthchecków zanim kontener jest oznaczony jako unhealthy."},
+    "SSH_DEPLOY_USER":       {"desc": "Użytkownik SSH do deployu na urządzenia IoT/RPi."},
+}
+
 # ── ENV schema: core + discovered + dockfra.yaml overrides ───────────────
 # Core entries (always present — infrastructure/wizard vars)
 _CORE_ENV_SCHEMA = [
@@ -313,6 +360,18 @@ def _build_env_schema() -> list:
                     "placeholder": meta.get("placeholder", ""),
                     "default": meta.get("default", ""),
                 })
+    # Apply _FIELD_META to all entries (desc, autodetect, type/options overrides)
+    for e in schema:
+        fm = _FIELD_META.get(e["key"])
+        if not fm:
+            continue
+        if "desc" in fm:
+            e.setdefault("desc", fm["desc"])
+        if "autodetect" in fm:
+            e.setdefault("autodetect", fm["autodetect"])
+        if fm.get("type") == "select" and e.get("type") != "select":
+            e["type"] = "select"
+            e["options"] = fm["options"]
     return schema
 
 ENV_SCHEMA = _build_env_schema()
@@ -557,8 +616,8 @@ def msg(text, role="bot"):
     _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
-def text_input(n,l,ph="",v="",sec=False,hint="",chips=None,modal_type=""): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or [],"modal_type":modal_type})
-def select(n,l,opts,v=""):          widget({"type":"select",   "name":n,"label":l,"options":opts,"value":v})
+def text_input(n,l,ph="",v="",sec=False,hint="",chips=None,modal_type="",desc="",autodetect=False): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or [],"modal_type":modal_type,"desc":desc,"autodetect":autodetect})
+def select(n,l,opts,v="",desc="",autodetect=False):                                               widget({"type":"select",  "name":n,"label":l,"options":opts,"value":v,"desc":desc,"autodetect":autodetect})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})
 def progress(label, done=False, error=False): widget({"type":"progress","label":label,"done":done,"error":error})
@@ -685,6 +744,29 @@ def _detect_suggestions() -> dict:
     """Auto-detect suggested values for form fields. Returns {key: {value, hint, chips}}."""
     s: dict[str, dict] = {}
 
+    # ── Git repo info ─────────────────────────────────────────────────────────
+    try:
+        url = subprocess.check_output(
+            ["git", "remote", "get-url", "origin"],
+            text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+        if url: s["GIT_REPO_URL"] = {"value": url, "hint": "git remote origin"}
+    except: pass
+    try:
+        branch = subprocess.check_output(
+            ["git", "branch", "--show-current"],
+            text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+        all_out = subprocess.check_output(
+            ["git", "branch", "-a", "--format=%(refname:short)"],
+            text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+        branches = list(dict.fromkeys(
+            b.strip().replace("origin/", "") for b in all_out.splitlines() if b.strip()))[:8]
+        s["GIT_BRANCH"] = {
+            "value": branch or (branches[0] if branches else ""),
+            "hint": f"aktualna gałąź: {branch}" if branch else "dostępne gałęzie",
+            "chips": [{"label": b, "value": b} for b in branches],
+        }
+    except: pass
+
     # ── Git config ────────────────────────────────────────────────────────────
     for key, cmd in [("GIT_NAME",  ["git","config","--global","user.name"]),
                      ("GIT_EMAIL", ["git","config","--global","user.email"])]:
@@ -809,12 +891,14 @@ def _emit_missing_fields(missing: list[dict]):
         modal_type = "ip_picker" if e["key"] == "DEVICE_IP" else ""
         if e["type"] == "select":
             opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-            select(e["key"], e["label"], opts, cur)
+            select(e["key"], e["label"], opts, cur,
+                   desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         else:
             text_input(e["key"], e["label"],
                        e.get("placeholder", ""), cur,
                        sec=(e["type"] == "password"), hint=hint, chips=chips,
-                       modal_type=modal_type)
+                       modal_type=modal_type,
+                       desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
 
 
 _HEALTH_PATTERNS = [

@@ -98,14 +98,16 @@ def step_settings(group: str = ""):
                 cur = sug["value"]
             if e["type"] == "select":
                 opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-                select(e["key"], e["label"], opts, cur)
+                select(e["key"], e["label"], opts, cur,
+                       desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
             else:
                 text_input(e["key"], e["label"],
                            e.get("placeholder", ""), cur,
                            sec=(e["type"] == "password"),
                            hint=sug.get("hint", ""),
                            chips=sug.get("chips", []),
-                           modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "")
+                           modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
+                           desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         buttons([
             {"label": "💾 Zapisz",    "value": f"save_settings::{group}"},
             {"label": "← Sekcje",    "value": "settings"},

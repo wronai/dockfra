@@ -267,6 +267,42 @@ def api_processes():
     
     return json.dumps(processes)
 
+@app.route("/api/detect/<key>")
+def api_detect(key):
+    result: dict = {}
+    try:
+        if key == "GIT_REPO_URL":
+            url = subprocess.check_output(
+                ["git", "remote", "get-url", "origin"],
+                text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+            result = {"value": url, "hint": "git remote origin"}
+        elif key == "GIT_BRANCH":
+            branch = subprocess.check_output(
+                ["git", "branch", "--show-current"],
+                text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+            all_out = subprocess.check_output(
+                ["git", "branch", "-a", "--format=%(refname:short)"],
+                text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip()
+            branches = list(dict.fromkeys(
+                b.strip().replace("origin/", "") for b in all_out.splitlines() if b.strip()))[:8]
+            result = {
+                "value": branch or (branches[0] if branches else ""),
+                "options": [{"value": b, "label": b} for b in branches],
+                "hint": f"aktualna ga\u0142\u0105\u017c: {branch}" if branch else "dost\u0119pne ga\u0142\u0119zie",
+            }
+        elif key == "APP_VERSION":
+            tag = subprocess.check_output(
+                ["git", "describe", "--tags", "--abbrev=0"],
+                text=True, stderr=subprocess.DEVNULL, cwd=str(ROOT)).strip().lstrip("v")
+            if tag:
+                result = {"value": tag, "hint": f"ostatni git tag: v{tag}"}
+        elif key == "APP_NAME":
+            name = ROOT.name.lower().replace("-", "_")
+            result = {"value": name, "hint": f"z nazwy katalogu: {ROOT.name}"}
+    except Exception as e:
+        result = {"error": str(e)}
+    return json.dumps(result)
+
 @app.route("/api/ssh-options/<kind>")
 @app.route("/api/ssh-options/<kind>/<role>")
 def api_ssh_options(kind, role="developer"):

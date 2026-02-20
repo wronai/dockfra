@@ -1,3 +1,18 @@
+## [1.0.23] - 2026-02-20
+
+### Summary
+
+docs(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+
+
 ## [1.0.22] - 2026-02-20
 
 ### Summary

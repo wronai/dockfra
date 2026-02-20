@@ -305,17 +305,82 @@ function getOrCreateForm(){
   return _formBuf;
 }
 
+function buildFieldLabel(d, targetEl){
+  const row = document.createElement('div');
+  row.className = 'field-label-row';
+  const lbl = document.createElement('label');
+  lbl.htmlFor = 'field_'+d.name;
+  lbl.textContent = d.label;
+  row.appendChild(lbl);
+  if(d.desc){
+    const btn = document.createElement('button');
+    btn.type='button'; btn.className='field-help-btn'; btn.innerHTML='&#x2139;&#xFE0F;';
+    btn.title = d.desc;
+    const descEl = document.createElement('div');
+    descEl.className = 'field-desc';
+    descEl.textContent = d.desc;
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = descEl.classList.toggle('open');
+      btn.classList.toggle('active', open);
+    });
+    row.appendChild(btn);
+    row._descEl = descEl;
+  }
+  if(d.autodetect){
+    const ab = document.createElement('button');
+    ab.type='button'; ab.className='field-detect-btn'; ab.innerHTML='&#x26A1;';
+    ab.title='Wykryj automatycznie';
+    ab.addEventListener('click', () => {
+      ab.innerHTML='&#x23F3;'; ab.disabled=true;
+      fetch('/api/detect/'+d.name)
+        .then(r=>r.json())
+        .then(res => {
+          const inp = targetEl;
+          if(res.value && inp){ inp.value=res.value; inp.dispatchEvent(new Event('input')); }
+          if(res.options && inp && inp.tagName==='SELECT'){
+            Array.from(inp.options).forEach(o=>{ o.selected=(o.value===res.value); });
+          }
+          if(res.options && inp && inp.tagName!=='SELECT'){
+            const f = inp.closest('.field');
+            let cr = f.querySelector('.field-chips-detect');
+            if(!cr){ cr=document.createElement('div'); cr.className='field-chips field-chips-detect'; f.appendChild(cr); }
+            cr.innerHTML='';
+            res.options.forEach(o=>{
+              const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=o.label;
+              b.addEventListener('click',()=>{ inp.value=o.value; inp.dispatchEvent(new Event('input')); cr.querySelectorAll('.chip').forEach(x=>x.classList.remove('active')); b.classList.add('active'); });
+              cr.appendChild(b);
+            });
+          }
+          if(res.hint){
+            const f = inp ? inp.closest('.field') : ab.closest('.field');
+            let hd=f.querySelector('.field-hint-detect');
+            if(!hd){ hd=document.createElement('div'); hd.className='field-hint field-hint-detect'; f.appendChild(hd); }
+            hd.textContent=res.hint;
+          }
+          ab.innerHTML='&#x2714;'; ab.disabled=false;
+          setTimeout(()=>{ ab.innerHTML='&#x26A1;'; },2000);
+        })
+        .catch(()=>{ ab.innerHTML='&#x26A1;'; ab.disabled=false; });
+    });
+    row.appendChild(ab);
+  }
+  return row;
+}
+
 function renderInput(d){
   const form = getOrCreateForm();
   const field = document.createElement('div');
   field.className = 'field';
-  field.innerHTML = `<label>${d.label}</label>`;
   const inp = document.createElement('input');
   inp.type = d.secret ? 'password' : 'text';
   inp.placeholder = d.placeholder || '';
   inp.value = d.value || '';
   inp.dataset.name = d.name;
   inp.id = 'field_'+d.name;
+  const _lrow = buildFieldLabel(d, inp);
+  field.appendChild(_lrow);
+  if(_lrow._descEl) field.appendChild(_lrow._descEl);
   // ── IP Picker modal button ────────────────────────────────────────────────
   if(d.modal_type === 'ip_picker'){
     const wrap = document.createElement('div');
@@ -392,10 +457,12 @@ function renderSelect(d){
   const form = getOrCreateForm();
   const field = document.createElement('div');
   field.className = 'field';
-  field.innerHTML = `<label>${d.label}</label>`;
   const sel = document.createElement('select');
   sel.dataset.name = d.name;
   sel.id = 'field_'+d.name;
+  const _slrow = buildFieldLabel(d, sel);
+  field.appendChild(_slrow);
+  if(_slrow._descEl) field.appendChild(_slrow._descEl);
   d.options.forEach(o => {
     const opt = document.createElement('option');
     opt.value = o.value; opt.textContent = o.label;

@@ -99,6 +99,15 @@ header .sub{color:var(--muted);font-size:.85rem}
 .w-form{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
 .field{display:flex;flex-direction:column;gap:4px}
 .field label{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field-label-row{display:flex;align-items:center;gap:5px}
+.field-label-row label{flex:1;margin:0}
+.field-help-btn{background:none;border:none;cursor:pointer;font-size:.78rem;padding:0 2px;opacity:.5;line-height:1;transition:opacity .15s,color .15s;flex-shrink:0}
+.field-help-btn:hover,.field-help-btn.active{opacity:1;color:var(--accent)}
+.field-detect-btn{background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:.72rem;padding:1px 6px;color:var(--muted);line-height:1.4;transition:border-color .15s,color .15s;flex-shrink:0}
+.field-detect-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.field-detect-btn:disabled{opacity:.45;cursor:default}
+.field-desc{display:none;font-size:.75rem;color:var(--muted);background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;line-height:1.5;margin-bottom:2px}
+.field-desc.open{display:block}
 .field input,.field select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem;width:100%}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field-input-wrap{position:relative;display:flex;align-items:center}
