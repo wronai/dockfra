@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Dockfra Setup Wizard — http://localhost:5050"""
-import os, json, subprocess, threading, time, socket as _socket, secrets as _secrets, sys
+import os, json, re as _re, subprocess, threading, time, socket as _socket, secrets as _secrets, sys
 from collections import deque
 from pathlib import Path
 from flask import Flask, render_template, request
@@ -1145,30 +1145,18 @@ def step_do_launch(form):
             buttons(fix_btns)
         else:
             msg("## ✅ Infrastruktura gotowa!")
-            # Read configured ports (with defaults)
-            dev_port  = _state.get("SSH_DEVELOPER_PORT",  "2200")
-            mgr_port  = _state.get("SSH_MANAGER_PORT",    "2202")
-            mon_port  = _state.get("SSH_MONITOR_PORT",    "2201")
-            auto_port = _state.get("SSH_AUTOPILOT_PORT",  "2203")
-            vnc_port  = _state.get("DESKTOP_VNC_PORT",    "6081")
-            # Determine which SSH containers are actually running
+            vnc_port  = _state.get("DESKTOP_VNC_PORT", "6081")
             running_names = {c["name"] for c in all_containers if "Up" in c["status"] or "healthy" in c["status"]}
             sections = []
-            # Build sections from _SSH_ROLE_INFO (single source of truth)
-            _role_container = {
-                "developer": ("dockfra-ssh-developer", dev_port),
-                "manager":   ("dockfra-ssh-manager",   mgr_port),
-                "monitor":   ("dockfra-ssh-monitor",   mon_port),
-                "autopilot": ("dockfra-ssh-autopilot", auto_port),
-            }
-            for role, (cname, port) in _role_container.items():
-                if cname not in running_names:
+            # Build sections dynamically from discovered roles
+            for role, ri in _SSH_ROLES.items():
+                if ri["container"] not in running_names:
                     continue
-                info = _SSH_ROLE_INFO[role]
-                rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in info["commands"])
+                port = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
+                rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in ri["commands"])
                 sections.append(
-                    f"### {info['icon']} {info['title']}  "
-                    f"`ssh {info['user']}@localhost -p {port}`\n"
+                    f"### {ri['icon']} {ri['title']}  "
+                    f"`ssh {ri['user']}@localhost -p {port}`\n"
                     f"| Komenda | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
                 )
             if "dockfra-desktop" in running_names:
@@ -1178,13 +1166,16 @@ def step_do_launch(form):
                 )
             if sections:
                 msg("---\n## 🗺️ Co możesz teraz zrobić?\n\n" + "\n\n".join(sections))
-            buttons([
-                {"label": "🔧 SSH Developer",      "value": f"ssh_info::developer::{dev_port}"},
-                {"label": "👤 SSH Manager",         "value": f"ssh_info::manager::{mgr_port}"},
-                {"label": "📡 SSH Monitor",         "value": f"ssh_info::monitor::{mon_port}"},
+            # Build buttons dynamically from discovered roles
+            post_btns = []
+            for role, ri in _SSH_ROLES.items():
+                p = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
+                post_btns.append({"label": f"{ri['icon']} SSH {role.capitalize()}", "value": f"ssh_info::{role}::{p}"})
+            post_btns += [
                 {"label": "🔑 Setup GitHub + LLM",  "value": "post_launch_creds"},
                 {"label": "📦 Wdróż na urządzenie", "value": "deploy_device"},
-            ])
+            ]
+            buttons(post_btns)
     threading.Thread(target=run,daemon=True).start()
 
 def step_deploy_device():
@@ -1865,79 +1856,179 @@ def fix_docker_perms():
     buttons([{"label":"🔄 Spróbuj ponownie","value":"retry_launch"},{"label":"🏠 Menu","value":"back"}])
 
 
-_SSH_ROLE_INFO = {
-    "developer": {
-        "user":  "developer",
-        "icon":  "🔧",
-        "title": "Developer — Ticket-Driven Workspace",
-        "makefile": "app/ssh-developer/Makefile",
-        "commands": [
-            ("`my-tickets`",            "Lista moich zadań",                  "`make developer-tickets`"),
-            ("`ticket-work <T-XXXX>`",  "Zacznij pracę nad ticketem",         "`make -f app/ssh-developer/Makefile ticket-work T=T-0001`"),
-            ("`ticket-done <T-XXXX>`",  "Oznacz ticket jako gotowy",          "`make -f app/ssh-developer/Makefile ticket-done T=T-0001`"),
-            ("`implement <T-XXXX>`",    "AI-assisted implementacja",          "`make -f app/ssh-developer/Makefile implement T=T-0001`"),
-            ("`ask <pytanie>`",         "Zapytaj LLM o kod",                  "`make developer-ask Q=\"pytanie\"`"),
-            ("`review <plik>`",         "AI code review",                     "`make -f app/ssh-developer/Makefile review F=src/main.py`"),
-            ("`test-local`",            "Uruchom testy",                      "`make -f app/ssh-developer/Makefile test-local`"),
-            ("`commit-push <msg>`",     "Git commit + push",                  "`make -f app/ssh-developer/Makefile commit-push MSG=\"msg\"`"),
-        ],
-    },
-    "manager": {
-        "user":  "manager",
-        "icon":  "👤",
-        "title": "Manager — Project Control Center",
-        "makefile": "management/ssh-manager/Makefile",
-        "commands": [
-            ("`status`",                     "Przegląd wszystkich serwisów",  "`make manager-status`"),
-            ("`ticket-create <tytuł>`",      "Utwórz zadanie",                "`make ticket-create TITLE=\"tytuł\"`"),
-            ("`ticket-list`",                "Lista ticketów",                "`make ticket-list`"),
-            ("`ticket-show <T-XXXX>`",       "Szczegóły ticketu",             "`make -f management/ssh-manager/Makefile ticket-show T=T-0001`"),
-            ("`plan <feature>`",             "Wygeneruj plan przez LLM",      "`make -f management/ssh-manager/Makefile plan FEATURE=\"opis\"`"),
-            ("`ask <pytanie>`",              "Zapytaj asystenta",             "`make manager-ask Q=\"pytanie\"`"),
-            ("`ssh-to developer`",           "Przeskocz do developera",       "`make ssh-developer`"),
-            ("`config-show <serwis>`",       "Pokaż konfigurację serwisu",    "`make -f management/ssh-manager/Makefile config-show SVC=developer`"),
-        ],
-    },
-    "monitor": {
-        "user":  "monitor",
-        "icon":  "📡",
-        "title": "Monitor — Deploy & Health Orchestrator",
-        "makefile": "management/ssh-monitor/Makefile",
-        "commands": [
-            ("`status`",        "Stan całej infrastruktury",    "`make monitor-status`"),
-            ("`deploy-all`",    "Wdróż na wszystkie targety",   "`make deploy-all`"),
-            ("`deploy-backend`","Deploy tylko backend",          "`make -f management/ssh-monitor/Makefile deploy-backend`"),
-            ("`verify`",        "Health check po wdrożeniu",    "`make -f management/ssh-monitor/Makefile verify`"),
-            ("`analyze-logs`",  "AI analiza logów",             "`make -f management/ssh-monitor/Makefile analyze-logs`"),
-            ("`ask <pytanie>`", "Zapytaj LLM o infrastrukturę", "`make monitor-ask Q=\"pytanie\"`"),
-        ],
-    },
-    "autopilot": {
-        "user":  "autopilot",
-        "icon":  "🤖",
-        "title": "Autopilot — Autonomous Orchestrator",
-        "makefile": "management/ssh-autopilot/Makefile",
-        "commands": [
-            ("`pilot-status`",       "Decyzje i stan autopilota",    "`make autopilot-status`"),
-            ("`pilot-run`",          "Jeden cykl ręcznie",           "`make -f management/ssh-autopilot/Makefile pilot-run`"),
-            ("`pilot-plan`",         "Wygeneruj plan projektu LLM",  "`make -f management/ssh-autopilot/Makefile pilot-plan`"),
-            ("`create-from-plan`",   "Utwórz tickety z planu",       "`make -f management/ssh-autopilot/Makefile create-from-plan`"),
-            ("`pilot-log`",          "Podgląd logu daemona",         "`make -f management/ssh-autopilot/Makefile pilot-log`"),
-        ],
-    },
+# ══════════════════════════════════════════════════════════════════════════════
+# Dynamic SSH role / command discovery — parses Makefiles, motd, scripts dirs
+# so that adding scripts or Makefile targets automatically updates the wizard.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SKIP_MAKE_TARGETS = frozenset({"help", "logs", "shell", ".PHONY", ".DEFAULT_GOAL"})
+_MAKE_SKIP_VARS    = frozenset({
+    "EXEC", "SSH", "MAKE", "CONTAINER", "USER", "SSH_PORT", "APP", "MGMT",
+    "ROOT", "MAKEFILE_LIST", "SHELL", "DEFAULT_GOAL",
+})
+_PARAM_HINTS = {
+    "T":       ("Ticket ID",       "T-0001"),
+    "Q":       ("Pytanie",         "Jak naprawić X?"),
+    "F":       ("Plik / opis",     "src/main.py"),
+    "MSG":     ("Wiadomość",       "feat: add feature"),
+    "TITLE":   ("Tytuł",           "Fix login bug"),
+    "FEATURE": ("Opis funkcji",    "user authentication"),
+    "SVC":     ("Nazwa serwisu",   "developer"),
+    "TARGET":  ("Cel",             "developer"),
+    "ARTIFACT":("Ścieżka artefaktu", "/artifacts/app.tar.gz"),
 }
+_FALLBACK_ICONS = {"developer": "🔧", "manager": "👤", "monitor": "📡", "autopilot": "🤖"}
+_FALLBACK_PORTS = {"developer": "2200", "manager": "2202", "monitor": "2201", "autopilot": "2203"}
+
+
+def _parse_ssh_makefile(path: Path):
+    """Parse an ssh-* Makefile. Returns (container, user, port, targets_dict)."""
+    if not path.exists():
+        return None, None, None, {}
+    text = path.read_text(errors="replace")
+    container = user = port = None
+    for m in _re.finditer(r'^(\w+)\s*\?=\s*(.+)', text, _re.MULTILINE):
+        k, v = m.group(1), m.group(2).strip()
+        if k == "CONTAINER": container = v
+        elif k == "USER":    user = v
+        elif k == "SSH_PORT": port = v
+
+    targets = {}
+    for m in _re.finditer(r'^([\w][\w-]*)\s*:[^#\n]*##\s*(.+)$', text, _re.MULTILINE):
+        name, desc = m.group(1), m.group(2).strip()
+        if name in _SKIP_MAKE_TARGETS or name.isupper():
+            continue
+        body_start = m.end()
+        body_lines = []
+        for line in text[body_start:].splitlines():
+            if line.startswith('\t') or (line.startswith('    ') and not _re.match(r'^\S', line)):
+                body_lines.append(line)
+            elif line.strip() == "":
+                continue
+            else:
+                break
+        body = "\n".join(body_lines)
+        params = [p for p in _re.findall(r'\$\((\w+)\)', body) if p not in _MAKE_SKIP_VARS]
+        params = list(dict.fromkeys(params))
+        targets[name] = {"desc": desc, "params": params}
+    return container, user, port, targets
+
+
+def _parse_ssh_motd(path: Path, role: str):
+    """Parse a motd file for icon and title."""
+    icon  = _FALLBACK_ICONS.get(role, "🖥️")
+    title = role.capitalize()
+    if not path.exists():
+        return icon, title
+    text = path.read_text(errors="replace")
+    m = _re.search(r'║\s*(\S+)\s+\w+\s*[—–-]\s*(.+?)\s*║', text)
+    if m:
+        icon  = m.group(1)
+        title = f"{role.capitalize()} — {m.group(2).strip()}"
+    return icon, title
+
+
+def _discover_extra_scripts(ssh_dir: Path, known_targets: set):
+    """Find .sh scripts not already covered by Makefile targets."""
+    extra = {}
+    for sub in ("scripts", "manager-scripts", "deploy-scripts", "autopilot-scripts"):
+        sd = ssh_dir / sub
+        if not sd.is_dir():
+            continue
+        for f in sorted(sd.glob("*.sh")):
+            name = f.stem
+            if name in known_targets:
+                continue
+            extra[name] = {"desc": name.replace("-", " ").replace("_", " ").title(), "params": []}
+    return extra
+
+
+def _discover_ssh_roles():
+    """Scan app/ and management/ for ssh-* dirs, parse Makefiles + motd + scripts.
+    Returns unified dict: role → {container, user, port, icon, title, makefile, targets, commands}
+    """
+    roles = {}
+    for parent in (APP, MGMT):
+        if not parent.is_dir():
+            continue
+        for d in sorted(parent.iterdir()):
+            if not d.is_dir() or not d.name.startswith("ssh-"):
+                continue
+            role = d.name[4:]  # "ssh-developer" → "developer"
+            makefile = d / "Makefile"
+            motd     = d / "motd"
+
+            container, user, port, targets = _parse_ssh_makefile(makefile)
+            icon, title                    = _parse_ssh_motd(motd, role)
+            container = container or f"dockfra-ssh-{role}"
+            user      = user or role
+            port      = port or _FALLBACK_PORTS.get(role, "2222")
+
+            extra = _discover_extra_scripts(d, set(targets))
+            targets.update(extra)
+
+            mk_rel = str(makefile.relative_to(ROOT)) if makefile.exists() else ""
+
+            # Build commands list: (ssh_col, desc, make_col)
+            commands = []
+            for cmd, info in targets.items():
+                params = info["params"]
+                if params:
+                    param_display = " ".join(f"<{p}>" for p in params)
+                    ssh_col = f"`{cmd} {param_display}`"
+                    param_example = " ".join(f"{p}={_PARAM_HINTS.get(p,('',''))[1] or p}" for p in params)
+                    make_col = f"`make -f {mk_rel} {cmd} {param_example}`" if mk_rel else ""
+                else:
+                    ssh_col  = f"`{cmd}`"
+                    make_col = f"`make -f {mk_rel} {cmd}`" if mk_rel else ""
+                commands.append((ssh_col, info["desc"], make_col))
+
+            # Build cmd_meta: cmd → (label, [params], hint, placeholder)
+            cmd_meta = {}
+            for cmd, info in targets.items():
+                params = info["params"]
+                hint, placeholder = "", ""
+                if params:
+                    hint, placeholder = _PARAM_HINTS.get(params[0], (params[0], ""))
+                cmd_meta[cmd] = (info["desc"], params, hint, placeholder)
+
+            roles[role] = {
+                "container": container, "user": user, "port": port,
+                "icon": icon, "title": title, "makefile": mk_rel,
+                "commands": commands, "cmd_meta": cmd_meta,
+            }
+    return roles
+
+# Cache: rebuilt once at import, call _refresh_ssh_roles() to reload
+_SSH_ROLES = _discover_ssh_roles()
+
+def _refresh_ssh_roles():
+    """Re-scan the filesystem and update the cached role data."""
+    global _SSH_ROLES
+    _SSH_ROLES = _discover_ssh_roles()
+
+def _get_role(role: str):
+    """Get role data, falling back to a minimal stub."""
+    return _SSH_ROLES.get(role, {
+        "container": f"dockfra-ssh-{role}", "user": role,
+        "port": _FALLBACK_PORTS.get(role, "2222"),
+        "icon": _FALLBACK_ICONS.get(role, "🖥️"),
+        "title": role.capitalize(), "makefile": "",
+        "commands": [], "cmd_meta": {},
+    })
+
 
 def _step_ssh_info(value: str):
     """Handle ssh_info::role::port button — show SSH connection card."""
     parts = value.split("::")
     role = parts[1] if len(parts) > 1 else "developer"
     port = parts[2] if len(parts) > 2 else "2200"
-    info = _SSH_ROLE_INFO.get(role)
-    if not info:
-        msg(f"❓ Nieznana rola: `{role}`")
+    info = _get_role(role)
+    if not info["commands"]:
+        msg(f"❓ Nieznana rola lub brak komend: `{role}`")
         return
     ssh_cmd = f"ssh {info['user']}@localhost -p {port}"
-    mk = info.get('makefile', '')
+    mk = info["makefile"]
     rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in info["commands"])
     msg(
         f"## {info['icon']} {info['title']}\n\n"
@@ -1945,68 +2036,14 @@ def _step_ssh_info(value: str):
         + (f"**Makefile:** `{mk}` — `make -f {mk} help`\n\n" if mk else "\n")
         + f"| Komenda (w kontenerze) | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
     )
-    buttons([
-        {"label": f"🔧 SSH Developer", "value": f"ssh_info::developer::{_state.get('SSH_DEVELOPER_PORT','2200')}"},
-        {"label": f"👤 SSH Manager",   "value": f"ssh_info::manager::{_state.get('SSH_MANAGER_PORT','2202')}"},
-        {"label": f"📡 SSH Monitor",   "value": f"ssh_info::monitor::{_state.get('SSH_MONITOR_PORT','2201')}"},
-        {"label": f"🤖 SSH Autopilot", "value": f"ssh_info::autopilot::{_state.get('SSH_AUTOPILOT_PORT','2203')}"},
-        {"label": f"📟 Konsola ({role})", "value": f"ssh_console::{role}::{port}"},
-        {"label": "🏠 Menu",           "value": "back"},
-    ])
-
-
-# ── SSH command runner metadata ────────────────────────────────────────────────
-# Maps role → {cmd: (label, [param_names], hint, placeholder)}
-_SSH_CMD_META = {
-    "developer": {
-        "my-tickets":    ("📋 Lista moich zadań",        [],        "", ""),
-        "ticket-work":   ("🎫 Zacznij ticket",           ["T"],     "Ticket ID", "T-0001"),
-        "ticket-done":   ("✅ Zakończ ticket",           ["T"],     "Ticket ID", "T-0001"),
-        "implement":     ("🤖 AI implementacja",         ["T"],     "Ticket ID", "T-0001"),
-        "ask":           ("💬 Zapytaj LLM",              ["Q"],     "Pytanie do asystenta", "Jak naprawić X?"),
-        "review":        ("🔍 Code review (AI)",         ["F"],     "Ścieżka pliku", "src/main.py"),
-        "test-local":    ("🧪 Uruchom testy",            [],        "", ""),
-        "check-services":("🩺 Sprawdź serwisy",          [],        "", ""),
-        "commit-push":   ("📤 Commit + push",            ["MSG"],   "Wiadomość commita", "feat: add feature"),
-    },
-    "manager": {
-        "status":          ("📊 Status serwisów",        [],        "", ""),
-        "ticket-create":   ("🎫 Utwórz ticket",          ["TITLE"], "Tytuł ticketu", "Fix login bug"),
-        "ticket-list":     ("📋 Lista ticketów",         [],        "", ""),
-        "ticket-show":     ("🔎 Szczegóły ticketu",      ["T"],     "Ticket ID", "T-0001"),
-        "ticket-push":     ("📤 Push ticket do GitHub",  ["T"],     "Ticket ID", "T-0001"),
-        "ticket-pull":     ("📥 Pull ticketów",          [],        "", ""),
-        "plan":            ("🗺️ Wygeneruj plan (LLM)",   ["F"],     "Opis funkcji", "user authentication"),
-        "ask":             ("💬 Zapytaj asystenta",      ["Q"],     "Pytanie", "Jak zoptymalizować X?"),
-        "config-developer":("⚙️ Konfiguruj developer",   [],        "", ""),
-        "config-monitor":  ("⚙️ Konfiguruj monitor",     [],        "", ""),
-        "config-show":     ("👁 Pokaż config serwisu",   ["SVC"],   "Nazwa serwisu", "developer"),
-        "ssh-to":          ("🔗 SSH do innego węzła",    ["T"],     "Cel: developer|monitor|autopilot", "developer"),
-    },
-    "monitor": {
-        "status":          ("📊 Stan infrastruktury",    [],        "", ""),
-        "deploy-all":      ("🚀 Wdróż na wszystkie",     [],        "", ""),
-        "deploy-backend":  ("🚀 Deploy backend",         [],        "", ""),
-        "deploy-frontend": ("🚀 Deploy frontend",        [],        "", ""),
-        "deploy-rpi3":     ("🚀 Deploy RPi3",            [],        "", ""),
-        "verify":          ("✅ Health check",           [],        "", ""),
-        "analyze-logs":    ("🧠 AI analiza logów",       [],        "", ""),
-        "ask":             ("💬 Zapytaj LLM",            ["Q"],     "Pytanie", "Dlaczego backend jest wolny?"),
-    },
-    "autopilot": {
-        "pilot-status":      ("📊 Stan autopilota",      [],        "", ""),
-        "pilot-run":         ("▶️ Jeden cykl ręcznie",   [],        "", ""),
-        "pilot-plan":        ("🗺️ Plan projektu (LLM)",  [],        "", ""),
-        "create-from-plan":  ("🎫 Tickety z planu",      [],        "", ""),
-    },
-}
-
-_ROLE_CONTAINER = {
-    "developer": ("dockfra-ssh-developer", "developer"),
-    "manager":   ("dockfra-ssh-manager",   "manager"),
-    "monitor":   ("dockfra-ssh-monitor",   "monitor"),
-    "autopilot": ("dockfra-ssh-autopilot", "autopilot"),
-}
+    # Build role buttons dynamically from discovered roles
+    role_btns = []
+    for r, ri in sorted(_SSH_ROLES.items()):
+        p = _state.get(f"SSH_{r.upper()}_PORT", ri["port"])
+        role_btns.append({"label": f"{ri['icon']} SSH {r.capitalize()}", "value": f"ssh_info::{r}::{p}"})
+    role_btns.append({"label": f"📟 Konsola ({role})", "value": f"ssh_console::{role}::{port}"})
+    role_btns.append({"label": "🏠 Menu", "value": "back"})
+    buttons(role_btns)
 
 
 def step_ssh_console(value: str):
@@ -2014,11 +2051,10 @@ def step_ssh_console(value: str):
     parts  = value.split("::")
     role   = parts[1] if len(parts) > 1 else "developer"
     port   = parts[2] if len(parts) > 2 else "2200"
-    cmds   = _SSH_CMD_META.get(role, {})
-    info   = _SSH_ROLE_INFO.get(role, {})
-    container, user = _ROLE_CONTAINER.get(role, ("dockfra-ssh-developer", "developer"))
+    ri     = _get_role(role)
+    cmds   = ri["cmd_meta"]
     clear_widgets()
-    msg(f"## {info.get('icon','🖥️')} {info.get('title','SSH')} — konsola komend")
+    msg(f"## {ri['icon']} {ri['title']} — konsola komend")
 
     options = [{"value": k, "label": v[0]} for k, v in cmds.items()]
     hint_map = {k: v[2] for k, v in cmds.items()}
@@ -2037,7 +2073,7 @@ def step_ssh_console(value: str):
         "placeholder": first_ph, "value": "", "hint": first_hint,
     })
     buttons([
-        {"label": "▶️ Uruchom",      "value": f"run_ssh_cmd::{role}::{container}::{user}"},
+        {"label": "▶️ Uruchom",      "value": f"run_ssh_cmd::{role}::{ri['container']}::{ri['user']}"},
         {"label": "◀ Info",         "value": f"ssh_info::{role}::{port}"},
         {"label": "🏠 Menu",         "value": "back"},
     ])
@@ -2055,8 +2091,8 @@ def run_ssh_cmd(value: str, form: dict):
     if not cmd_name:
         msg("❌ Wybierz komendę."); return
 
-    cmds   = _SSH_CMD_META.get(role, {})
-    meta   = cmds.get(cmd_name)
+    ri     = _get_role(role)
+    meta   = ri["cmd_meta"].get(cmd_name)
     if not meta:
         msg(f"❌ Nieznana komenda: `{cmd_name}`"); return
 
