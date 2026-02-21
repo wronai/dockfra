@@ -17,6 +17,42 @@ t() { TOTAL=$((TOTAL+1)); if ( eval "$2" ) >/dev/null 2>&1; then printf "  ${G}�
 s() { TOTAL=$((TOTAL+1)); SKIP=$((SKIP+1)); printf "  ${Y}○${N} %-55s SKIP (%s)\n" "$1" "$2"; }
 sx() { local p=$1 u=$2; ssh -i "$SSH_KEY" -p "$p" -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$u@localhost" "${@:3}" 2>/dev/null; }
 
+HAS_PYYAML=false
+python3 -c "import yaml" >/dev/null 2>&1 && HAS_PYYAML=true
+
+HAS_DOCKER_COMPOSE=false
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    HAS_DOCKER_COMPOSE=true
+fi
+
+compose_assert() {
+    local compose_file="$1"
+    local check="$2"
+
+    if $HAS_PYYAML; then
+        python3 - "$compose_file" "$check" <<'PY'
+import sys
+import yaml
+
+path, check = sys.argv[1], sys.argv[2]
+d = yaml.safe_load(open(path))
+exec(check, {"d": d})
+PY
+    elif $HAS_DOCKER_COMPOSE; then
+        docker compose -f "$compose_file" config --format json 2>/dev/null | \
+            python3 - "$check" <<'PY'
+import json
+import sys
+
+check = sys.argv[1]
+d = json.load(sys.stdin)
+exec(check, {"d": d})
+PY
+    else
+        return 1
+    fi
+}
+
 # ═══ 1. STRUCTURE ═══
 echo ""; echo "  1. PROJECT STRUCTURE"
 t "management/ exists" "test -d '$MGMT'"
@@ -58,40 +94,22 @@ else s "Backend unit tests (3)" "flask/psycopg2 not installed (run inside contai
 
 # ═══ 4. COMPOSE VALIDATION ═══
 echo ""; echo "  4. DOCKER-COMPOSE VALIDATION"
-t "management compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$MGMT/docker-compose.yml'))\""
-t "management compose: 4 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml')); assert len(d['services'])==4, len(d['services'])\""
-t "management prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$MGMT/docker-compose-production.yml'))\""
-t "app compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose.yml'))\""
-t "app compose: 8 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml')); assert len(d['services'])==8, len(d['services'])\""
-t "app prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose-production.yml'))\""
-t "devices compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$PROJECT/devices/docker-compose.yml'))\""
-t "devices compose: 2 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$PROJECT/devices/docker-compose.yml')); assert len(d["services"])==3, len(d['services'])\""
+t "management compose: valid YAML" "compose_assert '$MGMT/docker-compose.yml' 'assert isinstance(d, dict)'"
+t "management compose: 4 services" "compose_assert '$MGMT/docker-compose.yml' 'assert len(d[\"services\"]) == 4, len(d[\"services\"])'"
+t "management prod compose: valid YAML" "compose_assert '$MGMT/docker-compose-production.yml' 'assert isinstance(d, dict)'"
+t "app compose: valid YAML" "compose_assert '$APP/docker-compose.yml' 'assert isinstance(d, dict)'"
+t "app compose: 8 services" "compose_assert '$APP/docker-compose.yml' 'assert len(d[\"services\"]) == 8, len(d[\"services\"])'"
+t "app prod compose: valid YAML" "compose_assert '$APP/docker-compose-production.yml' 'assert isinstance(d, dict)'"
+t "devices compose: valid YAML" "compose_assert '$PROJECT/devices/docker-compose.yml' 'assert isinstance(d, dict)'"
+t "devices compose: 3 services" "compose_assert '$PROJECT/devices/docker-compose.yml' 'assert len(d[\"services\"]) == 3, len(d[\"services\"])'"
 
 # ═══ 5. NETWORK ISOLATION ═══
 echo ""; echo "  5. NETWORK ISOLATION"
-t "Management uses dockfra-shared (external)" "python3 -c \"
-import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml'))
-assert d['networks']['dockfra-shared']['external'] == True
-\""
-t "App uses dockfra-shared (external)" "python3 -c \"
-import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml'))
-assert d['networks']['dockfra-shared']['external'] == True
-\""
-t "ssh-developer on dockfra-shared" "python3 -c \"
-import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml'))
-nets=d['services']['ssh-developer']['networks']
-assert 'dockfra-shared' in nets, f'developer not on dockfra-shared: {nets}'
-\""
-t "ssh-manager on dockfra-shared" "python3 -c \"
-import yaml; d=yaml.safe_load(open('$MGMT/docker-compose.yml'))
-nets=d['services']['ssh-manager']['networks']
-assert 'dockfra-shared' in nets
-\""
-t "Production: no external network" "python3 -c \"
-import yaml; d=yaml.safe_load(open('$MGMT/docker-compose-production.yml'))
-for name, cfg in d.get('networks', {}).items():
-    assert not cfg.get('external', False), f'{name} is external in production'
-\""
+t "Management uses dockfra-shared (external)" "compose_assert '$MGMT/docker-compose.yml' 'assert d[\"networks\"][\"dockfra-shared\"][\"external\"] is True'"
+t "App uses dockfra-shared (external)" "compose_assert '$APP/docker-compose.yml' 'assert d[\"networks\"][\"dockfra-shared\"][\"external\"] is True'"
+t "ssh-developer on dockfra-shared" "compose_assert '$APP/docker-compose.yml' 'nets=d[\"services\"][\"ssh-developer\"][\"networks\"]; assert \"dockfra-shared\" in nets, f\"developer not on dockfra-shared: {nets}\"'"
+t "ssh-manager on dockfra-shared" "compose_assert '$MGMT/docker-compose.yml' 'nets=d[\"services\"][\"ssh-manager\"][\"networks\"]; assert \"dockfra-shared\" in nets'"
+t "Production: no external network" "compose_assert '$MGMT/docker-compose-production.yml' 'for name, cfg in d.get(\"networks\", {}).items(): assert not cfg.get(\"external\", False), f\"{name} is external in production\"'"
 
 # ═══ 6. DOCKERFILES ═══
 echo ""; echo "  6. DOCKERFILES"
