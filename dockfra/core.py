@@ -629,7 +629,7 @@ def save_state():
             k: v
             for k, v in _state.items()
             if k not in _STATE_SKIP_PERSIST
-            and not any(s in k.lower() for s in ("password", "secret", "token", "api_key", "key"))
+            and not any(s in k.lower() for s in ("password", "secret", "token", "api_key"))
         }
         _STATE_FILE.write_text(json.dumps(data, indent=2))
     except Exception:
@@ -784,18 +784,38 @@ def _emit_log_error(line: str, fired: set):
             var = (_mv.group(1) if _mv else (_uv.group(1) if _uv else ""))
             if var:
                 sk = _ENV_TO_STATE.get(var, var.lower())
+                # Best-effort field metadata for unknown vars
+                _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+                _placeholder = ""
+                if var.endswith("_URL"):
+                    _placeholder = "https://..."
+                elif var.endswith("_EMAIL"):
+                    _placeholder = "you@example.com"
+                elif "PORT" in var:
+                    _placeholder = "8080"
                 _sid_emit("widget", {"type": "input", "name": var,
                                      "label": var, "placeholder": "",
                                      "value": _state.get(sk, ""),
-                                     "secret": "KEY" in var or "PASSWORD" in var or "SECRET" in var,
+                                     "secret": _secret,
                                      "hint": f"Ustaw wartość zmiennej `{var}`",
                                      "chips": [], "modal_type": ""})
+                # Apply inferred placeholder if we have one
+                if _placeholder:
+                    _sid_emit("widget", {"type": "input", "name": var,
+                                         "label": var, "placeholder": _placeholder,
+                                         "value": _state.get(sk, ""),
+                                         "secret": _secret,
+                                         "hint": f"Ustaw wartość zmiennej `{var}`",
+                                         "chips": [], "modal_type": ""})
+
+                group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
                 btn_items = [
-                    {"label": f"💾 Zapisz {var}", "value": "save_settings::General"},
+                    {"label": f"💾 Zapisz {var}", "value": f"save_settings::{group}" if group else f"save_env_var::{var}"},
                 ]
                 if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
                     env = _state.get("environment", "local")
                     ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
+                    btn_items.append({"label": "🔧 Przebuduj management", "value": "rebuild_stack::management"})
                     btn_items.append({"label": "🔄 Restart autopilot", "value": f"restart_container::{ap}"})
                     btn_items.append({"label": "▶️ Sprawdź pilot-status", "value": "ssh_cmd::autopilot::pilot-status::"})
                 _sid_emit("widget", {"type": "buttons", "items": btn_items})
