@@ -15,8 +15,8 @@ def step_welcome():
     docker_ok, docker_msg = validate_docker()
     llm_ok, llm_msg = validate_llm_connection()
     checks = []
-    checks.append({"name": f"🐳 Docker", "ok": docker_ok, "detail": docker_msg})
-    checks.append({"name": f"🤖 LLM", "ok": llm_ok, "detail": llm_msg})
+    checks.append({"name": t('status_check_docker'), "ok": docker_ok, "detail": docker_msg})
+    checks.append({"name": t('status_check_llm'), "ok": llm_ok, "detail": llm_msg})
     status_row(checks)
 
     if not docker_ok:
@@ -70,7 +70,7 @@ def step_status():
             finding, btns = _analyze_container_log(c["name"])
             msg(f"#### `{c['name']}` — {c['status']}\n{finding}")
             if btns:
-                btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
+                btns.insert(0, {"label": t('logs_for_container', name=c['name']), "value": f"logs::{c['name']}"})
                 buttons(btns)
     buttons([
         {"label": t('launch_infra'),  "value":"launch_all"},
@@ -139,9 +139,9 @@ def step_settings(group: str = ""):
                            modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
                            desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         buttons([
-            {"label": "💾 Zapisz",         "value": f"save_settings::{group}"},
-            {"label": "← Wszystkie sekcje", "value": "settings_nav"},
-            {"label": "🏠 Menu",             "value": "back"},
+            {"label": t('save'),         "value": f"save_settings::{group}"},
+            {"label": t('all_sections'), "value": "settings_nav"},
+            {"label": t('menu'),         "value": "back"},
         ])
 
 
@@ -197,7 +197,8 @@ def step_preflight_fill(stacks: list[str]):
     msg(t('missing_vars_title'))
     msg(t('fill_missing_n', n=len(missing)))
     for e in missing:
-        msg(f"- **{e['label']}** (`{e['key']}`)", role="bot")
+        _lbl = t(e["label"]) if e["label"] in _STRINGS else e["label"]
+        msg(f"- **{_lbl}** (`{e['key']}`)", role="bot")
     msg("")
     suggestions = _detect_suggestions()
     for e in missing:
@@ -206,11 +207,12 @@ def step_preflight_fill(stacks: list[str]):
         sug = suggestions.get(e["key"], {})
         if not cur and sug.get("value"):
             cur = sug["value"]
+        _lbl = t(e["label"]) if e["label"] in _STRINGS else e["label"]
         if e["type"] == "select":
             opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-            select(e["key"], e["label"], opts, cur)
+            select(e["key"], _lbl, opts, cur)
         else:
-            text_input(e["key"], e["label"],
+            text_input(e["key"], _lbl,
                        e.get("placeholder", ""), cur,
                        sec=(e["type"] == "password"),
                        hint=sug.get("hint", ""), chips=sug.get("chips", []),
@@ -282,14 +284,14 @@ def step_launch_all():
     clear_widgets()
     msg(t('launching_stacks'))
     select("stacks", t('stacks_select_label'), [
-        {"label": "All (management + app + devices)", "value": "all"},
-        {"label": "Management",                            "value": "management"},
-        {"label": "App",                                   "value": "app"},
-        {"label": "Devices",                               "value": "devices"},
+        {"label": t('launch_option_all_full'),  "value": "all"},
+        {"label": t('launch_option_management'),"value": "management"},
+        {"label": t('launch_option_app'),       "value": "app"},
+        {"label": t('launch_option_devices'),   "value": "devices"},
     ], _state.get("stacks", "all"))
     select("environment", t('environment_label'), [
-        {"label": "Local",      "value": "local"},
-        {"label": "Production", "value": "production"},
+        {"label": t('launch_env_local'),      "value": "local"},
+        {"label": t('launch_env_production'), "value": "production"},
     ], _state.get("environment", "local"))
     buttons([
         {"label": t('run_btn'), "value": "do_launch"},
@@ -351,12 +353,10 @@ def _analyze_launch_error(name: str, output: str) -> tuple[str, list]:
 
     _base_img = PROJECT["ssh_base_image"]
     if _base_img in lines and ("pull access denied" in lines or "failed to resolve source metadata" in lines):
-        analysis.append(
-            f"⚠️ **Brak lokalnego obrazu `{_base_img}`** — obraz bazowy SSH musi być zbudowany lokalnie "
-            "z `shared/Dockerfile.ssh-base`. Kliknij **Spróbuj ponownie** — kreator zbuduje go automatycznie.")
+        analysis.append(t('missing_ssh_base_image', image=_base_img))
         solutions.append({"label":t('build_ssh_base_retry'),"value":"retry_launch"})
     elif "pull access denied" in lines or ("not found" in lines and "image" in lines):
-        analysis.append("⚠️ **Cannot pull Docker image** — check image name and registry access.")
+        analysis.append(t('cannot_pull_docker_image'))
         solutions.append({"label":t('retry'),"value":"retry_launch"})
 
     if not analysis:
@@ -397,14 +397,14 @@ def step_do_launch(form):
                 ["git", "clone", "--branch", branch, "--depth", "1", app_repo_url, str(app_dir)],
                 capture_output=True, text=True)
             if rc.returncode != 0:
-                msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
+                msg(t('clone_error', err=rc.stderr[:1000]))
                 buttons([{"label":t('change_git_url'),"value":"settings_group::Git"},
                          {"label":t('menu'),"value":"back"}])
                 return
             msg(t('cloned_to', dir=app_dir))
             _refresh_ssh_roles()
         elif (app_dir / ".git").exists():
-            progress("🔄 Aktualizuję app/ (git pull)…")
+            progress(t('updating_app_pull'))
             subprocess.run(["git", "-C", str(app_dir), "pull", "--ff-only"],
                            capture_output=True)
             _refresh_ssh_roles()
@@ -441,7 +441,7 @@ def step_do_launch(form):
                 ["docker","image","inspect",PROJECT["ssh_base_image"]],
                 capture_output=True)
             if check.returncode != 0:
-                progress(f"🔨 Buduję {PROJECT['ssh_base_image']}...")
+                progress(t('building_ssh_base', image=PROJECT['ssh_base_image']))
                 proc = subprocess.Popen(
                     ["docker","build","-t",PROJECT["ssh_base_image"],
                      "-f", str(ssh_base_dockerfile), str(ssh_base_context)],
@@ -452,13 +452,13 @@ def step_do_launch(form):
                 proc.wait()
                 if proc.returncode != 0:
                     progress(PROJECT["ssh_base_image"], error=True)
-                    msg(f"❌ **Błąd budowania `{PROJECT['ssh_base_image']}`** — sprawdź logi po prawej.")
+                    msg(t('build_ssh_base_error', image=PROJECT['ssh_base_image']))
                     buttons([{"label":t('retry'),"value":"retry_launch"},
                              {"label":t('menu'),"value":"back"}])
                     return
                 progress(PROJECT["ssh_base_image"], done=True)
             else:
-                progress(f"{PROJECT['ssh_base_image']} (cached)", done=True)
+                progress(t('cached_label', name=PROJECT['ssh_base_image']), done=True)
 
         # ── Create missing env_file stubs for every stack ─────────────────────
         # Scans docker-compose*.yml for `env_file:` entries and touches missing
@@ -533,7 +533,7 @@ def step_do_launch(form):
                 finding, btns = _analyze_container_log(c["name"])
                 msg(f"#### 🔴 `{c['name']}` — {c['status']}\n{finding}")
                 if btns:
-                    btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
+                    btns.insert(0, {"label": t('logs_for_container', name=c['name']), "value": f"logs::{c['name']}"})
                 time.sleep(0.05)
             # Show single consolidated action bar for failing containers
             fix_btns = []
@@ -552,8 +552,7 @@ def step_do_launch(form):
             # Show desktop/VNC info if running
             vnc_port = _state.get("desktop_vnc_port", _state.get("DESKTOP_VNC_PORT", "6081"))
             if cname("desktop") in running_names or cname("desktop-app") in running_names:
-                msg(f"### 🖥️ Desktop (noVNC)  [http://localhost:{vnc_port}](http://localhost:{vnc_port})\n"
-                    "Przeglądarkowy pulpit z podglądem dashboardu i logów.")
+                msg(t('desktop_novnc', port=vnc_port))
             if _SSH_ROLES:
                 msg(t('what_next'))
             # Config-driven post-launch buttons (dockfra.yaml + SSH roles + built-ins)
@@ -600,7 +599,7 @@ def step_test_device(form):
     ip, user, port = _state["device_ip"], _state["device_user"], _state["device_port"]
     key = _state.get("github_key", str(Path.home()/".ssh/id_ed25519"))
     if not ip: msg(t('provide_ip')); step_deploy_device(); return
-    msg(f"🔍 Testuję `{user}@{ip}:{port}`...")
+    msg(t('testing_connection', target=f'{user}@{ip}:{port}'))
     def run():
         rc, out = run_cmd(["ssh","-i",key,"-p",str(port),"-o","ConnectTimeout=8",
                            "-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null",
@@ -628,36 +627,36 @@ def step_do_deploy(form):
     def run():
         container = _get_role("developer")["container"]
         if container not in [c["name"] for c in docker_ps()]:
-            msg(f"❌ `{container}` nie działa. Uruchom app stack.")
+            msg(t('container_not_running', name=container))
             socketio.emit("widget",{"type":"buttons","items":[
                 {"label":t('launch_stacks_btn'),"value":"launch_all"},{"label":t('back'),"value":"back"}]}); return
-        progress("Kopiuję klucz SSH do developer...")
+        progress(t('copying_ssh_key'))
         kpath = Path(key).expanduser()
         if kpath.exists():
             subprocess.run(["docker","cp",str(kpath),f"{container}:/tmp/dk"],capture_output=True)
             subprocess.run(["docker","exec",container,"bash","-c",
                 "mkdir -p /home/developer/.ssh && cp /tmp/dk /home/developer/.ssh/id_ed25519 && "
                 "chmod 600 /home/developer/.ssh/id_ed25519 && rm /tmp/dk"],capture_output=True)
-        progress("Klucz SSH gotowy",done=True)
-        progress(f"Testuję SSH: developer → {ip}...")
+        progress(t('ssh_key_ready'),done=True)
+        progress(t('testing_ssh_to', ip=ip))
         rc, out = run_cmd(["docker","exec",container,
             "ssh","-i","/home/developer/.ssh/id_ed25519","-p",str(port),
             "-o","ConnectTimeout=8","-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null",
             f"{user}@{ip}","uname -a && echo DOCKFRA_DEPLOY_OK"])
         if rc!=0 or "DOCKFRA_DEPLOY_OK" not in out:
-            progress(f"SSH do {ip} nieudany",error=True)
-            msg(f"❌ Nie można połączyć się z `{ip}` z kontenera developer.")
+            progress(t('ssh_failed_to', ip=ip),error=True)
+            msg(t('ssh_failed_from_container', ip=ip))
             socketio.emit("widget",{"type":"buttons","items":[
                 {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]}); return
-        progress(f"SSH → {ip} działa!",done=True)
-        msg(f"✅ Połączenie `developer → {ip}` działa!")
+        progress(t('ssh_success_to', ip=ip),done=True)
+        msg(t('ssh_success_route', ip=ip))
         # Save to devices/.env.local
         _update_device_env(ip, user, port)
-        progress("Konfiguracja zapisana w devices/.env.local",done=True)
-        msg(f"\n✅ **Urządzenie `{ip}` skonfigurowane jako cel deployment!**")
-        msg("Uruchom `make up-devices` aby wystartować ssh-rpi3 + vnc-rpi3 dla tego urządzenia.")
+        progress(t('device_saved_env'),done=True)
+        msg(t('device_configured_target', ip=ip))
+        msg(t('device_launch_hint'))
         socketio.emit("widget",{"type":"buttons","items":[
-            {"label":"▶️ Uruchom devices stack","value":"launch_devices"}]})
+            {"label":t('launch_devices_stack'),"value":"launch_devices"}]})
     threading.Thread(target=run,daemon=True).start()
 
 def _update_device_env(ip, user, port):
@@ -677,10 +676,10 @@ def _update_device_env(ip, user, port):
 
 def step_launch_devices(form=None):
     clear_widgets()
-    msg("▶️ Uruchamiam **devices** stack...")
+    msg(t('launching_devices_stack'))
     def run():
         subprocess.run(["docker","network","create",PROJECT["network"]],capture_output=True)
-        progress("Uruchamiam devices...")
+        progress(t('launching_devices'))
         rc, _ = run_cmd(["docker","compose","up","-d","--build"],cwd=DEVS)
         progress("devices",done=(rc==0),error=(rc!=0))
         if rc==0:
@@ -689,7 +688,7 @@ def step_launch_devices(form=None):
             msg(f"📺 VNC: http://localhost:{vnc_p}")
             msg(f"🔒 SSH-RPi3: `ssh deployer@localhost -p {_state.get('SSH_RPI3_PORT','2224')}`")
         else:
-            msg("❌ Błąd uruchamiania devices stack")
+            msg(t('launch_devices_error'))
     threading.Thread(target=run,daemon=True).start()
 
 def step_post_launch_creds():
@@ -699,11 +698,11 @@ def step_post_launch_creds():
     if container not in [c["name"] for c in docker_ps()]:
         msg(f"❌ `{container}` nie działa.")
         buttons([{"label":t('launch_stacks_btn'),"value":"launch_all"},{"label":t('back'),"value":"back"}]); return
-    msg(f"## 🔑 Setup GitHub + LLM — {dev_role['user']}")
+    msg(t('post_creds_title', user=dev_role['user']))
     key = _state.get("openrouter_key","")
     status_row([
-        {"name":"GitHub SSH key","ok": Path(_state.get("github_key","~/.ssh/id_ed25519")).expanduser().exists(),"detail":_state.get("github_key","")},
-        {"name":"OpenRouter Key","ok": bool(key and key.startswith("sk-")),"detail":mask(key) if key else "brak"},
+        {"name":t('status_github_ssh_key'),"ok": Path(_state.get("github_key","~/.ssh/id_ed25519")).expanduser().exists(),"detail":_state.get("github_key","")},
+        {"name":t('status_openrouter_key'),"ok": bool(key and key.startswith("sk-")),"detail":mask(key) if key else t('empty_short')},
     ])
     buttons([{"label":t('run_config'),"value":"run_post_creds"},
              {"label":t('change_creds'),"value":"setup_creds"},

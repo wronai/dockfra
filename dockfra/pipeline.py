@@ -252,9 +252,10 @@ class PipelineState:
         for s in self.steps[-5:]:
             icon = "✅" if s.get("ok") else "❌"
             lines.append(f"  {icon} {s['step']} — {s['score']:.0%} ({s['duration']:.1f}s)")
-        if self.decisions:
+        current_decisions = [d for d in self.decisions if d.get("iteration") == self.iteration]
+        if current_decisions:
             lines.append("Decyzje:")
-            for d in self.decisions[-3:]:
+            for d in current_decisions[-3:]:
                 lines.append(f"  → {d['decision']}: {d['reason']}")
         return "\n".join(lines)
 

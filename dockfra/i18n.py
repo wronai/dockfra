@@ -3,6 +3,19 @@ import threading
 
 LANGUAGES = ('pl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'cs', 'ro', 'nl')
 
+LANGUAGE_NAMES = {
+    "pl": "Polish",
+    "en": "English",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "cs": "Czech",
+    "ro": "Romanian",
+    "nl": "Dutch",
+}
+
 _tl = threading.local()
 _STRINGS: dict = {}
 
@@ -35,7 +48,7 @@ def llm_lang_instruction() -> str:
     lang = get_lang()
     if lang == "en":
         return "Respond in English."
-    name = LANGUAGES.get(lang, lang)
+    name = LANGUAGE_NAMES.get(lang, lang)
     return f"IMPORTANT: Always respond in {name} ({lang}). All your messages, explanations, diagnoses, and suggestions must be in {name}."
 
 _add('menu',
@@ -3118,3 +3131,115 @@ _add('cli_n_problems',
      cs='❌ {n} problém(ů): {details}',
      ro='❌ {n} problemă(e): {details}',
      nl='❌ {n} probleem/problemen: {details}')
+
+_add('status_check_docker',
+     pl='🐳 Docker',
+     en='🐳 Docker')
+_add('status_check_llm',
+     pl='🤖 LLM',
+     en='🤖 LLM')
+_add('logs_for_container',
+     pl='📋 Logi: {name}',
+     en='📋 Logs: {name}')
+_add('launch_option_all_full',
+     pl='Wszystkie (management + app + devices)',
+     en='All (management + app + devices)')
+_add('launch_option_management',
+     pl='Management',
+     en='Management')
+_add('launch_option_app',
+     pl='App',
+     en='App')
+_add('launch_option_devices',
+     pl='Devices',
+     en='Devices')
+_add('launch_env_local',
+     pl='Lokalne',
+     en='Local')
+_add('launch_env_production',
+     pl='Produkcyjne',
+     en='Production')
+_add('missing_ssh_base_image',
+     pl='⚠️ **Brak lokalnego obrazu `{image}`** — obraz bazowy SSH musi być zbudowany lokalnie z `shared/Dockerfile.ssh-base`. Kliknij **Spróbuj ponownie** — kreator zbuduje go automatycznie.',
+     en='⚠️ **Missing local image `{image}`** — SSH base image must be built locally from `shared/Dockerfile.ssh-base`. Click **Retry** and the wizard will build it automatically.')
+_add('cannot_pull_docker_image',
+     pl='⚠️ **Nie można pobrać obrazu Docker** — sprawdź nazwę obrazu i dostęp do rejestru.',
+     en='⚠️ **Cannot pull Docker image** — check image name and registry access.')
+_add('clone_error',
+     pl='❌ Błąd klonowania:\n```\n{err}\n```',
+     en='❌ Clone error:\n```\n{err}\n```')
+_add('updating_app_pull',
+     pl='🔄 Aktualizuję app/ (git pull)…',
+     en='🔄 Updating app/ (git pull)…')
+_add('building_ssh_base',
+     pl='🔨 Buduję {image}...',
+     en='🔨 Building {image}...')
+_add('build_ssh_base_error',
+     pl='❌ **Błąd budowania `{image}`** — sprawdź logi po prawej.',
+     en='❌ **Build error for `{image}`** — check logs on the right.')
+_add('cached_label',
+     pl='{name} (cached)',
+     en='{name} (cached)')
+_add('desktop_novnc',
+     pl='### 🖥️ Desktop (noVNC)  [http://localhost:{port}](http://localhost:{port})\nPrzeglądarkowy pulpit z podglądem dashboardu i logów.',
+     en='### 🖥️ Desktop (noVNC)  [http://localhost:{port}](http://localhost:{port})\nBrowser desktop with dashboard and logs preview.')
+_add('testing_connection',
+     pl='🔍 Testuję `{target}`...',
+     en='🔍 Testing `{target}`...')
+_add('container_not_running',
+     pl='❌ `{name}` nie działa. Uruchom app stack.',
+     en='❌ `{name}` is not running. Launch the app stack.')
+_add('copying_ssh_key',
+     pl='Kopiuję klucz SSH do developer...',
+     en='Copying SSH key to developer...')
+_add('ssh_key_ready',
+     pl='Klucz SSH gotowy',
+     en='SSH key ready')
+_add('testing_ssh_to',
+     pl='Testuję SSH: developer → {ip}...',
+     en='Testing SSH: developer → {ip}...')
+_add('ssh_failed_to',
+     pl='SSH do {ip} nieudany',
+     en='SSH to {ip} failed')
+_add('ssh_failed_from_container',
+     pl='❌ Nie można połączyć się z `{ip}` z kontenera developer.',
+     en='❌ Cannot connect to `{ip}` from developer container.')
+_add('ssh_success_to',
+     pl='SSH → {ip} działa!',
+     en='SSH → {ip} works!')
+_add('ssh_success_route',
+     pl='✅ Połączenie `developer → {ip}` działa!',
+     en='✅ Connection `developer → {ip}` works!')
+_add('device_saved_env',
+     pl='Konfiguracja zapisana w devices/.env.local',
+     en='Configuration saved in devices/.env.local')
+_add('device_configured_target',
+     pl='\n✅ **Urządzenie `{ip}` skonfigurowane jako cel deployment!**',
+     en='\n✅ **Device `{ip}` configured as deployment target!**')
+_add('device_launch_hint',
+     pl='Uruchom `make up-devices` aby wystartować ssh-rpi3 + vnc-rpi3 dla tego urządzenia.',
+     en='Run `make up-devices` to start ssh-rpi3 + vnc-rpi3 for this device.')
+_add('launch_devices_stack',
+     pl='▶️ Uruchom devices stack',
+     en='▶️ Launch devices stack')
+_add('launching_devices_stack',
+     pl='▶️ Uruchamiam **devices** stack...',
+     en='▶️ Launching **devices** stack...')
+_add('launching_devices',
+     pl='Uruchamiam devices...',
+     en='Launching devices...')
+_add('launch_devices_error',
+     pl='❌ Błąd uruchamiania devices stack',
+     en='❌ Error launching devices stack')
+_add('post_creds_title',
+     pl='## 🔑 Setup GitHub + LLM — {user}',
+     en='## 🔑 Setup GitHub + LLM — {user}')
+_add('status_github_ssh_key',
+     pl='GitHub SSH key',
+     en='GitHub SSH key')
+_add('status_openrouter_key',
+     pl='OpenRouter Key',
+     en='OpenRouter Key')
+_add('empty_short',
+     pl='brak',
+     en='missing')
