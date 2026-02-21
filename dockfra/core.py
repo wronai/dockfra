@@ -22,6 +22,7 @@ __all__ = [
     'PROJECT', 'STACKS', 'cname', 'short_name',
     # ENV
     'ENV_SCHEMA', '_schema_defaults', 'load_env', 'save_env',
+    'save_state', 'load_state', '_STATE_FILE', '_STATE_SKIP_PERSIST',
     # Helpers
     'detect_config', '_emit_log_error', 'run_cmd', 'docker_ps',
     'mask', 'msg', 'widget', 'buttons', 'text_input', 'select',
@@ -30,6 +31,9 @@ __all__ = [
     '_arp_devices', '_devices_env_ip', '_docker_container_env',
     '_local_interfaces', '_subnet_ping_sweep',
     '_detect_suggestions', '_emit_missing_fields',
+    # Post-launch hooks
+    '_render_post_launch', '_expand_env_vars', '_eval_post_launch_condition',
+    '_PROJECT_CONFIG',
     # Health
     '_HEALTH_PATTERNS', '_docker_logs', '_analyze_container_log',
 ]
@@ -223,6 +227,85 @@ def _load_project_config() -> dict:
 
 _PROJECT_CONFIG = _load_project_config()
 
+
+def _expand_env_vars(text: str) -> str:
+    """Expand ${VAR:-default} and $VAR patterns using _state and os.environ."""
+    import re as _re2
+    def _sub(m):
+        var, default = m.group(1), m.group(2) or ""
+        return _state.get(var.lower(), os.environ.get(var, default))
+    text = _re2.sub(r'\$\{([A-Z_][A-Z0-9_]*)(?::?-([^}]*))?\}', _sub, text)
+    text = _re2.sub(r'\$([A-Z_][A-Z0-9_]*)', lambda m: os.environ.get(m.group(1), m.group(0)), text)
+    return text
+
+
+def _eval_post_launch_condition(cond: str, running_names: set) -> bool:
+    """Evaluate a post_launch condition string. Returns True if button should show."""
+    if not cond:
+        return True
+    cond = cond.strip()
+    func, _, arg = cond.partition("(")
+    arg = arg.rstrip(")").strip().strip('"\'')
+    if func == "stack_exists":
+        return arg in STACKS
+    if func == "stack_running":
+        return any(arg in n for n in running_names)
+    if func == "container_running":
+        return cname(arg) in running_names or arg in running_names
+    if func == "ssh_roles_exist":
+        try:
+            from .discover import _SSH_ROLES
+            return bool(_SSH_ROLES)
+        except Exception:
+            return False
+    return True
+
+
+def _render_post_launch(running_names: set, ssh_roles: dict):
+    """Build and emit post-launch buttons from SSH roles + dockfra.yaml post_launch hooks."""
+    post_btns = []
+    # SSH role buttons (auto-discovered)
+    for role, ri in ssh_roles.items():
+        p = _state.get(f"ssh_{role}_port", ri.get("port", "22"))
+        post_btns.append({"label": f"{ri['icon']} SSH {role.capitalize()}", "value": f"ssh_info::{role}::{p}"})
+    # Virtual developer: app/ not cloned yet but GIT_REPO_URL is set
+    if "developer" not in ssh_roles and not (ROOT / "app").is_dir() and _state.get("git_repo_url"):
+        dev_port = _state.get("ssh_developer_port", "2200")
+        post_btns.insert(0, {"label": "🔧 SSH Developer", "value": f"ssh_info::developer::{dev_port}"})
+    # Config-driven hooks from dockfra.yaml
+    for hook in _PROJECT_CONFIG.get("post_launch", []):
+        cond = hook.get("condition", "")
+        if not _eval_post_launch_condition(cond, running_names):
+            continue
+        label = hook.get("label", "")
+        if "url" in hook:
+            url = _expand_env_vars(hook["url"])
+            post_btns.append({"label": label, "value": f"open_url::{url}"})
+        elif "action" in hook:
+            post_btns.append({"label": label, "value": hook["action"]})
+    # Fallback built-in buttons (always shown unless overridden by config)
+    _config_actions = {h.get("action") for h in _PROJECT_CONFIG.get("post_launch", []) if "action" in h}
+    _builtin = [
+        ("ticket_create_wizard", lambda: True),
+        ("project_stats",        lambda: True),
+        ("integrations_setup",   lambda: True),
+        ("post_launch_creds",    lambda: True),
+        ("deploy_device",        lambda: "devices" in STACKS),
+    ]
+    for action, show_fn in _builtin:
+        if action not in _config_actions and show_fn():
+            from .i18n import t as _ti
+            _labels = {
+                "ticket_create_wizard": _ti("create_ticket"),
+                "project_stats":        _ti("project_stats"),
+                "integrations_setup":   _ti("task_integrations"),
+                "post_launch_creds":    _ti("setup_github_llm"),
+                "deploy_device":        _ti("deploy_device"),
+            }
+            post_btns.append({"label": _labels[action], "value": action})
+    buttons(post_btns)
+
+
 # ── B: Auto-discover env vars from docker-compose files ───────────────────
 def _parse_compose_env_vars() -> dict:
     """Scan all docker-compose files for ${VAR:-default} patterns.
@@ -267,7 +350,10 @@ _FIELD_META: dict[str, dict] = {
     "GIT_REPO_URL":   {"desc": "URL repozytorium projektu (SSH lub HTTPS). Np. git@github.com:firma/app.git — klonowane w kontenerach dev.", "autodetect": True},
     "GIT_BRANCH":     {"desc": "Gałąź git do klonowania/checkoutu w kontenerze developer. Domyślnie: main.", "autodetect": True},
     "OPENROUTER_API_KEY": {"desc": "Klucz API OpenRouter.ai — wymagany dla poleceń ask / implement / review w kontenerach SSH."},
+    "ANTHROPIC_API_KEY": {"desc": "Klucz API Anthropic — wymagany dla Claude Code CLI oraz modeli Anthropica."},
     "LLM_MODEL":      {"desc": "Model AI asystenta kodu. Gemini Flash 1.5 — szybki i tani. GPT-4o — najlepszy, droższy."},
+    "FIX_LLM_ENABLED": {"desc": "Fix LLM: nadzór AI nad błędami shell/pipeline. Włącz, aby LLM analizował problemy i zadawał pytania."},
+    "FIX_LLM_MODEL":   {"desc": "Model dla Fix LLM. Puste = użyj LLM_MODEL."},
     "DEPLOY_MODE":    {"desc": "Tryb deployu: local (bez Traefik) lub production (z Traefik, HTTPS, domenami).",
                        "type": "select", "options": [("local", "Local (bez proxy)"), ("production", "Production (Traefik+HTTPS)")]},
     "APP_DEBUG":      {"desc": "Tryb debugowania: false = produkcja (ciche logi); true = szczegółowe logi i stack trace.",
@@ -526,12 +612,45 @@ for _e in ENV_SCHEMA:
     _ENV_TO_STATE[_k] = _STATE_KEY_ALIASES.get(_k, _k.lower())
 _STATE_TO_ENV = {v: k for k, v in _ENV_TO_STATE.items()}
 
+_STATE_FILE = WIZARD_DIR / ".state.json"
+
+# Keys that must NOT be persisted (secrets / per-session only)
+_STATE_SKIP_PERSIST = frozenset({
+    "_lang", "step",
+    "openrouter_key", "anthropic_api_key", "github_token",
+    "jira_token", "trello_token", "linear_token",
+})
+
+
+def save_state():
+    """Persist non-sensitive _state keys to dockfra/.state.json."""
+    try:
+        data = {k: v for k, v in _state.items() if k not in _STATE_SKIP_PERSIST}
+        _STATE_FILE.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def load_state() -> dict:
+    """Load persisted state from dockfra/.state.json. Returns {} on error."""
+    try:
+        if _STATE_FILE.exists():
+            return json.loads(_STATE_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+
 def reset_state():
     global _state
     env = load_env()
     _state = {"step": "welcome"}
     for env_key, state_key in _ENV_TO_STATE.items():
         _state[state_key] = env.get(env_key, "")
+    # Overlay persisted non-sensitive state (env values take precedence for secrets)
+    for k, v in load_state().items():
+        if k not in _STATE_SKIP_PERSIST and not _state.get(k):
+            _state[k] = v
     _conversation.clear()
     _logs.clear()
 

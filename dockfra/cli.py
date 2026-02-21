@@ -22,6 +22,7 @@ Usage:
 import sys, os, json, time, threading, textwrap, re, argparse
 import urllib.request, urllib.error
 from pathlib import Path
+from .i18n import t, set_lang
 
 BASE_URL = os.environ.get("DOCKFRA_URL", "http://localhost:5050")
 
@@ -111,33 +112,33 @@ def _render_md(text):
 
 def _render_result(items):
     for item in items:
-        t = item.get("type", "")
-        if t == "message":
+        wtype = item.get("type", "")
+        if wtype == "message":
             role = item.get("role", "bot")
             text = _render_md(item.get("text", "")).strip()
             prefix = bold("🤖 ") if role == "bot" else bold(purple("👤 "))
             for i, ln in enumerate(text.splitlines()):
                 print(("   " if i else prefix) + ln)
-        elif t == "buttons":
+        elif wtype == "buttons":
             print()
             for b in item.get("items", []):
                 print(f"  {purple('▶')} {b['label']:<30} {dim(repr(b['value']))}")
-        elif t == "status_row":
+        elif wtype == "status_row":
             for c in item.get("items", []):
                 ok   = c.get("ok", False)
                 icon = green("🟢") if ok else red("🔴")
                 print(f"  {icon} {c['name']:<38} {dim(c.get('detail',''))}")
-        elif t == "progress":
+        elif wtype == "progress":
             icon = green("✅") if item.get("done") else red("❌") if item.get("error") else yellow("⏳")
             print(f"  {icon} {item.get('label','')}")
-        elif t == "code":
+        elif wtype == "code":
             print(dim(item.get("value", "")))
-        elif t == "action_grid":
+        elif wtype == "action_grid":
             run_val = item.get("run_value", "")
             cmds = item.get("commands", [])
             if cmds:
                 print()
-                print(bold("  Dostępne komendy:"))
+                print(bold(f"  {t('cli_available_commands')}"))
                 for i, c in enumerate(cmds, 1):
                     desc = c.get("desc", "")
                     params = c.get("params", [])
@@ -145,11 +146,11 @@ def _render_result(items):
                     tty_mark = dim(" [TTY]") if c.get("tty") else ""
                     print(f"  {cyan(f'{i:>2})')} {bold(c['cmd']):<24} {desc}{tty_mark}")
                     if param_str:
-                        print(f"       {dim('parametry:')} {param_str}")
+                        print(f"       {dim(t('cli_params'))} {param_str}")
                 print()
-                print(dim(f"  Uruchom: dockfra cli action \"ssh_cmd::<role>::<cmd>::<arg>\""))
+                print(dim(f"  {t('cli_run_hint')}"))
                 print(dim(f"  Lub via REST: POST /api/action {{\"action\":\"{run_val}\", \"form\":{{\"ssh_cmd\":\"<cmd>\",\"ssh_arg\":\"<arg>\"}}}}"))
-        elif t == "config_prompt":
+        elif wtype == "config_prompt":
             title = item.get("title", "")
             desc = item.get("desc", "")
             fields = item.get("fields", [])
@@ -158,7 +159,7 @@ def _render_result(items):
                 for ln in desc.splitlines():
                     print(f"     {dim(ln)}")
             if fields:
-                print(f"     {dim('Wymagane pola:')}")
+                print(f"     {dim(t('cli_required_fields'))}")
                 for fld in fields:
                     ftype = fld.get('type', 'text')
                     print(f"       {cyan(fld['name'])}: {fld.get('label','')} {dim('[' + ftype + ']')}")
@@ -175,7 +176,7 @@ def cmd_status(client, args):
         ok = "Up" in c["status"] and "Restarting" not in c["status"]
         print(f"  {green('🟢') if ok else red('🔴')} {c['name']:<40} {dim(c['status'])}")
     if data.get("findings"):
-        print(bold(f"\n🔍 Problems ({len(data['findings'])}):\n"))
+        print(bold(f"\n{t('cli_problems_title', n=len(data['findings']))}\n"))
         for f in data["findings"]:
             print(f"  {red('▶')} {bold(f['container'])} — {dim(f['status'])}")
             finding = re.sub(r'```[^\n]*', '', f.get("finding", ""))
@@ -224,17 +225,17 @@ def cmd_tickets(client, args):
     data, err = client._get("/api/tickets")
     if err: print(red(f"❌ {err}")); return 1
     if not data:
-        print(dim("  Brak ticketów.")); return 0
+        print(dim(f"  {t('cli_no_tickets')}")); return 0
     status_icon = {"open": "○", "in_progress": "◐", "review": "◑", "done": "●", "closed": "●"}
     status_clr  = {"open": cyan, "in_progress": yellow, "review": purple, "done": green, "closed": dim}
     prio_icon   = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}
-    print(bold(f"\n🎫 Tickety ({len(data)})\n"))
+    print(bold(f"\n{t('cli_tickets_title', n=len(data))}\n"))
     for tk in data:
         si = status_icon.get(tk["status"], "○")
         sc = status_clr.get(tk["status"], dim)
         pi = prio_icon.get(tk.get("priority", ""), "⚪")
         print(f"  {sc(si + ' ' + tk['id']):<28} {pi} {bold(tk['title'])}")
-        print(f"     {dim(tk['status'])} · {dim(tk.get('assigned_to',''))} · {dim(str(len(tk.get('comments',[]))))} komentarzy")
+        print(f"     {dim(tk['status'])} · {dim(tk.get('assigned_to',''))} · {dim(str(len(tk.get('comments',[]))))} {t('cli_comments')}")
     print()
     return 0
 
@@ -249,10 +250,10 @@ def cmd_diff(client, args):
     diff = data.get("diff", "")
     print(bold(f"\n📄 Diff: {tid}") + f" — {data.get('title', '')}\n")
     if not commits:
-        print(yellow("  Brak commitów dla tego ticketu."))
-        print(dim("  Commity muszą zawierać ID ticketu w wiadomości.\n"))
+        print(yellow(f"  {t('cli_no_commits')}"))
+        print(dim(f"  {t('cli_commits_hint')}\n"))
         return 0
-    print(bold(f"  📝 Commity ({len(commits)})"))
+    print(bold(f"  {t('cli_commits_title', n=len(commits))}"))
     for c in commits:
         print(f"    {cyan(c['hash'])} {c['subject']}  {dim(c.get('repo',''))}")
     if diff:
@@ -276,7 +277,7 @@ def cmd_engines(client, args):
     if err: print(red(f"❌ {err}")); return 1
     pref = data.get("preferred", "")
     engines = data.get("engines", [])
-    print(bold(f"\n🤖 Silniki LLM\n"))
+    print(bold(f"\n{t('cli_engines_title')}\n"))
     for e in engines:
         ok = e.get("ok", False)
         icon = green("✅") if ok else red("🔴")
@@ -284,7 +285,7 @@ def cmd_engines(client, args):
         print(f"  {icon} {bold(e['name']):<25}{star}")
         print(f"     {dim(e.get('message',''))}")
     if not engines:
-        print(dim("  Brak silników."))
+        print(dim(f"  {t('cli_no_engines')}"))
     print()
     return 0
 
@@ -293,22 +294,22 @@ def cmd_dev_health(client, args):
     if err: print(red(f"❌ {err}")); return 1
     print(bold("\n🔧 SSH Developer Health\n"))
     checks = [
-        ("Kontener", data.get("container") == "running", data.get("container", "?")),
+        (t('cli_container'), data.get("container") == "running", data.get("container", "?")),
         ("Exec (SSH)", data.get("ssh") == "ok", data.get("ssh", "?")),
         ("Git repo", data.get("git", "") not in ("fail", "no repo", ""), data.get("git", "?")),
-        ("Skrypty", (data.get("scripts", 0) or 0) > 0, f"{data.get('scripts', 0)} scripts"),
+        (t('cli_scripts'), (data.get("scripts", 0) or 0) > 0, f"{data.get('scripts', 0)} scripts"),
     ]
     for label, ok, detail in checks:
         icon = green("✅") if ok else red("🔴")
         print(f"  {icon} {label:<20} {dim(str(detail))}")
     eng = data.get("engines", {})
     if eng:
-        print(bold("\n  Silniki:"))
+        print(bold(f"\n  {t('cli_engines_label')}"))
         for name, avail in eng.items():
             icon = green("✅") if avail else red("🔴")
             print(f"    {icon} {name}")
     overall = data.get("ok", False)
-    print(f"\n  {'✅ ' + green('Developer OK') if overall else '🔴 ' + red('Developer ma problemy')}\n")
+    print(f"\n  {'✅ ' + green(t('cli_dev_ok')) if overall else '🔴 ' + red(t('cli_dev_problems'))}\n")
     return 0 if overall else 1
 
 def cmd_dev_logs(client, args):
@@ -388,9 +389,9 @@ def cmd_test(client, args):
     # Summary
     print()
     if errors:
-        print(red(f"  ❌ {len(errors)} problem(s): {', '.join(errors)}"))
+        print(red(f"  {t('cli_n_problems', n=len(errors), details=', '.join(errors))}"))
     else:
-        print(green(bold("  ✅ All tests passed!")))
+        print(green(bold(f"  {t('cli_all_tests_passed')}")))
     print()
     return 1 if errors else 0
 
@@ -438,11 +439,11 @@ def cmd_doctor(client, args):
     # Summary
     print()
     if fixes:
-        print(bold("  🔧 Suggested fixes:"))
+        print(bold(f"  {t('cli_suggested_fixes')}"))
         for f in fixes:
             print(f"    {purple('→')} {f}")
     else:
-        print(green(bold("  ✅ System healthy — no issues found!")))
+        print(green(bold(f"  {t('cli_system_healthy')}")))
     print()
     return 1 if fixes else 0
 
@@ -480,16 +481,16 @@ def run_repl(client):
         rl.set_history_length(500)
         import atexit; atexit.register(lambda: rl.write_history_file(str(hist_path)))
         opts = list(COMMANDS) + ["help", "quit"]
-        rl.set_completer(lambda t, s: ([o for o in opts if o.startswith(t)] + [None])[s])
+        rl.set_completer(lambda txt, s: ([o for o in opts if o.startswith(txt)] + [None])[s])
         rl.parse_and_bind("tab: complete")
     except ImportError:
         pass
 
-    print(bold(cyan("\n🏗  Dockfra CLI — interactive shell")))
+    print(bold(cyan(f"\n{t('cli_interactive')}")))
     print(dim(f"   Wizard: {client.base}"))
     print(dim("   Commands: help | test | tickets | engines | dev-health | dev-logs | doctor | quit\n"))
     if not client.ping():
-        print(red(f"⚠️  Wizard offline at {client.base}"))
+        print(red(f"⚠️  {t('cli_wizard_offline', url=client.base)}"))
         print(yellow("   Start:  dockfra\n"))
 
     while True:
@@ -712,8 +713,10 @@ def main():
     p.add_argument("args",    nargs="*", help="Command arguments")
     p.add_argument("--url",   default=BASE_URL,  help="Wizard base URL")
     p.add_argument("--tui",   action="store_true", help="Launch three-panel TUI (curses)")
+    p.add_argument("--lang",  default=os.environ.get("DOCKFRA_LANG", "pl"), help="UI language (pl,en,de,fr,es,it,pt,cs,ro,nl)")
     ns = p.parse_args()
 
+    set_lang(ns.lang)
     client = WizardClient(ns.url)
 
     if ns.tui or (not ns.command):

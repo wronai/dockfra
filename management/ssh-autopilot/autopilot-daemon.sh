@@ -5,6 +5,9 @@ set -uo pipefail
 export PYTHONPATH="/shared/lib:$PYTHONPATH"
 [ -f ~/.service-env ] && export $(grep -v '^#' ~/.service-env | xargs) 2>/dev/null
 
+AUTOPILOT_ENABLED="${AUTOPILOT_ENABLED:-true}"
+AUTOPILOT_INTERVAL="${AUTOPILOT_INTERVAL:-120}"
+
 CYCLE=0
 log() { echo "$(date -Iseconds) [autopilot] $*"; }
 
@@ -74,7 +77,7 @@ print(resp)
     done
 }
 
-log "Autopilot daemon starting (interval=${AUTOPILOT_INTERVAL:-120}s, enabled=${AUTOPILOT_ENABLED:-true})"
+log "Autopilot daemon starting (interval=${AUTOPILOT_INTERVAL}s, enabled=${AUTOPILOT_ENABLED})"
 sleep 30
 
 while true; do
@@ -84,5 +87,5 @@ while true; do
         run_cycle 2>&1 || log "Cycle error (continuing)"
     fi
 
-    sleep "${AUTOPILOT_INTERVAL:-120}"
+    sleep "${AUTOPILOT_INTERVAL}"
 done

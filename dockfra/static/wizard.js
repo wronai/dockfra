@@ -375,6 +375,7 @@ socket.on('widget', d => {
   else if (d.type === 'progress')   renderProgress(d);
   else if (d.type === 'action_grid') renderActionGrid(d);
   else if (d.type === 'config_prompt') renderConfigPrompt(d);
+  else if (d.type === 'open_url') { window.open(d.url, '_blank', 'noopener'); }
 });
 
 function collectForm(){

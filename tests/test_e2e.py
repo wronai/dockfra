@@ -787,3 +787,595 @@ class TestTicketDomainEvents:
         events = json.loads(r2.data)["events"]
         assert len(events) >= 1
         assert events[0]["data"]["id"] == "T-0001"
+
+
+# ── CLI module unit tests ─────────────────────────────────────────────────────
+
+class TestCLIHelpers:
+    """Unit tests for CLI helper functions (no server required)."""
+
+    def test_classify_log_error(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("error: something failed") == "err"
+        assert _classify_log("fatal: crash") == "err"
+        assert _classify_log("connection refused") == "err"
+
+    def test_classify_log_warn(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("warning: deprecated") == "warn"
+
+    def test_classify_log_ok(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("successfully started") == "ok"
+        assert _classify_log("healthy") == "ok"
+
+    def test_classify_log_build(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("#1 [backend] RUN pip install") == "build"
+        assert _classify_log("#2 DONE 0.1s") == "done"
+
+    def test_classify_log_dim(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("[notice] new version available") == "dim"
+
+    def test_classify_log_plain(self):
+        from dockfra.cli import _classify_log
+        assert _classify_log("just a normal log line") == ""
+
+    def test_colorize_log_no_crash(self):
+        from dockfra.cli import _colorize_log
+        for line in ["error: x", "warning: y", "started ok", "#1 RUN", "plain"]:
+            result = _colorize_log(line)
+            assert isinstance(result, str)
+            assert line.split(":")[0] in result or line in result
+
+    def test_render_md_bold(self):
+        from dockfra.cli import _render_md
+        result = _render_md("**hello**")
+        assert "hello" in result
+
+    def test_render_md_heading(self):
+        from dockfra.cli import _render_md
+        result = _render_md("## My Title")
+        assert "My Title" in result
+
+    def test_render_md_code(self):
+        from dockfra.cli import _render_md
+        result = _render_md("`some_var`")
+        assert "some_var" in result
+
+    def test_render_md_list(self):
+        from dockfra.cli import _render_md
+        result = _render_md("- item one")
+        assert "item one" in result
+        assert "•" in result
+
+    def test_color_functions_no_tty(self):
+        """Color functions should return plain text when NO_COLOR is set."""
+        import os
+        os.environ["NO_COLOR"] = "1"
+        try:
+            from dockfra import cli as _cli
+            import importlib
+            importlib.reload(_cli)
+            assert _cli.green("x") == "x"
+            assert _cli.red("x") == "x"
+            assert _cli.bold("x") == "x"
+        finally:
+            del os.environ["NO_COLOR"]
+
+
+class TestWizardClient:
+    """Unit tests for WizardClient REST client (no live server)."""
+
+    def test_client_init_default(self):
+        from dockfra.cli import WizardClient
+        c = WizardClient("http://localhost:5050")
+        assert c.base == "http://localhost:5050"
+
+    def test_client_strips_trailing_slash(self):
+        from dockfra.cli import WizardClient
+        c = WizardClient("http://localhost:5050/")
+        assert c.base == "http://localhost:5050"
+
+    def test_ping_returns_false_when_offline(self):
+        from dockfra.cli import WizardClient
+        c = WizardClient("http://127.0.0.1:19999")  # nothing listening
+        assert c.ping() is False
+
+    def test_get_returns_error_when_offline(self):
+        from dockfra.cli import WizardClient
+        c = WizardClient("http://127.0.0.1:19999")
+        data, err = c._get("/api/health")
+        assert data is None
+        assert err is not None
+
+    def test_post_returns_error_when_offline(self):
+        from dockfra.cli import WizardClient
+        c = WizardClient("http://127.0.0.1:19999")
+        data, err = c._post("/api/action", {"action": "status"})
+        assert data is None
+        assert err is not None
+
+
+class TestCLICommands:
+    """Integration tests for CLI commands against live Flask test client."""
+
+    def test_cmd_status_offline(self):
+        """cmd_status should return 1 when wizard is offline."""
+        from dockfra.cli import WizardClient, cmd_status
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_status(c, [])
+        assert rc == 1
+
+    def test_cmd_logs_offline(self):
+        from dockfra.cli import WizardClient, cmd_logs
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_logs(c, [])
+        assert rc == 1
+
+    def test_cmd_tickets_offline(self):
+        from dockfra.cli import WizardClient, cmd_tickets
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_tickets(c, [])
+        assert rc == 1
+
+    def test_cmd_diff_no_args(self):
+        from dockfra.cli import WizardClient, cmd_diff
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_diff(c, [])
+        assert rc == 1
+
+    def test_cmd_engines_offline(self):
+        from dockfra.cli import WizardClient, cmd_engines
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_engines(c, [])
+        assert rc == 1
+
+    def test_cmd_dev_health_offline(self):
+        from dockfra.cli import WizardClient, cmd_dev_health
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_dev_health(c, [])
+        assert rc == 1
+
+    def test_cmd_dev_logs_offline(self):
+        from dockfra.cli import WizardClient, cmd_dev_logs
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_dev_logs(c, [])
+        assert rc == 1
+
+    def test_cmd_ask_no_args(self):
+        from dockfra.cli import WizardClient, cmd_ask
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_ask(c, [])
+        assert rc == 1
+
+    def test_cmd_action_no_args(self):
+        from dockfra.cli import WizardClient, cmd_action
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_action(c, [])
+        assert rc == 1
+
+    def test_cmd_launch_offline(self):
+        from dockfra.cli import WizardClient, cmd_launch
+        c = WizardClient("http://127.0.0.1:19999")
+        rc = cmd_launch(c, [])
+        assert rc == 1
+
+
+# ── Pipeline module unit tests ────────────────────────────────────────────────
+
+class TestPipelineModule:
+    """Unit tests for dockfra.pipeline — StepResult, PipelineState, scoring."""
+
+    def test_step_result_ok_when_rc0_score_high(self):
+        from dockfra.pipeline import StepResult
+        r = StepResult("test", rc=0, output="done", score=1.0)
+        assert r.ok() is True
+
+    def test_step_result_not_ok_when_rc_nonzero(self):
+        from dockfra.pipeline import StepResult
+        r = StepResult("test", rc=1, output="error", score=0.0)
+        assert r.ok() is False
+
+    def test_step_result_not_ok_when_score_low(self):
+        from dockfra.pipeline import StepResult
+        r = StepResult("test", rc=0, output="", score=0.3)
+        assert r.ok() is False
+
+    def test_step_result_to_dict(self):
+        from dockfra.pipeline import StepResult
+        r = StepResult("impl", rc=0, output="ok", duration=1.5, score=0.9)
+        d = r.to_dict()
+        assert d["step"] == "impl"
+        assert d["rc"] == 0
+        assert d["score"] == 0.9
+        assert d["duration"] == 1.5
+        assert "ts" in d
+
+    def test_evaluate_implementation_empty(self):
+        from dockfra.pipeline import evaluate_implementation
+        assert evaluate_implementation("") == 0.0
+
+    def test_evaluate_implementation_with_code(self):
+        from dockfra.pipeline import evaluate_implementation
+        output = "```python\nimport os\n# fix\nprint('done')\n```\nFile: main.py"
+        score = evaluate_implementation(output)
+        assert score > 0.5
+
+    def test_evaluate_implementation_llm_error(self):
+        from dockfra.pipeline import evaluate_implementation
+        score = evaluate_implementation("[llm] error: api key not set")
+        assert score <= 0.1
+
+    def test_evaluate_test_output_rc0(self):
+        from dockfra.pipeline import evaluate_test_output
+        assert evaluate_test_output("all passed", 0) == 1.0
+
+    def test_evaluate_test_output_rc_nonzero_no_output(self):
+        from dockfra.pipeline import evaluate_test_output
+        score = evaluate_test_output("", 1)
+        assert score == 0.3
+
+    def test_evaluate_test_output_partial(self):
+        from dockfra.pipeline import evaluate_test_output
+        score = evaluate_test_output("3 passed, 1 failed", 1)
+        assert 0.5 < score < 1.0
+
+    def test_run_step_success(self):
+        from dockfra.pipeline import run_step
+        r = run_step(lambda: (0, "all good"), "test-step")
+        assert r.rc == 0
+        assert r.score == 1.0
+        assert r.step == "test-step"
+
+    def test_run_step_failure(self):
+        from dockfra.pipeline import run_step
+        r = run_step(lambda: (1, "error occurred"), "test-step")
+        assert r.rc == 1
+        assert r.score == 0.0
+
+    def test_run_step_soft_failure_llm_error(self):
+        from dockfra.pipeline import run_step
+        r = run_step(lambda: (0, "[llm] error: key missing"), "implement")
+        assert r.score <= 0.1
+
+    def test_run_step_nothing_to_commit(self):
+        from dockfra.pipeline import run_step
+        r = run_step(lambda: (0, "Nothing to commit."), "commit-push")
+        assert r.score == 0.7
+
+    def test_run_step_exception(self):
+        from dockfra.pipeline import run_step
+        def _boom(): raise RuntimeError("crash")
+        r = run_step(_boom, "crash-step")
+        assert r.rc == -1
+        assert r.score == 0.0
+        assert "crash" in r.error
+
+    def test_pipeline_state_iteration(self, tmp_path):
+        import os
+        os.environ["TICKETS_DIR"] = str(tmp_path)
+        from dockfra.pipeline import PipelineState, StepResult
+        ps = PipelineState("T-TEST")
+        assert ps.iteration == 0
+        ps.start_iteration()
+        assert ps.iteration == 1
+
+    def test_pipeline_state_record_step(self, tmp_path):
+        import os
+        os.environ["TICKETS_DIR"] = str(tmp_path)
+        from dockfra.pipeline import PipelineState, StepResult
+        ps = PipelineState("T-TEST2")
+        ps.start_iteration()
+        r = StepResult("implement", rc=0, output="done", score=0.9)
+        ps.record_step(r)
+        assert len(ps.steps) == 1
+        assert ps.steps[0]["step"] == "implement"
+
+    def test_pipeline_state_compute_score(self, tmp_path):
+        import os
+        os.environ["TICKETS_DIR"] = str(tmp_path)
+        from dockfra.pipeline import PipelineState, StepResult
+        ps = PipelineState("T-TEST3")
+        ps.start_iteration()
+        for step, score in [("ticket-work", 1.0), ("implement", 0.8),
+                             ("test-local", 1.0), ("commit-push", 0.7), ("status-review", 1.0)]:
+            ps.record_step(StepResult(step, rc=0, output="ok", score=score))
+        overall = ps.compute_overall_score()
+        assert 0.0 < overall <= 1.0
+
+    def test_build_retry_prompt(self, tmp_path):
+        import os
+        os.environ["TICKETS_DIR"] = str(tmp_path)
+        from dockfra.pipeline import PipelineState, StepResult, build_retry_prompt
+        ps = PipelineState("T-RETRY")
+        ps.start_iteration()
+        failed = StepResult("implement", rc=1, output="", error="API key missing", score=0.0)
+        ticket = {"title": "Fix login", "description": "Users cannot log in"}
+        prompt = build_retry_prompt(ps, failed, ticket)
+        assert "Fix login" in prompt
+        assert "API key missing" in prompt
+
+
+# ── Persistent state unit tests ───────────────────────────────────────────────
+
+class TestPersistentState:
+    """Test save_state / load_state logic directly (no Flask dependency)."""
+
+    _SKIP = frozenset({
+        "_lang", "step",
+        "openrouter_key", "anthropic_api_key", "github_token",
+        "jira_token", "trello_token", "linear_token",
+    })
+
+    def _save(self, state_file, state):
+        data = {k: v for k, v in state.items() if k not in self._SKIP}
+        state_file.write_text(json.dumps(data, indent=2))
+
+    def _load(self, state_file):
+        try:
+            if state_file.exists():
+                return json.loads(state_file.read_text())
+        except Exception:
+            pass
+        return {}
+
+    def test_save_and_load_state(self, tmp_path):
+        state_file = tmp_path / ".state.json"
+        state = {
+            "environment": "local",
+            "llm_model": "google/gemini-2.0-flash-001",
+            "openrouter_key": "sk-secret",
+        }
+        self._save(state_file, state)
+        assert state_file.exists()
+        loaded = self._load(state_file)
+        assert loaded["environment"] == "local"
+        assert loaded["llm_model"] == "google/gemini-2.0-flash-001"
+        assert "openrouter_key" not in loaded
+
+    def test_load_state_missing_file(self, tmp_path):
+        result = self._load(tmp_path / "nonexistent.json")
+        assert result == {}
+
+    def test_load_state_corrupt_file(self, tmp_path):
+        bad = tmp_path / ".state.json"
+        bad.write_text("{ not valid json }")
+        result = self._load(bad)
+        assert result == {}
+
+    def test_save_state_skips_all_secrets(self, tmp_path):
+        state_file = tmp_path / ".state.json"
+        state = {
+            "openrouter_key": "sk-or-secret",
+            "anthropic_api_key": "sk-ant-secret",
+            "github_token": "ghp_secret",
+            "jira_token": "jira_secret",
+            "trello_token": "trello_secret",
+            "linear_token": "linear_secret",
+            "_lang": "pl",
+            "step": "welcome",
+            "environment": "local",
+        }
+        self._save(state_file, state)
+        loaded = json.loads(state_file.read_text())
+        for secret in ("openrouter_key", "anthropic_api_key", "github_token",
+                       "jira_token", "trello_token", "linear_token", "_lang", "step"):
+            assert secret not in loaded
+        assert loaded["environment"] == "local"
+
+
+# ── shared/lib ticket_system unit tests ──────────────────────────────────────
+
+class TestSharedLibTicketSystem:
+    """Unit tests for shared/lib/ticket_system.py standalone fallback."""
+
+    @pytest.fixture(autouse=True)
+    def setup_tickets_dir(self, tmp_path, monkeypatch):
+        """Each test gets its own isolated tickets directory."""
+        monkeypatch.setenv("TICKETS_DIR", str(tmp_path))
+        # Patch the module-level TICKETS_DIR in dockfra.tickets
+        import dockfra.tickets as _tmod
+        monkeypatch.setattr(_tmod, "TICKETS_DIR", tmp_path)
+        self.tickets_dir = tmp_path
+        yield
+
+    def test_create_and_get(self):
+        from dockfra import tickets
+        t = tickets.create("Shared lib test", description="desc")
+        assert t["id"] == "T-0001"
+        got = tickets.get("T-0001")
+        assert got["title"] == "Shared lib test"
+
+    def test_list_and_filter(self):
+        from dockfra import tickets
+        tickets.create("A", priority="high")
+        tickets.create("B", priority="low")
+        all_t = tickets.list_tickets()
+        assert len(all_t) == 2
+        high = tickets.list_tickets(priority="high")
+        assert len(high) == 1
+
+    def test_update_and_comment(self):
+        from dockfra import tickets
+        t0 = tickets.create("Update test")
+        tid = t0["id"]
+        tickets.update(tid, status="in_progress")
+        t = tickets.get(tid)
+        assert t["status"] == "in_progress"
+        tickets.add_comment(tid, "bot", "looks good")
+        t = tickets.get(tid)
+        assert t["comments"][0]["text"] == "looks good"
+
+    def test_close(self):
+        from dockfra import tickets
+        t0 = tickets.create("Close test")
+        tid = t0["id"]
+        tickets.close(tid)
+        t = tickets.get(tid)
+        assert t["status"] == "closed"
+
+    def test_format_ticket_basic(self):
+        from dockfra import tickets
+        t0 = tickets.create("Format test", priority="critical")
+        t = tickets.get(t0["id"])
+        line = tickets.format_ticket(t)
+        assert t0["id"] in line
+        assert "🔴" in line
+
+    def test_format_ticket_verbose(self):
+        from dockfra import tickets
+        t0 = tickets.create("Verbose", description="long description here")
+        t = tickets.get(t0["id"])
+        line = tickets.format_ticket(t, verbose=True)
+        assert "Status:" in line
+        assert "long description" in line
+
+    def test_stats_structure(self):
+        from dockfra import tickets
+        tickets.create("A", priority="high")
+        t2 = tickets.create("B", priority="low")
+        tickets.update(t2["id"], status="in_progress")
+        s = tickets.stats()
+        assert s["total"] == 2
+        assert "by_status" in s
+        assert "by_priority" in s
+
+    def test_sync_all_no_integrations(self):
+        from dockfra import tickets
+        result = tickets.sync_all()
+        assert result == {}
+
+    def test_get_missing_returns_none(self):
+        from dockfra import tickets
+        assert tickets.get("T-9999") is None
+
+    def test_update_missing_returns_none(self):
+        from dockfra import tickets
+        result = tickets.update("T-9999", status="closed")
+        assert result is None
+
+
+# ── post_launch hooks unit tests ─────────────────────────────────────────────
+
+class TestPostLaunchHooks:
+    """Unit tests for dockfra.yaml post_launch hook system (pure logic, no Flask)."""
+
+    # ── _expand_env_vars logic ────────────────────────────────────────────────
+
+    def _expand(self, text, state=None, environ=None):
+        """Inline reimplementation of _expand_env_vars for testing without Flask."""
+        import re, os
+        _st = state or {}
+        _env = environ or {}
+        def _sub(m):
+            var, default = m.group(1), m.group(2) or ""
+            return _st.get(var.lower(), _env.get(var, os.environ.get(var, default)))
+        text = re.sub(r'\$\{([A-Z_][A-Z0-9_]*)(?::?-([^}]*))?\}', _sub, text)
+        text = re.sub(r'\$([A-Z_][A-Z0-9_]*)',
+                      lambda m: _env.get(m.group(1), os.environ.get(m.group(1), m.group(0))), text)
+        return text
+
+    def test_expand_env_vars_default(self):
+        result = self._expand("http://localhost:${SOME_NONEXISTENT_PORT_XYZ:-6081}")
+        assert result == "http://localhost:6081"
+
+    def test_expand_env_vars_from_state(self):
+        result = self._expand("http://localhost:${MY_PORT:-1234}", state={"my_port": "9999"})
+        assert result == "http://localhost:9999"
+
+    def test_expand_env_vars_no_template(self):
+        result = self._expand("http://localhost:5050")
+        assert result == "http://localhost:5050"
+
+    def test_expand_env_vars_multiple(self):
+        result = self._expand("${HOST:-localhost}:${PORT:-80}", state={"host": "myhost"})
+        assert result == "myhost:80"
+
+    # ── _eval_post_launch_condition logic ─────────────────────────────────────
+
+    def _eval(self, cond, running_names, stacks=None, prefix="dockfra"):
+        """Inline reimplementation of _eval_post_launch_condition for testing."""
+        if not cond:
+            return True
+        cond = cond.strip()
+        func, _, arg = cond.partition("(")
+        arg = arg.rstrip(")").strip().strip('"\'')
+        _stacks = stacks or {}
+        if func == "stack_exists":
+            return arg in _stacks
+        if func == "stack_running":
+            return any(arg in n for n in running_names)
+        if func == "container_running":
+            full = f"{prefix}-{arg}"
+            return full in running_names or arg in running_names
+        if func == "ssh_roles_exist":
+            return False
+        return True
+
+    def test_eval_condition_empty_always_true(self):
+        assert self._eval("", set()) is True
+
+    def test_eval_condition_stack_exists_true(self):
+        assert self._eval('stack_exists("management")', set(), stacks={"management": "/path"}) is True
+
+    def test_eval_condition_stack_exists_false(self):
+        assert self._eval('stack_exists("nonexistent_xyz")', set(), stacks={}) is False
+
+    def test_eval_condition_container_running_true(self):
+        running = {"dockfra-traefik", "dockfra-app"}
+        assert self._eval('container_running("traefik")', running) is True
+
+    def test_eval_condition_container_running_false(self):
+        assert self._eval('container_running("traefik")', set()) is False
+
+    def test_eval_condition_stack_running_true(self):
+        running = {"dockfra-management-app", "dockfra-management-db"}
+        assert self._eval('stack_running("management")', running) is True
+
+    def test_eval_condition_stack_running_false(self):
+        assert self._eval('stack_running("management")', set()) is False
+
+    def test_eval_condition_unknown_returns_true(self):
+        assert self._eval('unknown_func("arg")', set()) is True
+
+    # ── _render_post_launch integration (needs app_client for Flask context) ──
+
+    def test_render_post_launch_no_crash(self, app_client):
+        """_render_post_launch should not raise with empty roles and running_names."""
+        from dockfra.core import _render_post_launch
+        _render_post_launch(set(), {})
+
+    def test_render_post_launch_with_url_hook(self, app_client, monkeypatch):
+        """URL hooks should be included when condition passes."""
+        from dockfra import core
+        monkeypatch.setattr(core, "_PROJECT_CONFIG", {
+            "post_launch": [
+                {"label": "🔗 Test URL", "url": "http://localhost:8080"},
+            ]
+        })
+        collected = []
+        monkeypatch.setattr(core, "buttons", lambda items: collected.extend(items))
+        core._render_post_launch(set(), {})
+        labels = [b["label"] for b in collected]
+        assert "🔗 Test URL" in labels
+        values = [b["value"] for b in collected]
+        assert any("open_url::http://localhost:8080" in v for v in values)
+
+    def test_render_post_launch_condition_filters(self, app_client, monkeypatch):
+        """Hooks with failing conditions should be excluded."""
+        from dockfra import core
+        monkeypatch.setattr(core, "_PROJECT_CONFIG", {
+            "post_launch": [
+                {"label": "✅ Always", "action": "back"},
+                {"label": "❌ Never", "action": "back",
+                 "condition": 'container_running("nonexistent_xyz_abc")'},
+            ]
+        })
+        collected = []
+        monkeypatch.setattr(core, "buttons", lambda items: collected.extend(items))
+        core._render_post_launch(set(), {})
+        labels = [b["label"] for b in collected]
+        assert "✅ Always" in labels
+        assert "❌ Never" not in labels

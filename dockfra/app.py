@@ -16,7 +16,7 @@ from .core import (
     msg, buttons, progress, mask, clear_widgets,
     run_cmd, docker_ps, _analyze_container_log,
     _local_interfaces, _arp_devices, _devices_env_ip, _subnet_ping_sweep,
-    _docker_container_env, _emit_log_error,
+    _docker_container_env, _emit_log_error, save_state,
     json, subprocess, threading, time, request, emit, render_template, _socket,
 )
 from .steps import (
@@ -1113,6 +1113,7 @@ def _step_test_llm_key(form: dict, return_action: str = ""):
             _state["llm_model"] = model
             _os.environ["OPENROUTER_API_KEY"] = key
             save_env({"OPENROUTER_API_KEY": key, "LLM_MODEL": model})
+            save_state()
             msg("💾 Klucz i model zapisane.")
             btn_items = [{"label": "🏠 Menu", "value": "back"}]
             if return_action:
@@ -1203,6 +1204,8 @@ def _step_set_engine(engine_id: str):
     """Set preferred dev engine."""
     clear_widgets()
     _engines.set_preferred_engine(engine_id)
+    _state["preferred_engine"] = engine_id
+    save_state()
     info = _engines.get_engine_info(engine_id)
     name = info["name"] if info else engine_id
     msg(f"✅ **Silnik ustawiony:** `{name}`\n\n"
@@ -1377,6 +1380,12 @@ def _dispatch(value: str, form: dict):
     if value.startswith("manager_reject::"):
         tid = value.split("::", 1)[1]
         _step_manager_reject(tid)
+        return True
+    if value.startswith("open_url::"):
+        url = value.split("::", 1)[1]
+        msg(f"🔗 **Link:** [{url}]({url})")
+        widget({"type": "open_url", "url": url})
+        buttons([{"label": t('menu'), "value": "back"}])
         return True
     if value.startswith("open_github::"):
         repo = value.split("::", 1)[1]
@@ -1585,7 +1594,57 @@ def _dispatch(value: str, form: dict):
                                 _re.search(p, r2.output or "", _re.IGNORECASE)
                                 for p in _AUTH_STOP
                             )
-                            if _is_auth_error:
+                            # ── Auto-fallback: test + try other engines when Claude/auth fails ──
+                            fallback_success = False
+                            if engine_id == "claude_code" or _is_auth_error:
+                                msg("🔁 **Silnik nie działa** — testuję i uruchamiam inne narzędzia.")
+                                fallback_ids = [e["id"] for e in _engines.ENGINE_DEFS if e["id"] != engine_id]
+                                for cand_id in fallback_ids:
+                                    cand_info = _engines.get_engine_info(cand_id)
+                                    cand_name = cand_info["name"] if cand_info else cand_id
+                                    ok, test_msg = _engines.test_engine(cand_id, container_, user_, llm_env)
+                                    if not ok:
+                                        msg(f"⚠️ `{cand_name}` — test nieudany: {test_msg[:120]}")
+                                        pstate.record_decision("engine_fallback_test_fail", f"{cand_id}: {test_msg[:120]}")
+                                        continue
+                                    msg(f"✅ `{cand_name}` — test OK: {test_msg[:120]}")
+                                    pstate.record_decision("engine_fallback_test_ok", f"{cand_id}: {test_msg[:120]}")
+
+                                    cand_cmd = _engines.get_implement_cmd(cand_id, arg_)
+                                    msg(f"### 🤖 Fallback: `{cand_name}` (test OK)")
+                                    progress(f"🤖 {cand_name} implementuje...")
+
+                                    def _engine_exec_fallback(cmd=cand_cmd, env=llm_env, _engine_id=cand_id):
+                                        shell = (
+                                            f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; "
+                                            f"then '/home/{user_}/scripts/engine-implement.sh' {_engine_id} {arg_}; "
+                                            f"else {cmd}; fi"
+                                        )
+                                        cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+                                        return run_cmd(cmd_parts)
+
+                                    r2_alt = run_step(_engine_exec_fallback, "implement")
+                                    progress(f"🤖 {cand_name}", done=True)
+                                    r2_alt.score = evaluate_implementation(r2_alt.output)
+                                    r2_alt.meta["engine"] = cand_id
+                                    pstate.record_step(r2_alt)
+                                    if r2_alt.ok():
+                                        msg(f"✅ Implementacja via `{cand_name}` (wynik: {r2_alt.score:.0%})\n```\n{r2_alt.output[:3000]}\n```")
+                                        pstate.record_decision("engine_fallback_success", f"{engine_id} -> {cand_id}")
+                                        _engines.set_preferred_engine(cand_id)
+                                        _state["preferred_engine"] = cand_id
+                                        save_state()
+                                        engine_id = cand_id
+                                        eng_name = cand_name
+                                        r2 = r2_alt
+                                        fallback_success = True
+                                        break
+                                    msg(f"⚠️ implement via `{cand_name}` (kod {r2_alt.rc}, wynik: {r2_alt.score:.0%}): {r2_alt.output[:1000]}")
+                                    _fired_alt: set = set()
+                                    for _line in (r2_alt.output or "").splitlines():
+                                        _emit_log_error(_line, _fired_alt)
+
+                            if _is_auth_error and not fallback_success:
                                 pstate.record_decision("auth_error_pause", f"engine {engine_id} auth error — czekam na użytkownika")
                                 msg(f"🛑 **Silnik `{eng_name}` wymaga autoryzacji.**\n\n"
                                     f"Wybierz co zrobić:")
@@ -1767,6 +1826,7 @@ def _dispatch(value: str, form: dict):
                 env_updates[k] = str(v).strip()
         if env_updates:
             save_env(env_updates)
+            save_state()
         stacks_str = value.split("::",1)[1]
         _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(","))==1 else "all"
         step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment","local")})

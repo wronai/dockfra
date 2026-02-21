@@ -1,0 +1,39 @@
+# dockfra.yaml — project-specific Dockfra configuration
+# Place this file in your project root (next to management/, devices/, app/).
+#
+# post_launch: config-driven buttons shown after successful infrastructure launch.
+# Each entry supports:
+#   label:     Button label (emoji + text)
+#   action:    Wizard action value (maps to existing step functions)
+#   url:       URL to open in new tab (supports ${VAR:-default} expansion)
+#   condition: Optional — show button only when condition is true:
+#     stack_exists("name")      — stack folder exists
+#     stack_running("name")     — any container with "name" in its name is Up
+#     container_running("name") — specific container is Up (prefix auto-added)
+#     ssh_roles_exist()         — at least one SSH role was discovered
+
+post_launch:
+  - label: "🔑 Setup GitHub + LLM"
+    action: post_launch_creds
+    condition: ssh_roles_exist()
+
+  - label: "📦 Wdróż na urządzenie"
+    action: deploy_device
+    condition: stack_exists("devices")
+
+  - label: "🖥️ Desktop noVNC"
+    url: "http://localhost:${DESKTOP_VNC_PORT:-6081}"
+    condition: container_running("desktop")
+
+  - label: "📊 Traefik Dashboard"
+    url: "http://localhost:${TRAEFIK_DASHBOARD_PORT:-8080}"
+    condition: container_running("traefik")
+
+  - label: "🎫 Tickety"
+    action: ticket_create_wizard
+
+  - label: "📈 Statystyki projektu"
+    action: project_stats
+
+  - label: "🔗 Integracje"
+    action: integrations_setup

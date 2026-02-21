@@ -1,3 +1,29 @@
+## [1.0.51] - 2026-02-21
+
+### Summary
+
+refactor(docs): CLI interface improvements
+
+### Docs
+
+- docs: update TODO.md
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- config: update dockfra.yaml
+- update dockfra/app.py
+- update dockfra/cli.py
+- update dockfra/core.py
+- update dockfra/i18n.py
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+- scripts: update autopilot-daemon.sh
+
+
 ## [1.0.50] - 2026-02-21
 
 ### Summary

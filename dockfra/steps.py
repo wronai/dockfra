@@ -158,6 +158,7 @@ def step_save_settings(group: str, form: dict):
             _state[sk] = val
             env_updates[e["key"]] = val
     save_env(env_updates)
+    save_state()
     lines = []
     for e in entries:
         sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
@@ -545,46 +546,18 @@ def step_do_launch(form):
             buttons(fix_btns)
         else:
             msg(t('infra_ready'))
-            vnc_port  = _state.get("DESKTOP_VNC_PORT", "6081")
             running_names = {c["name"] for c in all_containers if "Up" in c["status"] or "healthy" in c["status"]}
-            sections = []
-            # Build sections dynamically from discovered roles
-            for role, ri in _SSH_ROLES.items():
-                if ri["container"] not in running_names:
-                    continue
-                port = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
-                rows = "\n".join(f"| {c} | {d} | {m} |" for c, d, m in ri["commands"])
-                sections.append(
-                    f"### {ri['icon']} {ri['title']}  "
-                    f"`ssh {ri['user']}@localhost -p {port}`\n"
-                    f"| Komenda | Opis | Host (`make`) |\n|---|---|---|\n{rows}"
-                )
-            if cname("desktop") in running_names or cname("desktop-app") in running_names:
-                sections.append(
-                    f"### 🖥️ Desktop (noVNC)  [http://localhost:{vnc_port}](http://localhost:{vnc_port})\n"
-                    "Przeglądarkowy pulpit z podglądem dashboardu i logów."
-                )
-            if sections:
-                msg(t('what_next'))
             # Re-read roles at this point (state is fully loaded)
             _refresh_ssh_roles()
-            # Build buttons dynamically from discovered roles
-            post_btns = []
-            for role, ri in _SSH_ROLES.items():
-                p = _state.get(f"SSH_{role.upper()}_PORT", ri["port"])
-                post_btns.append({"label": f"{ri['icon']} SSH {role.capitalize()}", "value": f"ssh_info::{role}::{p}"})
-            # Virtual developer: app/ not cloned yet but GIT_REPO_URL is set
-            if "developer" not in _SSH_ROLES and not (ROOT / "app").is_dir() and _state.get("git_repo_url"):
-                dev_port = _state.get("ssh_developer_port", "2200")
-                post_btns.insert(0, {"label": "🔧 SSH Developer", "value": f"ssh_info::developer::{dev_port}"})
-            post_btns += [
-                {"label": t('create_ticket'),        "value": "ticket_create_wizard"},
-                {"label": t('project_stats'),   "value": "project_stats"},
-                {"label": t('task_integrations'),      "value": "integrations_setup"},
-                {"label": t('setup_github_llm'),    "value": "post_launch_creds"},
-                {"label": t('deploy_device'),   "value": "deploy_device"},
-            ]
-            buttons(post_btns)
+            # Show desktop/VNC info if running
+            vnc_port = _state.get("desktop_vnc_port", _state.get("DESKTOP_VNC_PORT", "6081"))
+            if cname("desktop") in running_names or cname("desktop-app") in running_names:
+                msg(f"### 🖥️ Desktop (noVNC)  [http://localhost:{vnc_port}](http://localhost:{vnc_port})\n"
+                    "Przeglądarkowy pulpit z podglądem dashboardu i logów.")
+            if _SSH_ROLES:
+                msg(t('what_next'))
+            # Config-driven post-launch buttons (dockfra.yaml + SSH roles + built-ins)
+            _render_post_launch(running_names, _SSH_ROLES)
     threading.Thread(target=run,daemon=True).start()
 
 def step_deploy_device():

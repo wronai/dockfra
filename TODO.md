@@ -1,6 +1,6 @@
 # Dockfra TODO
 
-_Last updated: 2026-02-21 — v1.0.41, 10 modules, 150+ functions, 15 containers, 5 engines_
+_Last updated: 2026-02-21 — v1.0.50, 10 modules, 160+ functions, 15 containers, 5 engines_
 
 ---
 
@@ -78,10 +78,10 @@ _Last updated: 2026-02-21 — v1.0.41, 10 modules, 150+ functions, 15 containers
 ## Pending
 
 ### Core
-- [ ] `dockfra.yaml` `post_launch` hooks — config-driven post-launch buttons and actions
+- [x] `dockfra.yaml` `post_launch` hooks — config-driven post-launch buttons, URL actions, conditions (stack_exists/running/container_running)
 - [ ] `dockfra.yaml` `fixes` section — project-specific fix plugins
-- [ ] i18n for all Python-side messages (currently Polish; `lang:` from dockfra.yaml)
-- [ ] Persistent `_state` across restarts (save to `dockfra/.env` on shutdown)
+- [x] i18n for all Python-side messages — 10 languages via dockfra/i18n.py, t() in all modules
+- [x] Persistent `_state` across restarts — save_state()/load_state() to dockfra/.state.json (secrets excluded)
 
 ### Engines
 - [ ] OpenCode Go binary install automation (currently best-effort in Dockerfile)
@@ -101,9 +101,9 @@ _Last updated: 2026-02-21 — v1.0.41, 10 modules, 150+ functions, 15 containers
 - [ ] Monitor daemon — extend health checks to devices stack + HTTP verify
 
 ### Testing
-- [ ] CLI tests (14 commands)
+- [x] CLI tests (14 commands) — TestCLIHelpers, TestWizardClient, TestCLICommands in test_e2e.py
 - [ ] Engine integration tests (implement ticket with each engine)
-- [ ] shared/lib unit tests (ticket_system, llm_client)
+- [x] shared/lib unit tests (ticket_system) — TestSharedLibTicketSystem, TestPipelineModule in test_e2e.py
 - [ ] Integration test: wizard → launch → pipeline → deploy → verify
 
 ### Docs
