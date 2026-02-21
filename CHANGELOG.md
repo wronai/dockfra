@@ -1,3 +1,29 @@
+## [1.0.55] - 2026-02-21
+
+### Summary
+
+fix(docs): configuration management system
+
+### Test
+
+- update test_parse.py
+- update tests/test_e2e.py
+
+### Other
+
+- update dockfra/.state.json
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/pipeline.py
+- update shared/tickets/.engine_pref.json
+- update shared/tickets/.pipeline/T-0004.json
+- update shared/tickets/.pipeline/T-0005.json
+- update shared/tickets/.pipeline/error_log.json
+- update shared/tickets/T-0004.json
+- ... and 1 more
+
+
 ## [1.0.54] - 2026-02-21
 
 ### Summary

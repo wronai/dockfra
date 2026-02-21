@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import pytest
 import sys
+from pathlib import Path
 
 # Ensure dockfra package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -44,6 +45,25 @@ def clean_tickets(tickets_dir):
     for f in tickets_dir.glob("T-*.json"):
         f.unlink()
     yield
+
+
+@pytest.fixture(autouse=True)
+def restore_wizard_files():
+    """Prevent tests from permanently mutating dockfra/.env and dockfra/.state.json."""
+    repo_root = Path(__file__).resolve().parent.parent
+    env_path = repo_root / "dockfra" / ".env"
+    state_path = repo_root / "dockfra" / ".state.json"
+    env_before = env_path.read_text() if env_path.exists() else ""
+    state_before = state_path.read_text() if state_path.exists() else ""
+    yield
+    try:
+        env_path.write_text(env_before)
+    except Exception:
+        pass
+    try:
+        state_path.write_text(state_before)
+    except Exception:
+        pass
 
 
 # ── Ticket module unit tests ─────────────────────────────────────────────────
@@ -493,6 +513,50 @@ class TestCLIWebSync:
         data = json.loads(r.data)
         # Conversation should have messages
         assert len(data["conversation"]) > 0
+
+
+class TestSaveEnvActions:
+    def test_save_env_vars_writes_to_env(self, app_client):
+        repo_root = Path(__file__).resolve().parent.parent
+        env_path = repo_root / "dockfra" / ".env"
+        r = app_client.post(
+            "/api/action",
+            data=json.dumps({
+                "action": "save_env_vars",
+                "form": {
+                    "AUTOPILOT_ENABLED": "false",
+                    "AUTOPILOT_INTERVAL": "90",
+                    "bad-key": "nope",
+                    "lowercase": "nope",
+                },
+            }),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        resp = json.loads(r.data)
+        assert resp["ok"] is True
+
+        env_txt = env_path.read_text()
+        assert "AUTOPILOT_ENABLED=false" in env_txt
+        assert "AUTOPILOT_INTERVAL=90" in env_txt
+        assert "bad-key=" not in env_txt
+        assert "lowercase=" not in env_txt
+
+    def test_save_env_var_single_writes_to_env(self, app_client):
+        repo_root = Path(__file__).resolve().parent.parent
+        env_path = repo_root / "dockfra" / ".env"
+        r = app_client.post(
+            "/api/action",
+            data=json.dumps({
+                "action": "save_env_var::AUTOPILOT_ENABLED",
+                "form": {"AUTOPILOT_ENABLED": "true"},
+            }),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        resp = json.loads(r.data)
+        assert resp["ok"] is True
+        assert "AUTOPILOT_ENABLED=true" in env_path.read_text()
 
 
 class TestSSEStream:
@@ -1043,7 +1107,7 @@ class TestPipelineModule:
     def test_run_step_nothing_to_commit(self):
         from dockfra.pipeline import run_step
         r = run_step(lambda: (0, "Nothing to commit."), "commit-push")
-        assert r.score == 0.7
+        assert r.score == 0.2
 
     def test_run_step_exception(self):
         from dockfra.pipeline import run_step

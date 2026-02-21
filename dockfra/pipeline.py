@@ -280,7 +280,8 @@ def run_step(exec_fn, step_name: str, *args, **kwargs) -> StepResult:
                 score = 0.1
                 error = "LLM error in output"
             elif "nothing to commit" in lower:
-                score = 0.7  # Not a failure, just no changes
+                score = 0.2
+                error = "No repository changes detected"
             elif "failed" in lower and "passed" not in lower:
                 score = 0.3
                 error = "Partial failure detected"

@@ -630,12 +630,22 @@ _STATE_SKIP_PERSIST = frozenset({
 def save_state():
     """Persist non-sensitive _state keys to dockfra/.state.json."""
     try:
-        data = {
-            k: v
-            for k, v in _state.items()
-            if k not in _STATE_SKIP_PERSIST
-            and not any(s in k.lower() for s in ("password", "secret", "token", "api_key"))
-        }
+        data = {}
+        for k, v in _state.items():
+            if k in _STATE_SKIP_PERSIST:
+                continue
+            kl = k.lower()
+            if any(s in kl for s in ("password", "secret", "token", "api_key")):
+                continue
+            env_key = _STATE_TO_ENV.get(k)
+            if env_key:
+                if any(s in env_key for s in ("API_KEY", "TOKEN", "SECRET", "PASSWORD")):
+                    continue
+                if (env_key.endswith("_KEY") or "_KEY_" in env_key) and "SSH_KEY" not in env_key and env_key != "GITHUB_SSH_KEY":
+                    continue
+            if kl.endswith("_key") and kl not in ("github_key",):
+                continue
+            data[k] = v
         _STATE_FILE.write_text(json.dumps(data, indent=2))
     except Exception:
         pass
@@ -814,20 +824,11 @@ def _emit_log_error(line: str, fired: set):
                 elif var.endswith("_INTERVAL") or var.endswith("_INTERVAL_S"):
                     _chips = [{"label": "60", "value": "60"}, {"label": "120", "value": "120"}, {"label": "300", "value": "300"}]
                 _sid_emit("widget", {"type": "input", "name": var,
-                                     "label": var, "placeholder": "",
+                                     "label": var, "placeholder": _placeholder or "",
                                      "value": _state.get(sk, ""),
                                      "secret": _secret,
                                      "hint": f"Ustaw wartość zmiennej `{var}`",
                                      "chips": _chips, "modal_type": ""})
-
-                if _placeholder:
-                    # Re-emit the same field with a better placeholder (frontend groups fields; last one wins in form)
-                    _sid_emit("widget", {"type": "input", "name": var,
-                                         "label": var, "placeholder": _placeholder,
-                                         "value": _state.get(sk, ""),
-                                         "secret": _secret,
-                                         "hint": f"Ustaw wartość zmiennej `{var}`",
-                                         "chips": _chips, "modal_type": ""})
 
                 btn_items = [
                     {"label": f"💾 Zapisz {var}", "value": f"save_env_var::{var}"},

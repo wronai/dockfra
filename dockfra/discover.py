@@ -290,8 +290,6 @@ def run_ssh_cmd(value: str, form: dict):
 
     def _run():
         _tl.sid = _tl_sid
-        # Reset per-thread UI tracking so we can safely merge proactive fix buttons
-        # emitted during this command execution.
         try:
             _tl.last_buttons_items = []
             _tl.had_auto_fixes = False
@@ -383,8 +381,6 @@ def run_ssh_cmd(value: str, form: dict):
                     {"label": f"{ri_['icon']} {t('back_to_actions')}", "value": f"ssh_info::{role}::{port}"},
                     {"label": t('menu'), "value": "back"},
                 ]
-
-                # If the command (or auto-diagnostics) already emitted buttons, merge them.
                 existing = getattr(_tl, 'last_buttons_items', None)
                 if isinstance(existing, list) and existing:
                     merged = []

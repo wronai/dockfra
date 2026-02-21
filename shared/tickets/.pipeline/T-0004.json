@@ -1,6 +1,6 @@
 {
   "ticket_id": "T-0004",
-  "iteration": 2,
+  "iteration": 3,
   "steps": [
     {
       "step": "ticket-work",
@@ -115,10 +115,93 @@
       "meta": {},
       "ok": true,
       "ts": "2026-02-21T01:10:04.186271+00:00"
+    },
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0004\nComment added to T-0004\n\u2713 T-0004 marked as in_progress",
+      "duration": 0.14,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T13:53:41.469541+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 1,
+      "output": "=== Engine: claude_code | Ticket: T-0004 ===\nTitle: kontakt\nDescription: Dodaj now\u0105 us\u0142ug\u0119 Formularza kontaktowego dla frontend i backend\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "duration": 2.55,
+      "error": "=== Engine: claude_code | Ticket: T-0004 ===\nTitle: kontakt\nDescription: Dodaj now\u0105 us\u0142ug\u0119 Formularza kontaktowego dla frontend i backend\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "score": 0.5,
+      "meta": {
+        "engine": "claude_code"
+      },
+      "ok": false,
+      "ts": "2026-02-21T13:53:44.216703+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 0,
+      "output": "=== Engine: built_in | Ticket: T-0004 ===\nTitle: kontakt\nDescription: Dodaj now\u0105 us\u0142ug\u0119 Formularza kontaktowego dla frontend i backend\n\n[built_in] Using llm_client.py via OpenRouter...\nTo implement a contact form service for both the frontend and backend, we will create a simple web application using Node.js for the backend and React for the frontend. Below are the details of the implementation, including file paths and complete code.\n\n### Project Structure\n```\ncontact-form-app/\n\u251c\u2500\u2500 backend/\n   ",
+      "duration": 26.65,
+      "error": "",
+      "score": 0.9000000000000001,
+      "meta": {
+        "engine": "built_in"
+      },
+      "ok": true,
+      "ts": "2026-02-21T13:54:12.265994+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 0,
+      "output": "\u2500\u2500\u2500 Local Tests \u2500\u2500\u2500\n  HTTP backend... \u2713\n  HTTP mobile-backend... \u2713\n\n  Passed: 2 | Failed: 0",
+      "duration": 0.13,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T13:54:12.494277+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 0,
+      "output": "Nothing to commit.",
+      "duration": 0.13,
+      "error": "",
+      "score": 0.7,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T13:54:12.728674+00:00"
+    },
+    {
+      "step": "status-review",
+      "rc": 0,
+      "output": "review",
+      "duration": 0,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T13:54:12.827170+00:00"
     }
   ],
-  "decisions": [],
-  "overall_score": 0.795,
+  "decisions": [
+    {
+      "decision": "engine_fallback_test_ok",
+      "reason": "built_in: OK: OK! How can I assist you today?",
+      "iteration": 3,
+      "ts": "2026-02-21T13:53:45.475691+00:00"
+    },
+    {
+      "decision": "engine_fallback_success",
+      "reason": "claude_code -> built_in",
+      "iteration": 3,
+      "ts": "2026-02-21T13:54:12.312239+00:00"
+    }
+  ],
+  "overall_score": 0.7807692307692309,
   "started_at": "2026-02-21T01:03:11.354458+00:00",
-  "finished_at": "2026-02-21T01:10:04.186791+00:00"
+  "finished_at": "2026-02-21T13:54:12.827562+00:00"
 }

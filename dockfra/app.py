@@ -41,6 +41,7 @@ from .discover import (
     _step_ssh_info, step_ssh_console, run_ssh_cmd, _SSH_ROLES, _refresh_ssh_roles, _get_role,
 )
 import os as _os, sys as _sys
+import re as _re
 from . import tickets as _tickets
 from .i18n import t, set_lang, get_lang, llm_lang_instruction
 from .pipeline import PipelineState, StepResult, run_step, evaluate_implementation, evaluate_test_output, build_retry_prompt
@@ -1281,11 +1282,22 @@ def _step_pipeline_skip_implement(ticket_id: str):
     commit_title = ticket_data.get("title", ticket_id) if ticket_data else ticket_id
     commit_msg = f"feat({ticket_id}): {commit_title}"
     msg(t('commit_and_push'))
-    r4 = run_step(_exec, "commit-push", f'"{commit_msg}"')
+    r4 = run_step(_exec, "commit-push", "commit-push", f'"{commit_msg}"')
     pstate.record_step(r4)
-    if "Nothing to commit" in (r4.output or ""):
+    no_repo_changes = "nothing to commit" in (r4.output or "").lower()
+    if no_repo_changes:
         msg(t('nothing_to_commit'))
-    elif r4.rc == 0:
+        pstate.record_decision("no_repo_changes", f"{ticket_id}: commit-push returned no changes")
+        overall = pstate.compute_overall_score()
+        msg(t('pipeline_skip_done', tid=ticket_id, score=f'{overall:.0%}'))
+        buttons([
+            {"label": t('change_engine'), "value": "engine_select"},
+            {"label": t('retry_with_new_engine'), "value": f"ssh_cmd::developer::ticket-work::{ticket_id}"},
+            {"label": t('ticket_list'), "value": "tickets_review"},
+            {"label": t('menu'), "value": "back"},
+        ])
+        return
+    if r4.rc == 0:
         msg(f"✅ Commit: `{r4.output.strip().split(chr(10))[-1]}`")
     else:
         msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
@@ -1718,14 +1730,27 @@ def _dispatch(value: str, form: dict):
                     r4 = run_step(_exec, "commit-push", "commit-push", f'"{commit_msg}"')
                     pstate.record_step(r4)
                     gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+                    no_repo_changes = "nothing to commit" in (r4.output or "").lower()
+                    if no_repo_changes:
+                        msg(t('nothing_to_commit'))
+                        pstate.record_decision("no_repo_changes", f"{arg_}: commit-push returned no changes")
+                        overall = pstate.compute_overall_score()
+                        _tickets.add_comment(arg_, "developer",
+                            f"Pipeline iteracja #{pstate.iteration} zatrzymana: brak zmian w repo (wynik: {overall:.0%}).")
+                        msg("⚠️ Brak zmian po implementacji — ticket pozostaje **in_progress**.")
+                        buttons([
+                            {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                            {"label": t('change_engine'), "value": "engine_select"},
+                            {"label": t('ticket_list'), "value": "tickets_review"},
+                            {"label": t('menu'), "value": "back"},
+                        ])
+                        return
                     if r4.rc == 0 and r4.output:
                         commit_line = r4.output.strip().split("\n")[-1]
                         commit_hash = commit_line.split()[0] if commit_line else ""
                         gh_link = f"https://github.com/{gh_repo}/commit/{commit_hash}" if gh_repo and commit_hash else ""
                         link_text = f"\n🔗 [Zobacz na GitHub]({gh_link})" if gh_link else ""
                         msg(f"✅ Commit: `{commit_line}`{link_text}")
-                    elif "Nothing to commit" in (r4.output or ""):
-                        msg("ℹ️ Brak zmian do commitowania")
                     else:
                         msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
 
