@@ -2,13 +2,13 @@
   "id": "T-0001",
   "title": "Przetestuj ca\u0142y projekt",
   "description": "stworz testy e2e i unit tests",
-  "status": "review",
+  "status": "in_progress",
   "priority": "normal",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:20:33.434519+00:00",
-  "updated_at": "2026-02-21T16:42:39.420749+00:00",
+  "updated_at": "2026-02-21T17:27:51.281132+00:00",
   "comments": [
     {
       "author": "tester",
@@ -129,6 +129,16 @@
       "author": "developer",
       "text": "Pipeline iteracja #3 zako\u0144czona (wynik: 96%). Silnik: Wbudowany LLM (OpenRouter). Model: google/gemini-3-flash-preview. Gotowe do review.",
       "timestamp": "2026-02-21T16:42:39.420740+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T17:27:42.566570+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "AI implementation (built_in engine)",
+      "timestamp": "2026-02-21T17:27:51.281114+00:00"
     }
   ],
   "github_issue_number": null

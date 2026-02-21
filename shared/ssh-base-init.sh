@@ -23,6 +23,35 @@ if [ -d "$UH/.ssh/extra" ]; then
     for k in "$UH/.ssh/extra"/*.pub; do
         [ -f "$k" ] && cat "$k" >> "$UH/.ssh/authorized_keys" 2>/dev/null || true
     done
+
+    # If sync script provided a bundled authorized_keys file, merge it as well
+    if [ -f "$UH/.ssh/extra/authorized_keys" ]; then
+        cat "$UH/.ssh/extra/authorized_keys" >> "$UH/.ssh/authorized_keys" 2>/dev/null || true
+    fi
+
+    # Copy role private/public keys from read-only extra mount to standard SSH paths.
+    # This enables outbound SSH (e.g. autopilot -> developer) even when extra files
+    # are not readable by the runtime user due to host UID/GID mismatch.
+    for key in id_ed25519 id_rsa; do
+        if [ -f "$UH/.ssh/extra/$key" ]; then
+            cp "$UH/.ssh/extra/$key" "$UH/.ssh/$key" 2>/dev/null || true
+            chmod 600 "$UH/.ssh/$key" 2>/dev/null || true
+        fi
+        if [ -f "$UH/.ssh/extra/$key.pub" ]; then
+            cp "$UH/.ssh/extra/$key.pub" "$UH/.ssh/$key.pub" 2>/dev/null || true
+            chmod 644 "$UH/.ssh/$key.pub" 2>/dev/null || true
+        fi
+    done
+fi
+
+# De-duplicate authorized keys while preserving order.
+if [ -f "$UH/.ssh/authorized_keys" ]; then
+    awk 'NF && !seen[$0]++' "$UH/.ssh/authorized_keys" > "$UH/.ssh/.authorized_keys.tmp" 2>/dev/null || true
+    if [ -s "$UH/.ssh/.authorized_keys.tmp" ]; then
+        mv "$UH/.ssh/.authorized_keys.tmp" "$UH/.ssh/authorized_keys"
+    else
+        rm -f "$UH/.ssh/.authorized_keys.tmp"
+    fi
 fi
 
 # Chown .ssh (ignore errors on read-only mounts)
