@@ -1721,3 +1721,8 @@ _add('retry_with_new_engine',
      fr='🔄 Réessayer avec un nouveau moteur', es='🔄 Reintentar con nuevo motor',
      it='🔄 Riprova con nuovo motore', pt='🔄 Tentar novamente com novo motor', cs='🔄 Znovu zkusit s novým enginem',
      ro='🔄 Reîncearcă cu alt motor', nl='🔄 Opnieuw proberen met nieuwe engine')
+_add('show_ticket',
+     pl='👁️ Pokaż ticket', en='👁️ Show ticket', de='👁️ Ticket anzeigen',
+     fr='👁️ Voir le ticket', es='👁️ Ver ticket',
+     it='👁️ Mostra ticket', pt='👁️ Ver ticket', cs='👁️ Zobrazit ticket',
+     ro='👁️ Arată ticket', nl='👁️ Ticket tonen')

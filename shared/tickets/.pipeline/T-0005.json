@@ -1,0 +1,67 @@
+{
+  "ticket_id": "T-0005",
+  "iteration": 1,
+  "steps": [
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0005\nComment added to T-0005\n\u2713 T-0005 marked as in_progress",
+      "duration": 0.14,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:28:43.999303+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 1,
+      "output": "=== Engine: claude_code | Ticket: T-0005 ===\nTitle: Dodaj funkcje kontaktu\nDescription: Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "duration": 2.71,
+      "error": "=== Engine: claude_code | Ticket: T-0005 ===\nTitle: Dodaj funkcje kontaktu\nDescription: Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "score": 0.55,
+      "meta": {
+        "engine": "claude_code"
+      },
+      "ok": false,
+      "ts": "2026-02-21T09:28:46.909873+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 0,
+      "output": "\u2500\u2500\u2500 Local Tests \u2500\u2500\u2500\n  HTTP backend... \u2713\n  HTTP mobile-backend... \u2713\n\n  Passed: 2 | Failed: 0",
+      "duration": 0.18,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:28:47.187186+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 0,
+      "output": "Nothing to commit.",
+      "duration": 0.12,
+      "error": "",
+      "score": 0.7,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:28:47.404011+00:00"
+    },
+    {
+      "step": "status-review",
+      "rc": 0,
+      "output": "review",
+      "duration": 0,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:28:47.499612+00:00"
+    }
+  ],
+  "decisions": [],
+  "overall_score": 0.775,
+  "started_at": "2026-02-21T09:28:41.457446+00:00",
+  "finished_at": "2026-02-21T09:28:47.499955+00:00"
+}
