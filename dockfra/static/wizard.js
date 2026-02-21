@@ -252,7 +252,13 @@ chat.addEventListener('click', e => {
     openDiffModal(value.split('::')[1]);
     return;
   }
-  const label = btn.closest('.ticket-card').querySelector('.ticket-id').textContent + ' — ' + btn.textContent.trim();
+  if (value.startsWith('show_diff::')) {
+    openDiffModal(value.split('::')[1], true);
+    return;
+  }
+  const card = btn.closest('.ticket-card');
+  const tidEl = card && card.querySelector('.ticket-id');
+  const label = (tidEl ? tidEl.textContent + ' — ' : '') + btn.textContent.trim();
   sendAction(value, label);
 });
 
@@ -991,7 +997,12 @@ async function updateStats() {
 
     // Delegate ticket-btn clicks inside stats panel
     statsPanel.querySelectorAll('.ticket-btn[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => sendAction(btn.dataset.action, btn.textContent.trim()));
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.action;
+        if (act.startsWith('show_ticket::')) { openDiffModal(act.split('::')[1]); return; }
+        if (act.startsWith('show_diff::')) { openDiffModal(act.split('::')[1], true); return; }
+        sendAction(act, btn.textContent.trim());
+      });
     });
   } catch(e) {
     statsPanel.innerHTML = '<div style="color:var(--red);font-size:.7rem;padding:8px">Błąd ładowania statystyk</div>';
@@ -1025,7 +1036,7 @@ function flashCopyBtn(btn, originalText) {
 
 document.getElementById('copy-logs').addEventListener('click', () => {
   const text = Array.from(logOut.children).map(c => c.textContent).join('\n');
-  navigator.clipboard.writeText(text.length > 5000 ? text.slice(-5000) : text)
+  navigator.clipboard.writeText(text.length > 45000 ? text.slice(-45000) : text)
     .then(() => flashCopyBtn(document.getElementById('copy-logs'), '📋 Copy'))
     .catch(() => { document.getElementById('copy-logs').textContent = '❌ Failed'; });
 });
@@ -1036,7 +1047,8 @@ document.getElementById('copy-chat').addEventListener('click', () => {
     const bubble = d.querySelector('.bubble');
     return `${role}: ${bubble ? bubble.textContent : ''}`;
   }).join('\n\n');
-  navigator.clipboard.writeText(text)
+  const clipped = text.length > 45000 ? text.slice(-45000) : text;
+  navigator.clipboard.writeText(clipped)
     .then(() => flashCopyBtn(document.getElementById('copy-chat'), t('copy')))
     .catch(() => { document.getElementById('copy-chat').textContent = '❌ Failed'; });
 });

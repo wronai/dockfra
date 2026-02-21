@@ -931,7 +931,7 @@ def _step_manager_reject(tid: str):
     _tickets.add_comment(tid, "manager", "🔄 Review odrzucony. Wymaga poprawek.")
     msg(f"## 🔄 Ticket `{tid}` odrzucony → in_progress\n"
         f"**{t['title']}** wraca do developera.\n\n"
-        f"Developer może ponownie uruchomić pipeline klikając **▶ Pracuj**.")
+        f"[[▶ Pracuj {tid}|ssh_cmd::developer::ticket-work::{tid}]] [[👁️ Diff|show_ticket::{tid}]]")
     buttons([
         {"label": f"▶ Pracuj ponownie {tid}", "value": f"ssh_cmd::developer::ticket-work::{tid}"},
         {"label": "📋 Panel review", "value": "tickets_review"},
@@ -1411,7 +1411,9 @@ def _dispatch(value: str, form: dict):
                     elif strategy == "ask_user":
                         can_retry, reason = pstate.should_retry("implement")
                         if not can_retry:
-                            msg(f"🛑 **Pipeline zatrzymany** — {reason}\n\nWymagana ręczna interwencja.")
+                            msg(f"🛑 **Pipeline zatrzymany** — {reason}\n\n"
+                                f"[[🔄 Wymuś ponowienie|ssh_cmd::{role_}::ticket-work::{arg_}]] "
+                                f"[[🔧 Zmień silnik|engine_select]]")
                             pstate.record_decision("abort", reason)
                             buttons([
                                 {"label": "🔄 Wymuś ponowienie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
@@ -1490,9 +1492,14 @@ def _dispatch(value: str, form: dict):
                     pstate.save()
 
                     score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
+                    retry_btn = f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] " if overall < 0.5 else ""
                     msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
                         f"**Wynik:** {overall:.0%} | **Silnik:** `{eng_name}` | **Model:** `{llm_model}`\n\n"
-                        f"{pstate.summary()}")
+                        f"{pstate.summary()}\n\n"
+                        f"{retry_btn}"
+                        f"[[✅ Zatwierdź|manager_approve::{arg_}]] "
+                        f"[[📋 Review|tickets_review]] "
+                        f"[[👁️ Diff|show_ticket::{arg_}]]")
 
                     btn_items = [
                         {"label": f"👁️ Pokaż ticket {arg_}", "value": f"show_ticket::{arg_}"},
@@ -1507,7 +1514,9 @@ def _dispatch(value: str, form: dict):
                     buttons(btn_items)
 
                 except Exception as e:
-                    msg(f"❌ Pipeline błąd: {e}")
+                    msg(f"❌ Pipeline błąd: {e}\n\n"
+                        f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] "
+                        f"[[🔧 Zmień silnik|engine_select]]")
                     pstate.record_step(StepResult("pipeline", -1, "", 0, str(e), 0.0))
                     pstate.save()
                 finally:

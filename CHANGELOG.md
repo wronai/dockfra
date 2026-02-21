@@ -1,3 +1,18 @@
+## [1.0.40] - 2026-02-21
+
+### Summary
+
+fix(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/static/wizard.js
+- update shared/tickets/.pipeline/T-0004.json
+- update shared/tickets/.pipeline/error_log.json
+- update shared/tickets/T-0004.json
+
+
 ## [1.0.39] - 2026-02-21
 
 ### Summary
