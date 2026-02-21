@@ -1,3 +1,28 @@
+## [1.0.46] - 2026-02-21
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update README
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/engines.py
+- update dockfra/event_bus.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+
+
 ## [1.0.45] - 2026-02-21
 
 ### Summary

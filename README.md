@@ -7,11 +7,11 @@
 **Manage any Docker Compose project** with an interactive web wizard, auto-discovery,
 SSH-isolated AI agents, ticket-driven workflows, and autonomous orchestration.
 
-[![Version](https://img.shields.io/badge/version-1.0.45-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.46-blue.svg)](CHANGELOG.md)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/compose/)
-[![Tests](https://img.shields.io/badge/tests-57%2F57-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-73%2F73-brightgreen.svg)](tests/)
 [![Engines](https://img.shields.io/badge/engines-5%20(3%20active)-orange.svg)](docs/ARCHITECTURE.md#dev-engines)
 [![CLI](https://img.shields.io/badge/CLI-14%20commands-purple.svg)](#cli)
 [![Containers](https://img.shields.io/badge/containers-15-informational.svg)](#architecture)

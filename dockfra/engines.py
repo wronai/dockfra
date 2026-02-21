@@ -1,22 +1,53 @@
 """
 dockfra.engines — Dev engine abstraction for autonomous coding tools.
 
-Discovers, tests, and selects from multiple autonomous dev engines:
-  1. built_in  — llm_client.py via OpenRouter (always available if API key works)
-  2. aider     — CLI tool that edits files autonomously via LLM
-  3. claude_code — Anthropic's Claude Code CLI
+SOLID Principles:
+  - SRP: Each engine handles only its own detect/test/implement
+  - OCP: New engines added by registering in ENGINE_DEFS, no existing code modified
+  - LSP: All engines conform to EngineProtocol — substitutable
+  - ISP: EngineProtocol exposes only what callers need
+  - DIP: Public API depends on protocol, not concrete implementations
 
-Each engine has: detect() → bool, test() → (ok, msg), implement(ticket) → (rc, output)
-Auto-selects the first working engine; user can override.
+Engines:
+  1. built_in    — llm_client.py via OpenRouter (always available if API key works)
+  2. aider       — CLI tool that edits files autonomously via LLM
+  3. claude_code — Anthropic's Claude Code CLI
+  4. opencode    — Open-source Go CLI agent
+  5. mcp_ssh     — MCP SSH Manager for agent orchestration
 """
 import json
 import os
 import subprocess
 import time
 import logging
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+
+# ── Engine Protocol (ISP — Interface Segregation) ────────────────────────────
+
+@runtime_checkable
+class EngineProtocol(Protocol):
+    """Interface every dev engine must satisfy (LSP — Liskov Substitution)."""
+    def detect(self, container: str, user: str) -> bool: ...
+    def test(self, container: str, user: str, env: list[str]) -> tuple[bool, str]: ...
+    def implement_cmd(self, ticket_id: str) -> str: ...
+
+
+@dataclass(frozen=True)
+class EngineResult:
+    """Immutable result of an engine test (SRP — single purpose value object)."""
+    id: str
+    name: str
+    ok: bool
+    message: str
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "name": self.name, "ok": self.ok, "message": self.message}
+
 
 # ── Engine Registry ───────────────────────────────────────────────────────────
 

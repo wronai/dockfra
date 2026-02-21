@@ -294,7 +294,12 @@ function copyMessage(button) {
 }
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
-socket.on('clear_widgets', () => { widgets.innerHTML = ''; });
+socket.on('clear_widgets', () => {
+  widgets.innerHTML = '';
+  // Also cancel any pending form-buffer flush to prevent old fields bleeding in
+  if (_formTimer) { clearTimeout(_formTimer); _formTimer = null; }
+  _formBuf = null;
+});
 
 socket.on('widget', d => {
   if (d.type === 'buttons')         renderButtons(d);
@@ -304,6 +309,7 @@ socket.on('widget', d => {
   else if (d.type === 'status_row') renderStatus(d);
   else if (d.type === 'progress')   renderProgress(d);
   else if (d.type === 'action_grid') renderActionGrid(d);
+  else if (d.type === 'config_prompt') renderConfigPrompt(d);
 });
 
 function collectForm(){
@@ -479,7 +485,9 @@ let _formTimer = null;
 
 function flushForm(){
   if(!_formBuf) return;
-  widgets.appendChild(_formBuf);
+  const existingBtns = widgets.querySelector('.w-buttons');
+  if(existingBtns) widgets.insertBefore(_formBuf, existingBtns);
+  else             widgets.appendChild(_formBuf);
   _formBuf = null; _formTimer = null;
 }
 
@@ -724,6 +732,169 @@ function renderCode(d){
   pre.className = 'w-code';
   pre.textContent = d.text;
   widgets.appendChild(pre);
+}
+
+// ── Config Prompt Widget ──────────────────────────────────────────────────────
+function renderConfigPrompt(d){
+  const card = document.createElement('div');
+  card.className = 'w-config-prompt';
+  card.innerHTML = `
+    <div class="cfg-prompt-icon">⚠️</div>
+    <div class="cfg-prompt-body">
+      <div class="cfg-prompt-title">${d.title}</div>
+      <div class="cfg-prompt-desc">${markdownToHtml(d.desc||'')}</div>
+    </div>
+    <button class="cfg-prompt-btn" title="Konfiguruj">⚙️ Konfiguruj</button>`;
+  card.querySelector('.cfg-prompt-btn').addEventListener('click', () => openConfigModal(d));
+  widgets.appendChild(card);
+}
+
+function openConfigModal(d){
+  const existing = document.getElementById('cfg-modal-overlay');
+  if(existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cfg-modal-overlay';
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+
+  const modal = document.createElement('div');
+  modal.className = 'modal cfg-modal';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  header.innerHTML = `<span>⚙️ ${d.title}</span>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'modal-close-btn';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  header.appendChild(closeBtn);
+  modal.appendChild(header);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'modal-body cfg-modal-body';
+
+  if(d.desc){
+    const descEl = document.createElement('div');
+    descEl.className = 'cfg-modal-desc';
+    descEl.innerHTML = markdownToHtml(d.desc);
+    body.appendChild(descEl);
+  }
+
+  // Special case: claude_code_login — no form, just instructions
+  if(d.settings_group === 'claude_code_login'){
+    const info = document.createElement('div');
+    info.className = 'cfg-modal-info';
+    info.innerHTML = `<p>Aby zalogować Claude Code CLI uruchom w terminalu:</p>
+      <pre class="md-code"><code>claude /login</code></pre>
+      <p>Lub ustaw klucz Anthropic API:</p>`;
+    body.appendChild(info);
+  }
+
+  // Form fields
+  const formEl = document.createElement('div');
+  formEl.className = 'cfg-modal-form';
+  const fields = d.fields || [];
+
+  fields.forEach(f => {
+    const field = document.createElement('div');
+    field.className = 'field';
+
+    const lbl = document.createElement('label');
+    lbl.textContent = f.label;
+    lbl.htmlFor = 'cfg_' + f.name;
+    field.appendChild(lbl);
+
+    const inp = document.createElement('input');
+    inp.type = (f.type === 'password') ? 'password' : 'text';
+    inp.id = 'cfg_' + f.name;
+    inp.dataset.name = f.name;
+    inp.placeholder = f.placeholder || '';
+    inp.value = f.value || '';
+    inp.className = 'cfg-field-input';
+
+    // Eye toggle for password fields
+    if(f.type === 'password'){
+      const wrap = document.createElement('div');
+      wrap.className = 'field-input-wrap';
+      wrap.appendChild(inp);
+      const eye = document.createElement('button');
+      eye.type = 'button'; eye.className = 'eye-btn'; eye.innerHTML = '👁';
+      let vis = false;
+      eye.addEventListener('click', () => { vis=!vis; inp.type=vis?'text':'password'; eye.classList.toggle('active',vis); });
+      eye.addEventListener('mousedown', e => e.preventDefault());
+      wrap.appendChild(eye);
+      field.appendChild(wrap);
+    } else {
+      field.appendChild(inp);
+    }
+
+    // Chips (smart suggestions)
+    if(f.chips && f.chips.length){
+      const chipsRow = document.createElement('div');
+      chipsRow.className = 'field-chips';
+      f.chips.forEach(chip => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'chip';
+        btn.textContent = chip.label;
+        if(chip.value){
+          btn.addEventListener('click', () => { inp.value = chip.value; inp.type='text'; });
+        } else {
+          // Link chip (e.g., API key portal link)
+          btn.addEventListener('click', () => window.open('https://' + chip.label, '_blank'));
+          btn.title = 'Otwórz portal klucza API';
+          btn.innerHTML = '🔗 ' + chip.label;
+        }
+        chipsRow.appendChild(btn);
+      });
+      field.appendChild(chipsRow);
+    }
+    formEl.appendChild(field);
+  });
+  body.appendChild(formEl);
+
+  // Footer buttons
+  const footer = document.createElement('div');
+  footer.className = 'cfg-modal-footer';
+
+  if(fields.length){
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn cfg-save-btn';
+    saveBtn.textContent = '💾 Zapisz i zastosuj';
+    saveBtn.addEventListener('click', () => {
+      const form = {};
+      formEl.querySelectorAll('input[data-name]').forEach(el => { form[el.dataset.name] = el.value; });
+      const group = d.settings_group || 'General';
+      socket.emit('action', {value: `save_settings::${group}`, form});
+      overlay.remove();
+    });
+    footer.appendChild(saveBtn);
+  }
+
+  if(d.action && d.action !== 'settings'){
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn';
+    openBtn.textContent = '📋 Otwórz pełne ustawienia';
+    openBtn.addEventListener('click', () => { sendAction(d.action, '⚙️ Ustawienia'); overlay.remove(); });
+    footer.appendChild(openBtn);
+  }
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-secondary';
+  cancelBtn.textContent = 'Anuluj';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+  footer.appendChild(cancelBtn);
+
+  body.appendChild(footer);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Focus first empty field
+  const firstEmpty = formEl.querySelector('input[data-name]');
+  if(firstEmpty && !firstEmpty.value) setTimeout(() => firstEmpty.focus(), 80);
 }
 
 function renderStatus(d){

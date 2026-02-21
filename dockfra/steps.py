@@ -102,16 +102,18 @@ def step_settings(group: str = ""):
     clear_widgets()
     groups = list(dict.fromkeys(e["group"] for e in ENV_SCHEMA))
     if not group:
-        msg("## ⚙️ Ustawienia — wybierz sekcję")
-        msg("Kliknij sekcję aby edytować jej zmienne. Wszystko zapisywane do `dockfra/.env`.")
-        btn_items = []
+        # Find first group with missing required fields; otherwise use first group
+        first_group = groups[0] if groups else None
         for g in groups:
             g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
             missing = [e for e in g_entries
                        if e.get("required_for") and not _state.get(_ENV_TO_STATE.get(e["key"],e["key"].lower()))]
-            icon = "✅" if not missing else f"🔴{len(missing)}"
-            btn_items.append({"label": f"{icon} {g}", "value": f"settings_group::{g}"})
-        buttons(btn_items)
+            if missing:
+                first_group = g
+                break
+        if first_group:
+            step_settings(first_group)
+        return
     else:
         entries = [e for e in ENV_SCHEMA if e["group"] == group]
         msg(f"## ⚙️ {group}")
@@ -135,8 +137,9 @@ def step_settings(group: str = ""):
                            modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
                            desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         buttons([
-            {"label": "💾 Zapisz",    "value": f"save_settings::{group}"},
-            {"label": "← Sekcje",    "value": "settings"},
+            {"label": "💾 Zapisz",         "value": f"save_settings::{group}"},
+            {"label": "← Wszystkie sekcje", "value": "settings_nav"},
+            {"label": "🏠 Menu",             "value": "back"},
         ])
 
 
@@ -162,7 +165,7 @@ def step_save_settings(group: str, form: dict):
     msg(f"✅ **{group}** — zapisano do `dockfra/.env`\n" + "\n".join(f"- `{l}`" for l in lines))
     buttons([
         {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
-        {"label": "← Sekcje",        "value": "settings"},
+        {"label": "← Wszystkie sekcje","value": "settings_nav"},
         {"label": "🚀 Uruchom",       "value": "launch_all"},
     ])
 

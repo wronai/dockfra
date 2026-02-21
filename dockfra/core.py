@@ -78,7 +78,21 @@ def _build_wizard_prompt() -> str:
         "Help the user configure environment variables, troubleshoot Docker errors, understand "
         "service roles, and launch stacks. Be concise and practical. Use Markdown.\n"
         f"Available stacks: {stacks_desc}.\n"
-        "If asked about a Docker error, suggest the most likely fix."
+        "If asked about a Docker error, suggest the most likely fix.\n\n"
+        "IMPORTANT — Interactive buttons: You can embed clickable action buttons anywhere in your "
+        "response using the syntax: [[Button label|action_value]]\n"
+        "Available actions:\n"
+        "  [[⚙️ Ustawienia|settings]] — open settings group selector\n"
+        "  [[🔑 LLM / API Key|settings_group::LLM]] — edit LLM and API key fields\n"
+        "  [[🌐 Git|settings_group::Git]] — edit Git settings\n"
+        "  [[🏗️ Infrastructure|settings_group::Infrastructure]] — edit infrastructure settings\n"
+        "  [[🔌 Ports|settings_group::Ports]] — edit port settings\n"
+        "  [[🔗 Integrations|settings_group::Integrations]] — edit integration tokens\n"
+        "  [[🚀 Uruchom|launch_all]] — launch all stacks\n"
+        "  [[📊 Status|status]] — show container status\n"
+        "RULE: Whenever the user asks about environment variables, configuration, API keys, or "
+        "settings — ALWAYS include at least one [[button|action]] to open the relevant settings "
+        "form directly. Do NOT just describe variables in text — show the form button."
     )
 
 # Lazy: rebuilt after STACKS is populated (see module bottom)
@@ -538,8 +552,33 @@ def detect_config():
     return cfg
 
 def _emit_log_error(line: str, fired: set):
-    """Check a single log line against _HEALTH_PATTERNS; emit chat alert if matched (debounced)."""
+    """Check a single log line against health + config-error patterns; emit alerts/forms."""
     import re as _re
+    # ── Config-error patterns (API keys, auth, tool login) ───────────────────
+    for pattern, title, desc, fields, settings_group in _CONFIG_ERROR_PATTERNS:
+        key = "cfg:" + pattern[:40]
+        if key in fired:
+            continue
+        m = _re.search(pattern, line, _re.IGNORECASE)
+        if not m:
+            continue
+        # For generic env var catch-all: extract var name from capture group
+        extra_fields = list(fields)
+        if not extra_fields and m.lastindex:
+            for gi in range(1, m.lastindex + 1):
+                try:
+                    var = m.group(gi)
+                    if var and _re.match(r'^[A-Z][A-Z0-9_]{2,}$', var):
+                        extra_fields = [{"name": var, "label": var, "type":
+                            "password" if any(k in var for k in ("KEY","TOKEN","SECRET","PASSWORD")) else "text",
+                            "placeholder": "", "chips": [], "value": _state.get(var.lower(), "")}]
+                        break
+                except Exception:
+                    pass
+        _emit_config_form(title, f"Wykryto w logach: `{line.strip()[:120]}`\n\n{desc}",
+                          extra_fields, settings_group, key, fired)
+        return  # one config-form per line
+    # ── Docker health patterns ────────────────────────────────────────────────
     for pattern, sev, message, solutions in _HEALTH_PATTERNS:
         key = pattern[:40]
         if key in fired or sev not in ("err", "warn"):
@@ -1046,6 +1085,124 @@ def _emit_missing_fields(missing: list[dict]):
                        sec=(e["type"] == "password"), hint=hint, chips=chips,
                        modal_type=modal_type,
                        desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
+
+
+# ── Config-error patterns (tool/service auth & missing API keys) ──────────────
+# Each entry: (regex, title_pl, desc_pl, fields, settings_group)
+# fields: list of {name, label, type, placeholder, chips}
+_CONFIG_ERROR_PATTERNS = [
+    # Claude Code CLI — not logged in
+    (r"Not logged in[\s·•\-]*(Please run|use)\s+/login|not logged in.*login|claude.*not logged in",
+     "Claude Code CLI: wymagane logowanie",
+     "Claude Code CLI nie jest zalogowany — uruchom `/login` w terminalu.",
+     [],
+     "claude_code_login"),
+
+    # Anthropic API key
+    (r"ANTHROPIC_API_KEY.*(not set|missing|invalid|undefined)|anthropic.*authentication.*fail|anthropic.*api.?key",
+     "Brak klucza Anthropic API",
+     "Zmienna `ANTHROPIC_API_KEY` nie jest ustawiona lub jest nieprawidłowa.",
+     [{"name": "ANTHROPIC_API_KEY", "label": "Klucz Anthropic API",
+       "type": "password", "placeholder": "sk-ant-api03-...",
+       "chips": [{"label": "anthropic.com/settings", "value": ""}]}],
+     "LLM"),
+
+    # OpenAI API key
+    (r"OPENAI_API_KEY.*(not set|missing|invalid)|Incorrect API key provided|invalid_api_key",
+     "Brak klucza OpenAI API",
+     "Zmienna `OPENAI_API_KEY` nie jest ustawiona lub klucz jest nieprawidłowy.",
+     [{"name": "OPENAI_API_KEY", "label": "Klucz OpenAI API",
+       "type": "password", "placeholder": "sk-proj-...",
+       "chips": [{"label": "platform.openai.com/api-keys", "value": ""}]}],
+     "LLM"),
+
+    # OpenRouter API key
+    (r"OPENROUTER_API_KEY.*(not set|missing|invalid)|openrouter.*unauthorized|No API key found.*openrouter",
+     "Brak klucza OpenRouter API",
+     "Zmienna `OPENROUTER_API_KEY` nie jest ustawiona lub jest nieprawidłowa.",
+     [{"name": "OPENROUTER_API_KEY", "label": "Klucz OpenRouter API",
+       "type": "password", "placeholder": "sk-or-v1-...",
+       "chips": [{"label": "openrouter.ai/keys", "value": ""}]}],
+     "LLM"),
+
+    # Generic API key / unauthorized
+    (r"401 Unauthorized|403 Forbidden.*API|API key.*invalid|Invalid API key|authentication.*required",
+     "Błąd autoryzacji API",
+     "Serwis zwrócił błąd autoryzacji — sprawdź klucze API.",
+     [],
+     "LLM"),
+
+    # GitHub token
+    (r"GITHUB_TOKEN.*(not set|missing|invalid)|GitHub.*403|Bad credentials.*GitHub|ghp_.*invalid",
+     "Brak tokenu GitHub",
+     "Zmienna `GITHUB_TOKEN` nie jest ustawiona lub token wygasł.",
+     [{"name": "GITHUB_TOKEN", "label": "GitHub Personal Access Token",
+       "type": "password", "placeholder": "ghp_...",
+       "chips": [{"label": "github.com/settings/tokens", "value": ""}]},
+      {"name": "GITHUB_REPO", "label": "GitHub Repo (owner/repo)",
+       "type": "text", "placeholder": "org/repo", "chips": []}],
+     "Integrations"),
+
+    # Jira token
+    (r"JIRA_TOKEN.*(not set|missing|invalid)|JIRA_URL.*(not set|missing)|Jira.*authentication",
+     "Brak konfiguracji Jira",
+     "Zmienna `JIRA_TOKEN` lub `JIRA_URL` nie jest ustawiona.",
+     [{"name": "JIRA_URL", "label": "Jira URL", "type": "text",
+       "placeholder": "https://your-org.atlassian.net", "chips": []},
+      {"name": "JIRA_TOKEN", "label": "Jira API Token", "type": "password",
+       "placeholder": "atl_...", "chips": [{"label": "id.atlassian.com/token", "value": ""}]}],
+     "Integrations"),
+
+    # SSH / Git
+    (r"Permission denied \(publickey\)|Host key verification failed|Could not read from remote repository",
+     "Błąd SSH / dostęp do repozytorium",
+     "Klucz SSH jest nieprawidłowy lub repo jest niedostępne.",
+     [{"name": "GITHUB_SSH_KEY", "label": "Ścieżka klucza SSH",
+       "type": "text", "placeholder": "~/.ssh/id_ed25519", "chips": []},
+      {"name": "GIT_REPO_URL", "label": "Git Repo URL",
+       "type": "text", "placeholder": "git@github.com:org/app.git", "chips": []}],
+     "Git"),
+
+    # Database connection
+    (r"could not connect to server|Connection refused.*5432|ECONNREFUSED.*(5432|3306|27017)|mysql.*connection.*refused|postgres.*connection.*refused",
+     "Brak połączenia z bazą danych",
+     "Nie można połączyć się z bazą — sprawdź host, port i dane dostępowe.",
+     [{"name": "DB_HOST", "label": "Host bazy danych", "type": "text",
+       "placeholder": "localhost", "chips": []},
+      {"name": "DB_PASSWORD", "label": "Hasło bazy danych", "type": "password",
+       "placeholder": "", "chips": []}],
+     "App"),
+
+    # Generic missing env var (catch-all for tool output)
+    (r'Please set the ([A-Z][A-Z0-9_]{2,}) environment variable|([A-Z][A-Z0-9_]{2,}) must be set|set ([A-Z][A-Z0-9_]{2,}) to',
+     "Brakuje zmiennej środowiskowej",
+     "Narzędzie wymaga ustawienia zmiennej środowiskowej.",
+     [],
+     ""),
+]
+
+
+def _emit_config_form(title: str, desc: str, fields: list, settings_group: str,
+                      fired_key: str, fired: set):
+    """Emit a config_prompt widget for interactive in-chat configuration."""
+    if fired_key in fired:
+        return
+    fired.add(fired_key)
+    action = f"settings_group::{settings_group}" if settings_group and settings_group != "claude_code_login" else "settings"
+    # Enrich fields with current values from _state
+    enriched = []
+    for f in fields:
+        sk = _ENV_TO_STATE.get(f["name"], f["name"].lower())
+        cur = _state.get(sk, "")
+        enriched.append({**f, "value": cur})
+    _sid_emit("widget", {
+        "type": "config_prompt",
+        "title": title,
+        "desc": desc,
+        "fields": enriched,
+        "settings_group": settings_group,
+        "action": action,
+    })
 
 
 _HEALTH_PATTERNS = [

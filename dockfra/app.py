@@ -1235,6 +1235,22 @@ def _step_engine_autotest():
         _prompt_api_key(return_action="engine_autotest")
 
 
+def _step_settings_nav():
+    """Show group selector for settings navigation."""
+    clear_widgets()
+    groups = list(dict.fromkeys(e["group"] for e in ENV_SCHEMA))
+    msg("## ⚙️ Ustawienia — wybierz sekcję")
+    btn_items = []
+    for g in groups:
+        g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
+        missing = [e for e in g_entries
+                   if e.get("required_for") and not _state.get(_ENV_TO_STATE.get(e["key"], e["key"].lower()))]
+        icon = "🔴" if missing else "✅"
+        btn_items.append({"label": f"{icon} {g}", "value": f"settings_group::{g}"})
+    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    buttons(btn_items)
+
+
 def _dispatch(value: str, form: dict):
     """Shared dispatch logic for both SocketIO and REST actions."""
     if value.startswith("logs::"):          step_show_logs(value.split("::",1)[1]); return True
@@ -1631,6 +1647,7 @@ def _dispatch(value: str, form: dict):
         msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
         buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"← Wróć","value":"back"}])
         return True
+    if value == "settings_nav":             _step_settings_nav(); return True
     if value.startswith("settings_group::"): step_settings(value.split("::",1)[1]); return True
     if value.startswith("save_settings::"):  step_save_settings(value.split("::",1)[1], form); return True
     if value.startswith("preflight_save_launch::"):
@@ -1768,6 +1785,10 @@ def api_tickets_create():
             labels=data.get("labels", []),
             created_by=data.get("created_by", "manager"),
         )
+        _bus.emit(EventType.TICKET_CREATED, {
+            "id": ticket["id"], "title": title,
+            "priority": ticket.get("priority"), "assigned_to": ticket.get("assigned_to"),
+        }, src="api")
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}), 500
     return json.dumps({"ok": True, "ticket": ticket})
@@ -1784,10 +1805,12 @@ def api_ticket_get(ticket_id):
 def api_ticket_update(ticket_id):
     """Update ticket fields."""
     data = request.get_json(silent=True) or {}
-    ticket = _tickets.update(ticket_id, **{k: v for k, v in data.items()
-                                           if k not in ("id", "created_at", "created_by")})
+    changes = {k: v for k, v in data.items() if k not in ("id", "created_at", "created_by")}
+    ticket = _tickets.update(ticket_id, **changes)
     if not ticket:
         return json.dumps({"ok": False, "error": "Not found"}), 404
+    event_type = EventType.TICKET_CLOSED if changes.get("status") == "done" else EventType.TICKET_UPDATED
+    _bus.emit(event_type, {"id": ticket_id, "changes": changes}, src="api")
     return json.dumps({"ok": True, "ticket": ticket})
 
 @app.route("/api/tickets/<ticket_id>/comment", methods=["POST"])
@@ -1797,9 +1820,11 @@ def api_ticket_comment(ticket_id):
     text = data.get("text", "").strip()
     if not text:
         return json.dumps({"ok": False, "error": "Text required"}), 400
-    ticket = _tickets.add_comment(ticket_id, data.get("author", "wizard"), text)
+    author = data.get("author", "wizard")
+    ticket = _tickets.add_comment(ticket_id, author, text)
     if not ticket:
         return json.dumps({"ok": False, "error": "Not found"}), 404
+    _bus.emit(EventType.TICKET_COMMENTED, {"id": ticket_id, "author": author, "text": text[:200]}, src="api")
     return json.dumps({"ok": True, "ticket": ticket})
 
 @app.route("/api/stats")

@@ -667,16 +667,20 @@ class TestEventBus:
         bus2 = get_bus()
         assert bus1 is bus2
 
-    def test_emit_persists_to_store(self, app_client):
-        from dockfra.event_bus import get_bus
-        bus = get_bus()
+    def test_emit_persists_to_store(self, app_client, tmp_path):
+        from dockfra import db as _db
+        from dockfra.event_bus import init_bus
+        _db.init_db(tmp_path / "bus_test.db")
+        bus = init_bus(_db)
         before = bus.query_max_id()
         eid = bus.emit("test.bus_emit", {"hello": "world"}, src="test")
         assert eid > before
 
-    def test_query_events_returns_emitted(self, app_client):
-        from dockfra.event_bus import get_bus
-        bus = get_bus()
+    def test_query_events_returns_emitted(self, app_client, tmp_path):
+        from dockfra import db as _db
+        from dockfra.event_bus import init_bus
+        _db.init_db(tmp_path / "bus_query_test.db")
+        bus = init_bus(_db)
         before = bus.query_max_id()
         bus.emit("test.query_check", {"key": "val"}, src="test")
         events = bus.query_events(since_id=before, limit=10)
@@ -729,3 +733,57 @@ class TestEventsAPIFilters:
         data = json.loads(r.data)
         for ev in data["events"]:
             assert ev["src"] == "cli"
+
+
+class TestTicketDomainEvents:
+    """Test that ticket CRUD emits domain events (event sourcing)."""
+
+    def test_ticket_create_emits_event(self, app_client):
+        r1 = app_client.get("/api/events/since/999999999")
+        before = json.loads(r1.data)["max_id"]
+        app_client.post("/api/tickets",
+            data=json.dumps({"title": "Event test ticket", "priority": "high"}),
+            content_type="application/json")
+        r2 = app_client.get(f"/api/events/since/{before}?limit=10&type=ticket.created")
+        events = json.loads(r2.data)["events"]
+        assert len(events) >= 1
+        assert events[0]["data"]["title"] == "Event test ticket"
+
+    def test_ticket_update_emits_event(self, app_client, tickets_dir):
+        from dockfra import tickets
+        tickets.create("Update event test")
+        r1 = app_client.get("/api/events/since/999999999")
+        before = json.loads(r1.data)["max_id"]
+        app_client.put("/api/tickets/T-0001",
+            data=json.dumps({"status": "in_progress"}),
+            content_type="application/json")
+        r2 = app_client.get(f"/api/events/since/{before}?limit=10&type=ticket.updated")
+        events = json.loads(r2.data)["events"]
+        assert len(events) >= 1
+        assert events[0]["data"]["id"] == "T-0001"
+
+    def test_ticket_comment_emits_event(self, app_client, tickets_dir):
+        from dockfra import tickets
+        tickets.create("Comment event test")
+        r1 = app_client.get("/api/events/since/999999999")
+        before = json.loads(r1.data)["max_id"]
+        app_client.post("/api/tickets/T-0001/comment",
+            data=json.dumps({"text": "Test comment", "author": "tester"}),
+            content_type="application/json")
+        r2 = app_client.get(f"/api/events/since/{before}?limit=10&type=ticket.commented")
+        events = json.loads(r2.data)["events"]
+        assert len(events) >= 1
+        assert events[0]["data"]["author"] == "tester"
+
+    def test_ticket_close_emits_closed_event(self, app_client, tickets_dir):
+        from dockfra import tickets
+        tickets.create("Close event test")
+        r1 = app_client.get("/api/events/since/999999999")
+        before = json.loads(r1.data)["max_id"]
+        app_client.put("/api/tickets/T-0001",
+            data=json.dumps({"status": "done"}),
+            content_type="application/json")
+        r2 = app_client.get(f"/api/events/since/{before}?limit=10&type=ticket.closed")
+        events = json.loads(r2.data)["events"]
+        assert len(events) >= 1
+        assert events[0]["data"]["id"] == "T-0001"

@@ -55,6 +55,10 @@ class EventType(str, Enum):
     ENGINE_SELECTED = "engine.selected"
     ENGINE_TEST_RESULT = "engine.test_result"
 
+    # Config error domain
+    CONFIG_ERROR = "config.error"
+    CONFIG_FIXED = "config.fixed"
+
     # Container domain
     CONTAINER_STARTED = "container.started"
     CONTAINER_STOPPED = "container.stopped"
