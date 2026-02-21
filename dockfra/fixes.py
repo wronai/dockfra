@@ -48,9 +48,9 @@ def step_fix_container(name: str):
             reply = _llm_chat(prompt, system_prompt=_WIZARD_SYSTEM_PROMPT)
             progress("🧠 AI", done=True)
             msg(f"### 🧠 Analiza AI\n{reply}")
-            fix_btns = [{"label": f"📋 Pełne logi: {n}", "value": f"logs::{n}"},
-                        {"label": "🔄 Restart kontenera", "value": f"restart_container::{n}"},
-                        {"label": "⚙️ Ustawienia", "value": "settings"}]
+            fix_btns = [{"label": f"{t('show_full_logs')}: {n}", "value": f"logs::{n}"},
+                        {"label": t('restart_container'), "value": f"restart_container::{n}"},
+                        {"label": t('settings'), "value": "settings"}]
             buttons(fix_btns)
             _tl.sid = None
         threading.Thread(target=_fix_llm, daemon=True).start()
@@ -457,7 +457,7 @@ def fix_network_overlap(net_name: str = ""):
                 msg(f"✅ Sieci wyczyszczone:\n```\n{out.strip()}\n```")
             except Exception as e:
                 msg(f"❌ Błąd: {e}")
-                buttons([{"label": "🔄 Spróbuj ponownie", "value": "retry_launch"}])
+                buttons([{"label": t('retry'), "value": "retry_launch"}])
                 return
         msg("🚀 Ponawiam uruchamianie stacków...")
         retry_launch()

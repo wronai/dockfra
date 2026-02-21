@@ -2,13 +2,13 @@
   "id": "T-0002",
   "title": "E2E test ticket",
   "description": "Created via API test",
-  "status": "review",
+  "status": "done",
   "priority": "high",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:32:24.342190+00:00",
-  "updated_at": "2026-02-21T09:05:05.078492+00:00",
+  "updated_at": "2026-02-21T09:27:07.563290+00:00",
   "comments": [
     {
       "author": "unknown",
@@ -89,6 +89,41 @@
       "author": "developer",
       "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 75%). Silnik: Claude Code CLI. Model: google/gemini-3-flash-preview. Gotowe do review.",
       "timestamp": "2026-02-21T09:05:05.078484+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\ud83d\udd04 Rejected. Needs rework.",
+      "timestamp": "2026-02-21T09:19:41.630362+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T09:19:50.634453+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #2 zako\u0144czona (wynik: 78%). Silnik: Claude Code CLI. Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T09:19:53.957283+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\ud83d\udd04 Rejected. Needs rework.",
+      "timestamp": "2026-02-21T09:26:21.821782+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T09:26:26.453889+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #3 zako\u0144czona (wynik: 78%). Silnik: Claude Code CLI. Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T09:26:29.623340+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\u2705 Approved by manager.",
+      "timestamp": "2026-02-21T09:27:07.563280+00:00"
     }
   ],
   "github_issue_number": null

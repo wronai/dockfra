@@ -1,0 +1,14 @@
+{
+  "id": "T-0005",
+  "title": "Dodaj funkcje kontaktu",
+  "description": "Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e",
+  "status": "open",
+  "priority": "normal",
+  "assigned_to": "developer",
+  "labels": [],
+  "created_by": "manager",
+  "created_at": "2026-02-21T09:27:49.990385+00:00",
+  "updated_at": "2026-02-21T09:27:49.990403+00:00",
+  "comments": [],
+  "github_issue_number": null
+}

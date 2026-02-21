@@ -1,6 +1,6 @@
 """Wizard step functions — welcome, status, settings, launch, deploy."""
 from .core import *
-from .i18n import t, set_lang, get_lang, llm_lang_instruction
+from .i18n import t, set_lang, get_lang, llm_lang_instruction, _STRINGS
 from .discover import _SSH_ROLES, _get_role, _refresh_ssh_roles
 
 def step_welcome():
@@ -125,12 +125,13 @@ def step_settings(group: str = ""):
             sug = suggestions.get(e["key"], {})
             if not cur and sug.get("value"):
                 cur = sug["value"]
+            _lbl = t(e["label"]) if e["label"] in _STRINGS else e["label"]
             if e["type"] == "select":
-                opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-                select(e["key"], e["label"], opts, cur,
+                opts = [{"label": (t(lbl) if lbl in _STRINGS else lbl), "value": val} for val, lbl in e["options"]]
+                select(e["key"], _lbl, opts, cur,
                        desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
             else:
-                text_input(e["key"], e["label"],
+                text_input(e["key"], _lbl,
                            e.get("placeholder", ""), cur,
                            sec=(e["type"] == "password"),
                            hint=sug.get("hint", ""),

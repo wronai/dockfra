@@ -1,11 +1,12 @@
 project: dockfra
-generated: "2026-02-21T09:46:09.764892"
-modules[25]{path,lang,items}:
+generated: "2026-02-21T10:22:43.305344"
+modules[26]{path,lang,items}:
   tests/test_e2e.py,python,78
+  dockfra/i18n.py,python,6
   dockfra/steps.py,python,22
   dockfra/cli.py,python,39
   dockfra/engines.py,python,30
-  dockfra/app.py,python,52
+  dockfra/app.py,python,53
   dockfra/__init__.py,python,0
   dockfra/llm_client.py,python,4
   dockfra/tickets.py,python,28
@@ -20,7 +21,7 @@ modules[25]{path,lang,items}:
   shared/lib/llm_client.py,python,4
   shared/lib/ticket_system.py,python,0
   shared/lib/logger.py,python,6
-  dockfra/static/wizard.js,javascript,44
+  dockfra/static/wizard.js,javascript,45
   app/backend/app.py,python,8
   app/mobile-backend/app.py,python,4
   app/desktop-app/server.py,python,3
@@ -108,30 +109,38 @@ function_details:
       TestTicketDomainEvents.test_ticket_update_emits_event,method,"(app_client, tickets_dir)",752-763,false,12,1,checks ticket update emits event
       TestTicketDomainEvents.test_ticket_comment_emits_event,method,"(app_client, tickets_dir)",765-776,false,12,1,checks ticket comment emits event
       TestTicketDomainEvents.test_ticket_close_emits_closed_event,method,"(app_client, tickets_dir)",778-789,false,12,1,checks ticket close emits closed event
+  dockfra/i18n.py:
+    functions[6]{name,kind,sig,loc,async,lines,cc,does}:
+      set_lang,function,"(lang:str)",30-32,false,3,2,Set the current language for this thread.
+      get_lang,function,() -> str,35-37,false,3,1,Get the current language for this thread.
+      get_lang_name,function,"(lang:str='') -> str",40-42,false,3,3,Human-readable language name.
+      _add,function,"(key:str)",51-53,false,3,1,Register translations for a key.
+      t,function,"(key:str) -> str",56-68,false,13,7,"Translate key to current language, with optional format kwargs."
+      llm_lang_instruction,function,() -> str,72-78,false,7,2,Return an instruction string for the LLM to respond in the current language.
   dockfra/steps.py:
     functions[22]{name,kind,sig,loc,async,lines,cc,does}:
-      step_welcome,function,(),5-52,false,48,10,step welcome
-      step_status,function,(),55-78,false,24,11,step status
-      step_pick_logs,function,(),80-88,false,9,3,step pick logs
-      step_show_logs,function,(container),90-97,false,8,2,step show logs
-      step_settings,function,"(group:str='')",99-143,false,45,20,Show env editor for a specific group or group selector.
-      step_save_settings,function,"(group:str, form:dict)",146-170,false,25,10,Save edited group back to _state and dockfra/.env.
-      preflight_check,function,"(stacks:list[str]) -> list[dict]",173-184,false,12,6,Return list of missing required vars for the given stacks.
-      step_preflight_fill,function,"(stacks:list[str])",187-212,false,26,7,Show inline form for all missing required vars before launching.
-      step_setup_creds,function,(),215-241,false,27,8,step setup creds
-      step_save_creds,function,(form),243-266,false,24,7,step save creds
-      step_launch_all,function,(),268-285,false,18,1,step launch all
-      step_launch_configure,function,(),287-288,false,2,1,step launch configure
-      _analyze_launch_error,function,"(name:str, output:str) -> tuple[str, list]",290-359,false,70,31,"Parse docker compose output and return (analysis_text, solution_buttons)."
-      step_do_launch,function,(form),362-577,false,216,17,step do launch
-      step_deploy_device,function,(),579-607,false,29,4,step deploy device
-      _save_device_form,function,(form),609-615,false,7,2,caches device form
-      step_test_device,function,(form),617-639,false,23,2,step test device
-      step_do_deploy,function,(form),641-680,false,40,2,step do deploy
-      _update_device_env,function,"(ip, user, port)",682-695,false,14,11,updates device env
-      step_launch_devices,function,(form=None),697-712,false,16,1,step launch devices
-      step_post_launch_creds,function,(),714-729,false,16,5,step post launch creds
-      step_run_post_creds,function,(),731-749,false,19,1,step run post creds
+      step_welcome,function,(),6-53,false,48,10,step welcome
+      step_status,function,(),56-79,false,24,11,step status
+      step_pick_logs,function,(),81-89,false,9,3,step pick logs
+      step_show_logs,function,(container),91-98,false,8,2,step show logs
+      step_settings,function,"(group:str='')",100-145,false,46,22,Show env editor for a specific group or group selector.
+      step_save_settings,function,"(group:str, form:dict)",148-172,false,25,10,Save edited group back to _state and dockfra/.env.
+      preflight_check,function,"(stacks:list[str]) -> list[dict]",175-186,false,12,6,Return list of missing required vars for the given stacks.
+      step_preflight_fill,function,"(stacks:list[str])",189-223,false,35,10,Show inline form for all missing required vars before launching.
+      step_setup_creds,function,(),226-252,false,27,8,step setup creds
+      step_save_creds,function,(form),254-277,false,24,7,step save creds
+      step_launch_all,function,(),279-296,false,18,1,step launch all
+      step_launch_configure,function,(),298-299,false,2,1,step launch configure
+      _analyze_launch_error,function,"(name:str, output:str) -> tuple[str, list]",301-370,false,70,31,"Parse docker compose output and return (analysis_text, solution_buttons)."
+      step_do_launch,function,(form),373-588,false,216,17,step do launch
+      step_deploy_device,function,(),590-615,false,26,4,step deploy device
+      _save_device_form,function,(form),617-623,false,7,2,caches device form
+      step_test_device,function,(form),625-647,false,23,2,step test device
+      step_do_deploy,function,(form),649-688,false,40,2,step do deploy
+      _update_device_env,function,"(ip, user, port)",690-703,false,14,11,updates device env
+      step_launch_devices,function,(form=None),705-720,false,16,1,step launch devices
+      step_post_launch_creds,function,(),722-737,false,16,5,step post launch creds
+      step_run_post_creds,function,(),739-757,false,19,1,step run post creds
   dockfra/cli.py:
     functions[39]{name,kind,sig,loc,async,lines,cc,does}:
       _c,function,"(code, s)",31-31,false,1,2,c
@@ -206,59 +215,60 @@ function_details:
       EngineProtocol.implement_cmd,method,"(ticket_id:str) -> str",37-37,false,1,1,implement cmd
       EngineResult.to_dict,method,() -> dict,48-49,false,2,1,converts dict
   dockfra/app.py:
-    functions[52]{name,kind,sig,loc,async,lines,cc,does}:
-      on_connect,function,(),80-102,false,23,4,handles connect
-      on_disconnect,function,(),105-106,false,2,1,handles disconnect
-      on_action,function,(data),109-171,false,63,4,handles action
-      index,function,(),175-177,false,3,1,index
-      dashboard,function,(),180-181,false,2,1,dashboard
-      api_containers,function,(),184-185,false,2,1,api containers
-      api_logs,function,(container),188-195,false,8,2,api logs
-      api_events,function,(),198-205,false,8,4,api events
-      api_env,function,(),208-221,false,14,4,api env
-      api_env_post,function,(),224-233,false,10,8,api env post
-      api_history,function,(),236-241,false,6,1,api history
-      api_processes,function,(),244-285,false,42,10,api processes
-      api_detect,function,(key),288-345,false,58,19,api detect
-      api_ssh_options,function,"(kind, role='developer')",349-458,false,110,34,api ssh options
-      api_device_ips,function,(),461-576,false,116,26,api device ips
-      api_process_action,function,"(action, process_name)",579-600,false,22,8,api process action
-      _load_integration_env,function,(),602-611,false,10,4,Load integration credentials from .env into os.environ and refresh _tickets.
-      _step_ticket_create_wizard,function,(form),614-635,false,22,1,Show ticket creation form in the wizard chat.
-      _step_ticket_create_do,function,(form),637-661,false,25,3,Actually create the ticket from form data.
-      _step_integrations_setup,function,(),663-700,false,38,1,Show integrations configuration form.
-      _step_integrations_save,function,(form),702-733,false,32,12,Save integration credentials to .env.
-      _step_ticket_sync,function,(),735-760,false,26,5,Sync tickets with configured external services.
-      _step_project_stats,function,(),762-830,false,69,23,Show project statistics in the chat.
-      _step_show_ticket,function,"(tid:str)",835-874,false,40,12,Show detailed ticket view with status-aware actions.
-      _step_tickets_review,function,(),877-919,false,43,20,Show all tickets in 'review' status — manager dashboard.
-      _step_manager_approve,function,"(tid:str, form:dict)",922-948,false,27,6,"Manager approves a ticket — marks as done, pushes to GitHub, syncs."
-      _step_manager_reject,function,"(tid:str)",951-968,false,18,2,Manager rejects a ticket — sends back to in_progress for rework.
-      _step_manager_suggest_features,function,(),971-1055,false,85,14,Manager uses LLM to analyze the project and suggest new features/tickets.
-      _step_test_llm_key,function,"(form:dict, return_action:str='')",1058-1129,false,72,16,Test LLM key + model from the form in real-time.
-      _step_engine_select,function,"(form:dict)",1132-1188,false,57,17,Show engine selection UI with auto-test results.
-      _step_set_engine,function,"(engine_id:str)",1191-1203,false,13,2,Set preferred dev engine.
-      _step_engine_autotest,function,(),1206-1235,false,30,5,Auto-test all engines and auto-select first working one.
-      _step_settings_nav,function,(),1238-1251,false,14,9,Show group selector for settings navigation.
-      _dispatch,function,"(value:str, form:dict)",1254-1668,false,415,48,Shared dispatch logic for both SocketIO and REST actions.
-      _run_action_sync,function,"(value:str, form:dict, timeout:float=30.0) -> list[dict]",1670-1695,false,26,7,Run a wizard action synchronously (for REST API).
-      _events_to_rest,function,"(events:list[dict]) -> list[dict]",1697-1729,false,33,13,Convert raw collected events to a clean REST-friendly list.
-      api_action,function,(),1732-1746,false,15,3,Synchronous action endpoint for CLI/REST clients.
-      api_logs_tail,function,(),1749-1753,false,5,1,Return last N lines from the internal log buffer.
-      api_health,function,(),1756-1771,false,16,8,Return algorithmic health analysis of running containers.
-      api_tickets,function,(),1776-1782,false,7,1,List all tickets with optional filters.
-      api_tickets_create,function,(),1785-1806,false,22,4,Create a ticket directly from the wizard.
-      api_ticket_get,function,(ticket_id),1809-1814,false,6,2,Get a single ticket by ID.
-      api_ticket_update,function,(ticket_id),1817-1826,false,10,6,Update ticket fields.
-      api_ticket_comment,function,(ticket_id),1829-1840,false,12,4,Add a comment to a ticket.
-      api_stats,function,(),1843-1907,false,65,21,"Project statistics: tickets, containers, git, integrations."
-      api_ticket_diff,function,(ticket_id),1910-1959,false,50,13,Return git commits and unified diff for a given ticket ID from the app repo.
-      api_developer_health,function,(),1963-2014,false,52,10,Quick health check of the ssh-developer container.
-      api_engine_status,function,(),2018-2028,false,11,3,Test all dev engines and return status.
-      api_developer_logs,function,(),2032-2044,false,13,2,Return last N lines of ssh-developer container logs.
-      api_tickets_sync,function,(),2048-2055,false,8,2,"Sync tickets with external services (GitHub, Jira, Trello, Linear)."
-      api_events_since,function,(since_id),2060-2067,false,8,3,"CQRS Query: return new events since given cursor (for CLI TUI polling)."
-      api_stream,function,(),2071-2096,false,26,1,"CQRS Query: SSE stream — push new events to connected clients in real-time."
+    functions[53]{name,kind,sig,loc,async,lines,cc,does}:
+      on_set_lang,function,(data),81-85,false,5,2,Handle language change from frontend.
+      on_connect,function,(),88-112,false,25,4,handles connect
+      on_disconnect,function,(),115-116,false,2,1,handles disconnect
+      on_action,function,(data),119-186,false,68,4,handles action
+      index,function,(),190-192,false,3,1,index
+      dashboard,function,(),195-196,false,2,1,dashboard
+      api_containers,function,(),199-200,false,2,1,api containers
+      api_logs,function,(container),203-210,false,8,2,api logs
+      api_events,function,(),213-220,false,8,4,api events
+      api_env,function,(),223-236,false,14,4,api env
+      api_env_post,function,(),239-248,false,10,8,api env post
+      api_history,function,(),251-256,false,6,1,api history
+      api_processes,function,(),259-300,false,42,10,api processes
+      api_detect,function,(key),303-360,false,58,19,api detect
+      api_ssh_options,function,"(kind, role='developer')",364-473,false,110,34,api ssh options
+      api_device_ips,function,(),476-591,false,116,26,api device ips
+      api_process_action,function,"(action, process_name)",594-615,false,22,8,api process action
+      _load_integration_env,function,(),617-626,false,10,4,Load integration credentials from .env into os.environ and refresh _tickets.
+      _step_ticket_create_wizard,function,(form),629-650,false,22,1,Show ticket creation form in the wizard chat.
+      _step_ticket_create_do,function,(form),652-676,false,25,3,Actually create the ticket from form data.
+      _step_integrations_setup,function,(),678-713,false,36,1,Show integrations configuration form.
+      _step_integrations_save,function,(form),715-746,false,32,12,Save integration credentials to .env.
+      _step_ticket_sync,function,(),748-773,false,26,5,Sync tickets with configured external services.
+      _step_project_stats,function,(),775-843,false,69,23,Show project statistics in the chat.
+      _step_show_ticket,function,"(tid:str)",848-887,false,40,12,Show detailed ticket view with status-aware actions.
+      _step_tickets_review,function,(),890-932,false,43,20,Show all tickets in 'review' status — manager dashboard.
+      _step_manager_approve,function,"(tid:str, form:dict)",935-959,false,25,6,"Manager approves a ticket — marks as done, pushes to GitHub, syncs."
+      _step_manager_reject,function,"(tid:str)",962-979,false,18,2,Manager rejects a ticket — sends back to in_progress for rework.
+      _step_manager_suggest_features,function,(),982-1066,false,85,14,Manager uses LLM to analyze the project and suggest new features/tickets.
+      _step_test_llm_key,function,"(form:dict, return_action:str='')",1069-1140,false,72,16,Test LLM key + model from the form in real-time.
+      _step_engine_select,function,"(form:dict)",1143-1199,false,57,17,Show engine selection UI with auto-test results.
+      _step_set_engine,function,"(engine_id:str)",1202-1214,false,13,2,Set preferred dev engine.
+      _step_engine_autotest,function,(),1217-1246,false,30,5,Auto-test all engines and auto-select first working one.
+      _step_settings_nav,function,(),1249-1262,false,14,9,Show group selector for settings navigation.
+      _dispatch,function,"(value:str, form:dict)",1265-1679,false,415,48,Shared dispatch logic for both SocketIO and REST actions.
+      _run_action_sync,function,"(value:str, form:dict, timeout:float=30.0) -> list[dict]",1681-1737,false,57,18,Run a wizard action synchronously (for REST API).
+      _events_to_rest,function,"(events:list[dict]) -> list[dict]",1739-1771,false,33,13,Convert raw collected events to a clean REST-friendly list.
+      api_action,function,(),1774-1788,false,15,3,Synchronous action endpoint for CLI/REST clients.
+      api_logs_tail,function,(),1791-1795,false,5,1,Return last N lines from the internal log buffer.
+      api_health,function,(),1798-1813,false,16,8,Return algorithmic health analysis of running containers.
+      api_tickets,function,(),1818-1824,false,7,1,List all tickets with optional filters.
+      api_tickets_create,function,(),1827-1848,false,22,4,Create a ticket directly from the wizard.
+      api_ticket_get,function,(ticket_id),1851-1856,false,6,2,Get a single ticket by ID.
+      api_ticket_update,function,(ticket_id),1859-1868,false,10,6,Update ticket fields.
+      api_ticket_comment,function,(ticket_id),1871-1882,false,12,4,Add a comment to a ticket.
+      api_stats,function,(),1885-1949,false,65,21,"Project statistics: tickets, containers, git, integrations."
+      api_ticket_diff,function,(ticket_id),1952-2001,false,50,13,Return git commits and unified diff for a given ticket ID from the app repo.
+      api_developer_health,function,(),2005-2056,false,52,10,Quick health check of the ssh-developer container.
+      api_engine_status,function,(),2060-2070,false,11,3,Test all dev engines and return status.
+      api_developer_logs,function,(),2074-2086,false,13,2,Return last N lines of ssh-developer container logs.
+      api_tickets_sync,function,(),2090-2097,false,8,2,"Sync tickets with external services (GitHub, Jira, Trello, Linear)."
+      api_events_since,function,(since_id),2102-2109,false,8,3,"CQRS Query: return new events since given cursor (for CLI TUI polling)."
+      api_stream,function,(),2113-2138,false,26,1,"CQRS Query: SSE stream — push new events to connected clients in real-time."
   dockfra/llm_client.py:
     functions[4]{name,kind,sig,loc,async,lines,cc,does}:
       get_config,function,(),17-25,false,9,1,Load LLM config from environment.
@@ -297,15 +307,15 @@ function_details:
       format_ticket,function,"(t, verbose=False)",593-604,false,12,4,Format ticket for display.
   dockfra/discover.py:
     functions[9]{name,kind,sig,loc,async,lines,cc,does}:
-      _parse_ssh_makefile,function,"(path:Path)",35-66,false,32,16,Parse an ssh-* Makefile.
-      _parse_ssh_motd,function,"(path:Path, role:str)",69-80,false,12,3,Parse a motd file for icon and title.
-      _discover_extra_scripts,function,"(ssh_dir:Path, known_targets:set)",83-95,false,13,5,Find .sh scripts not already covered by Makefile targets.
-      _discover_ssh_roles,function,(),98-165,false,68,21,"Scan app/ and management/ for ssh-* dirs, parse Makefiles + motd + scripts."
-      _refresh_ssh_roles,function,(),170-173,false,4,1,Re-scan the filesystem and update the cached role data.
-      _get_role,function,"(role:str)",175-194,false,20,5,"Get role data, falling back to a minimal stub."
-      _step_ssh_info,function,"(value:str)",197-248,false,52,12,"Handle ssh_info::role::port button — show action grid for role commands."
-      step_ssh_console,function,"(value:str)",251-256,false,6,3,Alias — redirect to action grid view.
-      run_ssh_cmd,function,"(value:str, form:dict)",259-383,false,125,12,Execute selected command via docker exec and stream output to chat.
+      _parse_ssh_makefile,function,"(path:Path)",36-67,false,32,16,Parse an ssh-* Makefile.
+      _parse_ssh_motd,function,"(path:Path, role:str)",70-81,false,12,3,Parse a motd file for icon and title.
+      _discover_extra_scripts,function,"(ssh_dir:Path, known_targets:set)",84-96,false,13,5,Find .sh scripts not already covered by Makefile targets.
+      _discover_ssh_roles,function,(),99-166,false,68,21,"Scan app/ and management/ for ssh-* dirs, parse Makefiles + motd + scripts."
+      _refresh_ssh_roles,function,(),171-174,false,4,1,Re-scan the filesystem and update the cached role data.
+      _get_role,function,"(role:str)",176-195,false,20,5,"Get role data, falling back to a minimal stub."
+      _step_ssh_info,function,"(value:str)",198-249,false,52,12,"Handle ssh_info::role::port button — show action grid for role commands."
+      step_ssh_console,function,"(value:str)",252-257,false,6,3,Alias — redirect to action grid view.
+      run_ssh_cmd,function,"(value:str, form:dict)",260-385,false,126,12,Execute selected command via docker exec and stream output to chat.
   dockfra/__main__.py:
     functions[4]{name,kind,sig,loc,async,lines,cc,does}:
       _serve,function,"(host:str, port:int, root:Any) -> None",8-19,false,12,3,serve
@@ -314,24 +324,24 @@ function_details:
       main,function,() -> None,33-60,false,28,5,main
   dockfra/fixes.py:
     functions[18]{name,kind,sig,loc,async,lines,cc,does}:
-      step_fix_container,function,"(name:str)",5-70,false,66,6,Interactive fix wizard for a failing container.
-      _do_restart_container,function,"(name:str)",73-104,false,32,1,do restart container
-      _llm_suggest_commands,function,"(name:str, logs:str) -> dict",107-123,false,17,3,Send log context to LLM and parse structured JSON with diagnosis + commands.
-      step_suggest_commands,function,"(name:str)",126-175,false,50,1,"Fetch logs, ask LLM for commands, render each with ▶️ Wykonaj button."
-      _sdk_fallback_cmd,function,"(cmd:str) -> str",178-218,false,41,14,Try to execute a docker command via the Python SDK.
-      _run_suggested_cmd,function,"(cmd:str)",221-258,false,38,3,Execute a command proposed by LLM.
-      diag_port,function,"(port_num:str)",262-278,false,17,1,diag port
-      show_missing_env,function,"(stack_name:str)",281-321,false,41,10,Show inline input form for missing required vars in the given stack.
-      validate_llm_connection,function,"() -> tuple[bool, str]",324-354,false,31,11,Test LLM key by making a minimal API call.
-      validate_docker,function,"() -> tuple[bool, str]",357-370,false,14,5,Check if Docker daemon is running.
-      _ensure_llm_key,function,"(return_action:str='') -> tuple[bool, str]",373-389,false,17,6,Validate LLM key exists and works.
-      _prompt_api_key,function,"(return_action:str='', reason:str='')",392-417,false,26,9,Show inline form to enter OPENROUTER_API_KEY when LLM is unavailable.
-      fix_network_overlap,function,"(net_name:str='')",420-464,false,45,1,"Remove a conflicting Docker network (or prune all unused), then retry launch."
-      retry_launch,function,(form=None),467-468,false,2,1,retry launch
-      fix_vnc_port,function,(),471-480,false,10,4,fix vnc port
-      fix_acme_storage,function,(),483-543,false,61,7,"Auto-configure ACME_STORAGE: create letsencrypt dir, write to app/.env, restart..."
-      fix_readonly_volume,function,"(container:str='')",546-609,false,64,2,Find read-only volume mounts for a container and fix host directory permissions.
-      fix_docker_perms,function,(),612-619,false,8,1,fix docker perms
+      step_fix_container,function,"(name:str)",6-71,false,66,6,Interactive fix wizard for a failing container.
+      _do_restart_container,function,"(name:str)",74-105,false,32,1,do restart container
+      _llm_suggest_commands,function,"(name:str, logs:str) -> dict",108-124,false,17,3,Send log context to LLM and parse structured JSON with diagnosis + commands.
+      step_suggest_commands,function,"(name:str)",127-176,false,50,1,"Fetch logs, ask LLM for commands, render each with ▶️ Wykonaj button."
+      _sdk_fallback_cmd,function,"(cmd:str) -> str",179-219,false,41,14,Try to execute a docker command via the Python SDK.
+      _run_suggested_cmd,function,"(cmd:str)",222-259,false,38,3,Execute a command proposed by LLM.
+      diag_port,function,"(port_num:str)",263-279,false,17,1,diag port
+      show_missing_env,function,"(stack_name:str)",282-322,false,41,10,Show inline input form for missing required vars in the given stack.
+      validate_llm_connection,function,"() -> tuple[bool, str]",325-355,false,31,11,Test LLM key by making a minimal API call.
+      validate_docker,function,"() -> tuple[bool, str]",358-371,false,14,5,Check if Docker daemon is running.
+      _ensure_llm_key,function,"(return_action:str='') -> tuple[bool, str]",374-390,false,17,6,Validate LLM key exists and works.
+      _prompt_api_key,function,"(return_action:str='', reason:str='')",393-418,false,26,9,Show inline form to enter OPENROUTER_API_KEY when LLM is unavailable.
+      fix_network_overlap,function,"(net_name:str='')",421-465,false,45,1,"Remove a conflicting Docker network (or prune all unused), then retry launch."
+      retry_launch,function,(form=None),468-469,false,2,1,retry launch
+      fix_vnc_port,function,(),472-481,false,10,4,fix vnc port
+      fix_acme_storage,function,(),484-544,false,61,7,"Auto-configure ACME_STORAGE: create letsencrypt dir, write to app/.env, restart..."
+      fix_readonly_volume,function,"(container:str='')",547-610,false,64,2,Find read-only volume mounts for a container and fix host directory permissions.
+      fix_docker_perms,function,(),613-620,false,8,1,fix docker perms
   dockfra/event_bus.py:
     functions[18]{name,kind,sig,loc,async,lines,cc,does}:
       get_bus,function,() -> EventBus,209-216,false,8,3,Get or create the global event bus singleton.
@@ -354,46 +364,46 @@ function_details:
       EventBus.replay,method,"(since_id:int=0, handler:Any=None) -> int",183-200,false,18,6,Replay events from store through a handler (for rebuilding projections).
   dockfra/core.py:
     functions[40]{name,kind,sig,loc,async,lines,cc,does}:
-      _docker_client,function,(),60-67,false,8,3,"Return a docker SDK client, or None if unavailable."
-      _build_wizard_prompt,function,() -> str,69-96,false,28,3,Build system prompt dynamically from discovered stacks.
-      _sid_emit,function,"(event, data)",124-145,false,22,6,"Emit to all clients, persist to SQLite, and optionally collect for REST."
-      cname,function,"(service:str) -> str",161-163,false,3,1,"Container name from service: cname('traefik') → 'dockfra-traefik"
-      short_name,function,"(container:str) -> str",165-168,false,4,2,"Strip project prefix: 'dockfra-traefik' → 'traefik"
-      _discover_stacks,function,() -> dict,173-183,false,11,7,"Auto-discover stacks: subdirs of ROOT that contain docker-compose.yml."
-      _load_project_config,function,() -> dict,194-214,false,21,10,Load optional dockfra.yaml from project root.
-      _parse_compose_env_vars,function,() -> dict,219-247,false,29,13,"Scan all docker-compose files for ${VAR:-default} patterns."
-      _build_env_schema,function,() -> list,378-443,false,66,24,Merge core schema + auto-discovered compose vars + dockfra.yaml overrides.
-      _schema_defaults,function,() -> dict,448-449,false,2,2,schema defaults
-      load_env,function,() -> dict,451-463,false,13,8,"Load dockfra/.env, create from .env.example if missing."
-      save_env,function,"(updates:dict)",465-492,false,28,13,Write updates to dockfra/.env preserving comments and unknown keys.
-      reset_state,function,(),521-528,false,8,2,reset state
-      detect_config,function,(),533-552,false,20,11,detect config
-      _emit_log_error,function,"(line:str, fired:set)",554-662,false,109,37,Check a single log line against health + config-error patterns; emit alerts/form...
-      _strip_motd_line,function,"(text:str) -> bool",664-676,false,13,6,Return True if the line is a MOTD box-drawing line that should be suppressed.
-      run_cmd,function,"(cmd, cwd=None)",679-703,false,25,11,starts cmd
-      docker_ps,function,(),705-728,false,24,9,docker ps
-      mask,function,(k),730-730,false,1,2,mask
-      msg,function,"(text, role='bot')",732-735,false,4,1,msg
-      widget,function,(w),736-736,false,1,1,widget
-      buttons,function,"(items, label='')",737-737,false,1,1,buttons
-      text_input,function,"(n, l, ph='', v='', sec=False, hint='', chips=None, modal_type='')",738-738,false,1,2,text input
-      select,function,"(n, l, opts, v='', desc='', autodetect=False)",739-739,false,1,1,retrieves
-      code_block,function,(t),740-740,false,1,1,code block
-      status_row,function,(items),741-741,false,1,1,status row
-      progress,function,"(label, done=False, error=False)",742-742,false,1,1,progress
-      action_grid,function,"(run_value, commands, label='')",743-743,false,1,1,action grid
-      clear_widgets,function,(),744-744,false,1,1,deletes widgets
-      _env_status_summary,function,() -> str,747-756,false,10,6,"One-line summary: which required vars are missing."
-      _arp_devices,function,"() -> list[dict]",759-785,false,27,13,"Return [{ip, mac, iface, state}] sorted REACHABLE first."
-      _devices_env_ip,function,() -> str,787-796,false,10,6,Read RPI3_HOST from devices/.env.local or devices/.env.
-      _docker_container_env,function,"(container:str, var:str) -> str",798-809,false,12,4,Extract an env var value from a running Docker container.
-      _local_interfaces,function,"() -> list[str]",811-820,false,10,3,Return host IPs (non-loopback).
-      _subnet_ping_sweep,function,"(max_hosts:int=254, timeout:float=0.4) -> list[str]",822-860,false,39,15,Ping-sweep the host's first non-loopback /24 subnet.
-      _detect_suggestions,function,() -> dict,862-1063,false,202,88,Auto-detect suggested values for form fields.
-      _emit_missing_fields,function,"(missing:list[dict])",1065-1087,false,23,7,"Emit input/select widgets for each missing env var, with smart suggestions."
-      _emit_config_form,function,"(title:str, desc:str, fields:list, settings_group:str, fired_key:str, fired:set)",1185-1205,false,21,5,Emit a config_prompt widget for interactive in-chat configuration.
-      _docker_logs,function,"(name:str, tail:int=40) -> str",1271-1285,false,15,5,"Get container logs — shell first, SDK fallback."
-      _analyze_container_log,function,"(name:str) -> tuple[str, list]",1288-1311,false,24,7,"Read last 40 lines of a container log and return (finding_text, buttons)."
+      _docker_client,function,(),61-68,false,8,3,"Return a docker SDK client, or None if unavailable."
+      _build_wizard_prompt,function,() -> str,70-97,false,28,3,Build system prompt dynamically from discovered stacks.
+      _sid_emit,function,"(event, data)",125-146,false,22,6,"Emit to all clients, persist to SQLite, and optionally collect for REST."
+      cname,function,"(service:str) -> str",162-164,false,3,1,"Container name from service: cname('traefik') → 'dockfra-traefik"
+      short_name,function,"(container:str) -> str",166-169,false,4,2,"Strip project prefix: 'dockfra-traefik' → 'traefik"
+      _discover_stacks,function,() -> dict,174-184,false,11,7,"Auto-discover stacks: subdirs of ROOT that contain docker-compose.yml."
+      _load_project_config,function,() -> dict,195-215,false,21,10,Load optional dockfra.yaml from project root.
+      _parse_compose_env_vars,function,() -> dict,220-248,false,29,13,"Scan all docker-compose files for ${VAR:-default} patterns."
+      _build_env_schema,function,() -> list,379-444,false,66,24,Merge core schema + auto-discovered compose vars + dockfra.yaml overrides.
+      _schema_defaults,function,() -> dict,449-450,false,2,2,schema defaults
+      load_env,function,() -> dict,452-464,false,13,8,"Load dockfra/.env, create from .env.example if missing."
+      save_env,function,"(updates:dict)",466-493,false,28,13,Write updates to dockfra/.env preserving comments and unknown keys.
+      reset_state,function,(),522-529,false,8,2,reset state
+      detect_config,function,(),534-553,false,20,11,detect config
+      _emit_log_error,function,"(line:str, fired:set)",555-667,false,113,42,Check a single log line against health + config-error patterns; emit alerts/form...
+      _strip_motd_line,function,"(text:str) -> bool",669-681,false,13,6,Return True if the line is a MOTD box-drawing line that should be suppressed.
+      run_cmd,function,"(cmd, cwd=None)",684-708,false,25,11,starts cmd
+      docker_ps,function,(),710-733,false,24,9,docker ps
+      mask,function,(k),735-735,false,1,2,mask
+      msg,function,"(text, role='bot')",737-740,false,4,1,msg
+      widget,function,(w),741-741,false,1,1,widget
+      buttons,function,"(items, label='')",742-742,false,1,1,buttons
+      text_input,function,"(n, l, ph='', v='', sec=False, hint='', chips=None, modal_type='')",743-743,false,1,2,text input
+      select,function,"(n, l, opts, v='', desc='', autodetect=False)",744-744,false,1,1,retrieves
+      code_block,function,(t),745-745,false,1,1,code block
+      status_row,function,(items),746-746,false,1,1,status row
+      progress,function,"(label, done=False, error=False)",747-747,false,1,1,progress
+      action_grid,function,"(run_value, commands, label='')",748-748,false,1,1,action grid
+      clear_widgets,function,(),749-749,false,1,1,deletes widgets
+      _env_status_summary,function,() -> str,752-762,false,11,6,"One-line summary: which required vars are missing."
+      _arp_devices,function,"() -> list[dict]",765-791,false,27,13,"Return [{ip, mac, iface, state}] sorted REACHABLE first."
+      _devices_env_ip,function,() -> str,793-802,false,10,6,Read RPI3_HOST from devices/.env.local or devices/.env.
+      _docker_container_env,function,"(container:str, var:str) -> str",804-815,false,12,4,Extract an env var value from a running Docker container.
+      _local_interfaces,function,"() -> list[str]",817-826,false,10,3,Return host IPs (non-loopback).
+      _subnet_ping_sweep,function,"(max_hosts:int=254, timeout:float=0.4) -> list[str]",828-866,false,39,15,Ping-sweep the host's first non-loopback /24 subnet.
+      _detect_suggestions,function,() -> dict,868-1069,false,202,88,Auto-detect suggested values for form fields.
+      _emit_missing_fields,function,"(missing:list[dict])",1071-1093,false,23,7,"Emit input/select widgets for each missing env var, with smart suggestions."
+      _emit_config_form,function,"(title:str, desc:str, fields:list, settings_group:str, fired_key:str, fired:set)",1191-1220,false,30,7,Emit a config_prompt widget for interactive in-chat configuration.
+      _docker_logs,function,"(name:str, tail:int=40) -> str",1286-1300,false,15,5,"Get container logs — shell first, SDK fallback."
+      _analyze_container_log,function,"(name:str) -> tuple[str, list]",1303-1327,false,25,8,"Read last 40 lines of a container log and return (finding_text, buttons)."
   dockfra/pipeline.py:
     functions[26]{name,kind,sig,loc,async,lines,cc,does}:
       _ensure_dir,function,(),27-28,false,2,1,ensure dir
@@ -448,51 +458,52 @@ function_details:
       action,function,"(message:str)",47-49,false,3,2,Log a significant decision or action taken by the service.
       decision,function,"(message:str, reasoning:str='')",51-54,false,4,3,Log an LLM-driven or autonomous decision.
   dockfra/static/wizard.js:
-    functions[44]{name,kind,sig,loc,async,lines,cc,does}:
-      t,function,(k),32-32,false,1,1,t
-      applyLang,function,(),33-42,false,10,1,apply lang
-      renderMd,function,(text),55-79,false,25,1,formats md
-      _appendLogLine,function,(text),96-109,false,14,1,append log line
-      loadLogs,function,(),110-131,true,22,1,retrieves logs
-      tryRenderTickets,function,(text),136-207,false,72,1,try render tickets
-      stripMotd,function,(text),210-232,false,23,1,strip motd
-      copyMessage,function,(button),284-294,false,11,1,copy message
-      collectForm,function,(),315-320,false,6,1,collect form
-      sendAction,function,"(value, label)",322-331,false,10,1,sends action
-      buildParamWidget,function,"(cmd, onRun)",333-407,false,75,1,creates param widget
-      renderActionGrid,function,(d),409-464,false,56,1,formats action grid
-      renderButtons,function,(d),466-480,false,15,1,formats buttons
-      flushForm,function,(),486-492,false,7,1,flush form
-      getOrCreateForm,function,(),494-502,false,9,1,retrieves or create form
-      buildFieldLabel,function,"(d, targetEl)",504-575,false,72,1,creates field label
-      buildFieldInputWrap,function,"(inp, d)",578-615,false,38,1,creates field input wrap
-      buildFieldChips,function,"(chips, inp, isSecret)",617-638,false,22,1,creates field chips
-      buildFieldHint,function,(hint),640-646,false,7,1,creates field hint
-      renderInput,function,(d),648-675,false,28,1,formats input
-      renderSelect,function,(d),677-728,false,52,1,formats select
-      renderCode,function,(d),730-735,false,6,1,formats code
-      renderConfigPrompt,function,(d),738-750,false,13,1,formats config prompt
-      openConfigModal,function,(d),752-898,false,147,1,starts config modal
-      renderStatus,function,(d),900-912,false,13,1,formats status
-      renderProgress,function,(d),914-929,false,16,1,formats progress
-      setupResizeHandle,function,"(handle, leftPanel, rightPanel)",940-950,false,11,1,initializes resize handle
-      restorePanelWidths,function,(),976-985,false,10,1,restore panel widths
-      updateProcesses,function,(),989-1036,true,48,1,updates processes
-      executeProcessAction,function,"(action, processName)",1038-1047,true,10,1,starts process action
-      updateServices,function,(),1055-1089,true,35,1,updates services
-      updateStats,function,(),1094-1270,true,177,1,updates stats
-      flashCopyBtn,function,"(btn, originalText)",1290-1295,false,6,1,flash copy btn
-      openIpPickerModal,function,(targetInput),1330-1376,false,47,1,starts ip picker modal
-      renderIpModal,function,"(body, data, targetInput, overlay)",1378-1498,false,121,1,formats ip modal
-      classifyLogLine,function,(text),1501-1524,false,24,1,classify log line
-      highlightLogText,function,(text),1526-1532,false,7,1,highlight log text
-      submitChatInput,function,(),1543-1559,false,17,1,submit chat input
-      _showDiffToast,function,"(tid, title)",1566-1574,false,9,1,show diff toast
-      openDiffModal,function,"(tid, forceModal)",1576-1658,false,83,1,starts diff modal
-      closeDiffModal,function,(),1660-1665,false,6,1,stops diff modal
-      switchDiffTab,function,(tab),1667-1674,false,8,1,switch diff tab
-      escHtml,function,(s),1678-1680,false,3,1,esc html
-      renderDiffText,function,(raw),1682-1697,false,16,1,formats diff text
+    functions[45]{name,kind,sig,loc,async,lines,cc,does}:
+      t,function,(k),92-92,false,1,1,t
+      applyLang,function,(),93-102,false,10,1,apply lang
+      _syncLangToServer,function,(),111-111,false,1,1,sync lang to server
+      renderMd,function,(text),120-144,false,25,1,formats md
+      _appendLogLine,function,(text),161-174,false,14,1,append log line
+      loadLogs,function,(),175-196,true,22,1,retrieves logs
+      tryRenderTickets,function,(text),201-272,false,72,1,try render tickets
+      stripMotd,function,(text),275-297,false,23,1,strip motd
+      copyMessage,function,(button),349-359,false,11,1,copy message
+      collectForm,function,(),380-385,false,6,1,collect form
+      sendAction,function,"(value, label)",387-396,false,10,1,sends action
+      buildParamWidget,function,"(cmd, onRun)",398-472,false,75,1,creates param widget
+      renderActionGrid,function,(d),474-529,false,56,1,formats action grid
+      renderButtons,function,(d),531-545,false,15,1,formats buttons
+      flushForm,function,(),551-557,false,7,1,flush form
+      getOrCreateForm,function,(),559-567,false,9,1,retrieves or create form
+      buildFieldLabel,function,"(d, targetEl)",569-640,false,72,1,creates field label
+      buildFieldInputWrap,function,"(inp, d)",643-680,false,38,1,creates field input wrap
+      buildFieldChips,function,"(chips, inp, isSecret)",682-703,false,22,1,creates field chips
+      buildFieldHint,function,(hint),705-711,false,7,1,creates field hint
+      renderInput,function,(d),713-740,false,28,1,formats input
+      renderSelect,function,(d),742-793,false,52,1,formats select
+      renderCode,function,(d),795-800,false,6,1,formats code
+      renderConfigPrompt,function,(d),803-815,false,13,1,formats config prompt
+      openConfigModal,function,(d),817-963,false,147,1,starts config modal
+      renderStatus,function,(d),965-977,false,13,1,formats status
+      renderProgress,function,(d),979-994,false,16,1,formats progress
+      setupResizeHandle,function,"(handle, leftPanel, rightPanel)",1005-1015,false,11,1,initializes resize handle
+      restorePanelWidths,function,(),1041-1050,false,10,1,restore panel widths
+      updateProcesses,function,(),1054-1101,true,48,1,updates processes
+      executeProcessAction,function,"(action, processName)",1103-1112,true,10,1,starts process action
+      updateServices,function,(),1120-1154,true,35,1,updates services
+      updateStats,function,(),1159-1335,true,177,1,updates stats
+      flashCopyBtn,function,"(btn, originalText)",1355-1360,false,6,1,flash copy btn
+      openIpPickerModal,function,(targetInput),1395-1441,false,47,1,starts ip picker modal
+      renderIpModal,function,"(body, data, targetInput, overlay)",1443-1563,false,121,1,formats ip modal
+      classifyLogLine,function,(text),1566-1589,false,24,1,classify log line
+      highlightLogText,function,(text),1591-1597,false,7,1,highlight log text
+      submitChatInput,function,(),1608-1624,false,17,1,submit chat input
+      _showDiffToast,function,"(tid, title)",1631-1639,false,9,1,show diff toast
+      openDiffModal,function,"(tid, forceModal)",1641-1723,false,83,1,starts diff modal
+      closeDiffModal,function,(),1725-1730,false,6,1,stops diff modal
+      switchDiffTab,function,(tab),1732-1739,false,8,1,switch diff tab
+      escHtml,function,(s),1743-1745,false,3,1,esc html
+      renderDiffText,function,(raw),1747-1762,false,16,1,formats diff text
   app/backend/app.py:
     functions[8]{name,kind,sig,loc,async,lines,cc,does}:
       get_db_conn,function,(),39-45,false,7,1,Get PostgreSQL connection.

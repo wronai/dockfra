@@ -16,7 +16,7 @@ from .core import (
     msg, buttons, progress, mask, clear_widgets,
     run_cmd, docker_ps, _analyze_container_log,
     _local_interfaces, _arp_devices, _devices_env_ip, _subnet_ping_sweep,
-    _docker_container_env,
+    _docker_container_env, _emit_log_error,
     json, subprocess, threading, time, request, emit, render_template, _socket,
 )
 from .steps import (
@@ -1246,6 +1246,65 @@ def _step_engine_autotest():
         _prompt_api_key(return_action="engine_autotest")
 
 
+def _step_pipeline_skip_implement(ticket_id: str):
+    """Continue pipeline from tests onward, skipping the implement step.
+    Used when engine auth fails and user chooses to skip implementation."""
+    clear_widgets()
+    ri = _get_role("developer")
+    container_ = ri["container"]
+    user_ = ri["user"]
+    pstate = PipelineState(ticket_id)
+    pstate.record_decision("skip_implement_user", t('skip_impl_decision'))
+
+    def _exec(cmd, *args):
+        full_cmd = f"/home/{user_}/scripts/{cmd}.sh {' '.join(str(a) for a in args)}" if args else f"/home/{user_}/scripts/{cmd}.sh"
+        cmd_parts = ["docker", "exec", "-u", user_, container_, "bash", "-lc", full_cmd]
+        return run_cmd(cmd_parts)
+
+    msg(t('pipeline_skip_title', tid=ticket_id))
+
+    # Tests
+    msg(t('local_tests'))
+    r3 = run_step(_exec, "test-local", "test-local")
+    r3.score = evaluate_test_output(r3.output, r3.rc)
+    pstate.record_step(r3)
+    if r3.ok():
+        msg(f"✅ Testy (wynik: {r3.score:.0%})\n```\n{r3.output[:1000]}\n```" if r3.output else f"✅ Testy (wynik: {r3.score:.0%})")
+    else:
+        msg(f"⚠️ Testy (wynik: {r3.score:.0%})\n```\n{r3.output[:1000]}\n```" if r3.output else f"⚠️ Testy (wynik: {r3.score:.0%})")
+
+    # Commit
+    ticket_data = _tickets.get(ticket_id)
+    commit_title = ticket_data.get("title", ticket_id) if ticket_data else ticket_id
+    commit_msg = f"feat({ticket_id}): {commit_title}"
+    msg(t('commit_and_push'))
+    r4 = run_step(_exec, "commit-push", f'"{commit_msg}"')
+    pstate.record_step(r4)
+    if "Nothing to commit" in (r4.output or ""):
+        msg(t('nothing_to_commit'))
+    elif r4.rc == 0:
+        msg(f"✅ Commit: `{r4.output.strip().split(chr(10))[-1]}`")
+    else:
+        msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
+
+    # Status → review
+    msg(t('status_review'))
+    _tickets.update(ticket_id, status="review")
+    _tickets.add_comment(ticket_id, "developer", t('pipeline_skip_comment'))
+    r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
+    pstate.record_step(r5)
+
+    overall = pstate.compute_overall_score()
+    pstate.save()
+    msg(t('pipeline_skip_done', tid=ticket_id, score=f'{overall:.0%}'))
+    buttons([
+        {"label": t('change_engine'), "value": "engine_select"},
+        {"label": t('retry_with_new_engine'), "value": f"ssh_cmd::developer::ticket-work::{ticket_id}"},
+        {"label": t('ticket_list'), "value": "tickets_review"},
+        {"label": t('menu'), "value": "back"},
+    ])
+
+
 def _step_settings_nav():
     """Show group selector for settings navigation."""
     clear_widgets()
@@ -1293,6 +1352,15 @@ def _dispatch(value: str, form: dict):
     if value.startswith("set_engine::"):
         engine_id = value.split("::", 1)[1]
         _step_set_engine(engine_id)
+        return True
+    if value.startswith("pipeline_skip_implement::"):
+        tid = value.split("::", 1)[1]
+        _tl_sid = getattr(_tl, 'sid', None)
+        def _psi(t=tid):
+            _tl.sid = _tl_sid
+            _step_pipeline_skip_implement(t)
+            _tl.sid = None
+        threading.Thread(target=_psi, daemon=True).start()
         return True
     # ── Ticket management actions ─────────────────────────────────────────────
     if value.startswith("show_ticket::"):
@@ -1498,6 +1566,36 @@ def _dispatch(value: str, form: dict):
                             msg(f"✅ Implementacja via `{eng_name}` (wynik: {r2.score:.0%})\n```\n{r2.output[:3000]}\n```")
                         else:
                             msg(f"⚠️ implement via `{eng_name}` (kod {r2.rc}, wynik: {r2.score:.0%}): {r2.output[:1500]}")
+                            # ── Detect known config/auth errors in engine output ──
+                            _fired: set = set()
+                            for _line in (r2.output or "").splitlines():
+                                _emit_log_error(_line, _fired)
+                            # ── Critical auth errors: stop pipeline, ask user ─────
+                            import re as _re
+                            _AUTH_STOP = [
+                                r"Not logged in[\s·•\-]*(Please run|use)\s+/login",
+                                r"not logged in.*login",
+                                r"ANTHROPIC_API_KEY.*(not set|missing|invalid)",
+                                r"anthropic.*authentication.*fail",
+                                r"401 Unauthorized",
+                                r"403 Forbidden.*API",
+                                r"Invalid API key|authentication.*required",
+                            ]
+                            _is_auth_error = any(
+                                _re.search(p, r2.output or "", _re.IGNORECASE)
+                                for p in _AUTH_STOP
+                            )
+                            if _is_auth_error:
+                                pstate.record_decision("auth_error_pause", f"engine {engine_id} auth error — czekam na użytkownika")
+                                msg(f"🛑 **Silnik `{eng_name}` wymaga autoryzacji.**\n\n"
+                                    f"Wybierz co zrobić:")
+                                buttons([
+                                    {"label": f"🔧 Zmień silnik", "value": "engine_select"},
+                                    {"label": f"🔄 Ponów po naprawie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                                    {"label": "⏭️ Pomiń implementację", "value": f"pipeline_skip_implement::{arg_}"},
+                                    {"label": "🏠 Menu", "value": "back"},
+                                ])
+                                return
 
                     # ─── Step 4: Run tests (scored) ───────────────────────
                     msg(f"### 🧪 Krok 3/5: testy lokalne")
@@ -1558,8 +1656,8 @@ def _dispatch(value: str, form: dict):
                         f"[[👁️ Diff|show_ticket::{arg_}]]")
 
                     btn_items = [
-                        {"label": f"👁️ Pokaż ticket {arg_}", "value": f"show_ticket::{arg_}"},
-                        {"label": "📋 Tickety do review", "value": "tickets_review"},
+                        {"label": f"👁️ {t('show_ticket')} {arg_}", "value": f"show_ticket::{arg_}"},
+                        {"label": t('ticket_list'), "value": "tickets_review"},
                     ]
                     if overall < 0.5:
                         btn_items.insert(0, {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})

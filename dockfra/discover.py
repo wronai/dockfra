@@ -373,8 +373,8 @@ def run_ssh_cmd(value: str, form: dict):
                 ri_ = _get_role(role)
                 port = _state.get(f"SSH_{role.upper()}_PORT", ri_["port"])
                 buttons([
-                    {"label": f"{ri_['icon']} Wróć do akcji", "value": f"ssh_info::{role}::{port}"},
-                    {"label": "🏠 Menu",                       "value": "back"},
+                    {"label": f"{ri_['icon']} {t('back_to_actions')}", "value": f"ssh_info::{role}::{port}"},
+                    {"label": t('menu'),                       "value": "back"},
                 ])
             except Exception:
                 buttons([

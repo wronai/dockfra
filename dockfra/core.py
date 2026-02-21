@@ -37,7 +37,7 @@ from collections import deque
 from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-from .i18n import t as _t_i18n, set_lang as _set_lang, get_lang as _get_lang, llm_lang_instruction as _llm_lang_instruction
+from .i18n import t as _t_i18n, set_lang as _set_lang, get_lang as _get_lang, llm_lang_instruction as _llm_lang_instruction, _STRINGS
 
 # Allow importing shared lib without installation
 _SHARED_LIB = Path(__file__).parent.parent / "shared" / "lib"
@@ -114,6 +114,13 @@ Rules:
 - "safe": false for destructive commands (docker rm, volume rm, system prune)
 - Include 2-5 concrete commands specific to the actual error in the logs
 - Commands must be immediately runnable (no placeholders like <value>)
+"""
+
+_FIX_LLM_SYSTEM_PROMPT = """You are Dockfra Fix LLM — an incident response assistant.
+Analyze command output and identify the most likely root cause.
+Provide concise, actionable repair steps for a technical user.
+If the fix requires credentials, login, or missing input, ask short, direct questions at the end.
+Use Markdown with short bullet lists. Keep it under 12 lines.
 """
 
 # Thread-local: when set, emit helpers target this SID instead of broadcasting
@@ -313,10 +320,10 @@ _FIELD_META: dict[str, dict] = {
 # Core entries (always present — infrastructure/wizard vars)
 _CORE_ENV_SCHEMA = [
     # Infrastructure
-    {"key":"ENVIRONMENT",       "label":"Środowisko",           "group":"Infrastructure",
+    {"key":"ENVIRONMENT",       "label":"env_label_environment",  "group":"Infrastructure",
      "type":"select", "options":[("local","Local"),("production","Production")], "default":"local"},
-    {"key":"STACKS",            "label":"Stacki do uruchomienia", "group":"Infrastructure",
-     "type":"select", "options":[("all","Wszystkie")] + [(s,s.capitalize()) for s in STACKS],
+    {"key":"STACKS",            "label":"env_label_stacks", "group":"Infrastructure",
+     "type":"select", "options":[("all","env_option_all")] + [(s,s.capitalize()) for s in STACKS],
      "default":"all"},
     # Git
     {"key":"GIT_REPO_URL",      "label":"Git Repo URL",           "group":"Git",
@@ -327,7 +334,7 @@ _CORE_ENV_SCHEMA = [
      "type":"text",  "placeholder":"Jan Kowalski",               "default":""},
     {"key":"GIT_EMAIL",         "label":"Git user.email",         "group":"Git",
      "type":"text",  "placeholder":"jan@example.com",            "default":""},
-    {"key":"GITHUB_SSH_KEY",    "label":"Ścieżka klucza SSH",     "group":"Git",
+    {"key":"GITHUB_SSH_KEY",    "label":"ssh_key_path",     "group":"Git",
      "type":"text",  "placeholder":"~/.ssh/id_ed25519",          "default":str(Path.home()/".ssh/id_ed25519")},
     # LLM
     {"key":"OPENROUTER_API_KEY","label":"OpenRouter API Key",     "group":"LLM",
@@ -344,7 +351,7 @@ _CORE_ENV_SCHEMA = [
          ("openai/gpt-4o",             "GPT-4o"),
          ("deepseek/deepseek-chat-v3-0324","DeepSeek Chat V3"),
          ("meta-llama/llama-3.1-70b-instruct","Llama 3.1 70B"),
-         ("__custom__",                "✏️ Wpisz ręcznie…"),
+         ("__custom__",                "custom_model_option"),
      ], "default":"google/gemini-2.0-flash-001"},
     # Ports
     {"key":"WIZARD_PORT",       "label":"Port Wizarda",            "group":"Ports",
@@ -576,8 +583,11 @@ def _emit_log_error(line: str, fired: set):
                         break
                 except Exception:
                     pass
-        _emit_config_form(title, f"Wykryto w logach: `{line.strip()[:120]}`\n\n{desc}",
-                          extra_fields, settings_group, key, fired)
+        _title = _t_i18n(title) if title in _STRINGS else title
+        _desc = _t_i18n(desc) if desc in _STRINGS else desc
+        _resolved_fields = [{**f, "label": (_t_i18n(f["label"]) if f["label"] in _STRINGS else f["label"])} for f in extra_fields]
+        _emit_config_form(_title, f"Wykryto w logach: `{line.strip()[:120]}`\n\n{_desc}",
+                          _resolved_fields, settings_group, key, fired)
         return  # one config-form per line
     # ── Docker health patterns ────────────────────────────────────────────────
     for pattern, sev, message, solutions in _HEALTH_PATTERNS:
@@ -607,9 +617,10 @@ def _emit_log_error(line: str, fired: set):
             val = b["value"].replace("__PORT__", port).replace("__NETWORK__", network)
             if "__NAME__" in val:
                 continue  # skip container-specific buttons during build stream
-            btns.append({**b, "value": val})
+            btns.append({"label": _t_i18n(b["label"]), "value": val})
+        _msg = _t_i18n(message, net=PROJECT['network']) if '{net}' in _t_i18n(message) else _t_i18n(message)
         _sid_emit("message", {"role": "bot",
-                               "text": f"{icon} **{message}**\n`{line.strip()[:160]}`"})
+                               "text": f"{icon} **{_msg}**\n`{line.strip()[:160]}`"})
 
         # ── Inline forms for known fixable patterns ─────────────────────────
         btn_values = " ".join(b["value"] for b in btns)
@@ -618,14 +629,14 @@ def _emit_log_error(line: str, fired: set):
             # Propose ACME_STORAGE path with smart default
             cur = _state.get("acme_storage", "letsencrypt/acme.json")
             _sid_emit("widget", {"type": "input", "name": "ACME_STORAGE",
-                                 "label": "Ścieżka ACME storage (traefik)",
+                                 "label": _t_i18n('acme_storage_label'),
                                  "placeholder": "letsencrypt/acme.json",
                                  "value": cur, "secret": False, "hint":
-                                 "Plik acme.json zostanie utworzony automatycznie.",
+                                 _t_i18n('acme_hint'),
                                  "chips": [], "modal_type": ""})
             _sid_emit("widget", {"type": "buttons", "items": [
-                {"label": "✅ Zastosuj i napraw traefik", "value": "fix_acme_storage"},
-                {"label": "⚙️ Ustawienia", "value": "settings"},
+                {"label": _t_i18n('apply_fix_traefik'), "value": "fix_acme_storage"},
+                {"label": _t_i18n('settings'), "value": "settings"},
             ]})
 
         elif "fix_network_overlap::" in btn_values and network:
@@ -1129,15 +1140,15 @@ _CONFIG_ERROR_PATTERNS = [
 
     # Generic API key / unauthorized
     (r"401 Unauthorized|403 Forbidden.*API|API key.*invalid|Invalid API key|authentication.*required",
-     "Błąd autoryzacji API",
-     "Serwis zwrócił błąd autoryzacji — sprawdź klucze API.",
+     "diag_api_auth",
+     "diag_api_auth_desc",
      [],
      "LLM"),
 
     # GitHub token
     (r"GITHUB_TOKEN.*(not set|missing|invalid)|GitHub.*403|Bad credentials.*GitHub|ghp_.*invalid",
-     "Brak tokenu GitHub",
-     "Zmienna `GITHUB_TOKEN` nie jest ustawiona lub token wygasł.",
+     "diag_no_github_token",
+     "diag_no_github_token_desc",
      [{"name": "GITHUB_TOKEN", "label": "GitHub Personal Access Token",
        "type": "password", "placeholder": "ghp_...",
        "chips": [{"label": "github.com/settings/tokens", "value": ""}]},
@@ -1147,8 +1158,8 @@ _CONFIG_ERROR_PATTERNS = [
 
     # Jira token
     (r"JIRA_TOKEN.*(not set|missing|invalid)|JIRA_URL.*(not set|missing)|Jira.*authentication",
-     "Brak konfiguracji Jira",
-     "Zmienna `JIRA_TOKEN` lub `JIRA_URL` nie jest ustawiona.",
+     "diag_no_jira",
+     "diag_no_jira_desc",
      [{"name": "JIRA_URL", "label": "Jira URL", "type": "text",
        "placeholder": "https://your-org.atlassian.net", "chips": []},
       {"name": "JIRA_TOKEN", "label": "Jira API Token", "type": "password",
@@ -1157,9 +1168,9 @@ _CONFIG_ERROR_PATTERNS = [
 
     # SSH / Git
     (r"Permission denied \(publickey\)|Host key verification failed|Could not read from remote repository",
-     "Błąd SSH / dostęp do repozytorium",
-     "Klucz SSH jest nieprawidłowy lub repo jest niedostępne.",
-     [{"name": "GITHUB_SSH_KEY", "label": "Ścieżka klucza SSH",
+     "diag_ssh_error",
+     "diag_ssh_error_desc",
+     [{"name": "GITHUB_SSH_KEY", "label": "ssh_key_path",
        "type": "text", "placeholder": "~/.ssh/id_ed25519", "chips": []},
       {"name": "GIT_REPO_URL", "label": "Git Repo URL",
        "type": "text", "placeholder": "git@github.com:org/app.git", "chips": []}],
@@ -1167,18 +1178,18 @@ _CONFIG_ERROR_PATTERNS = [
 
     # Database connection
     (r"could not connect to server|Connection refused.*5432|ECONNREFUSED.*(5432|3306|27017)|mysql.*connection.*refused|postgres.*connection.*refused",
-     "Brak połączenia z bazą danych",
-     "Nie można połączyć się z bazą — sprawdź host, port i dane dostępowe.",
-     [{"name": "DB_HOST", "label": "Host bazy danych", "type": "text",
+     "diag_db_error",
+     "diag_db_error_desc",
+     [{"name": "DB_HOST", "label": "db_host_label", "type": "text",
        "placeholder": "localhost", "chips": []},
-      {"name": "DB_PASSWORD", "label": "Hasło bazy danych", "type": "password",
+      {"name": "DB_PASSWORD", "label": "db_password_label", "type": "password",
        "placeholder": "", "chips": []}],
      "App"),
 
     # Generic missing env var (catch-all for tool output)
     (r'Please set the ([A-Z][A-Z0-9_]{2,}) environment variable|([A-Z][A-Z0-9_]{2,}) must be set|set ([A-Z][A-Z0-9_]{2,}) to',
-     "Brakuje zmiennej środowiskowej",
-     "Narzędzie wymaga ustawienia zmiennej środowiskowej.",
+     "diag_missing_env",
+     "diag_missing_env_desc",
      [],
      ""),
 ]
@@ -1217,66 +1228,66 @@ def _emit_config_form(title: str, desc: str, fields: list, settings_group: str,
 
 
 _HEALTH_PATTERNS = [
-    # (regex, severity, message_pl, [solution_buttons])
+    # (regex, severity, message_i18n_key, [solution_buttons with i18n label keys])
     (r"port is already allocated|bind for 0\.0\.0\.0:(\d+) failed",
-     "err", "Konflikt portu — inny proces zajmuje port",
-     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"},
-      {"label":"⚙️ Zmień port","value":"settings"}]),
+     "err", "hp_port_conflict",
+     [{"label":"diag_port_btn","value":"diag_port::__PORT__"},
+      {"label":"change_port_btn","value":"settings"}]),
     (r"Bind for .+:(\d+) failed",
-     "err", "Port zajęty",
-     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"}]),
+     "err", "hp_port_busy",
+     [{"label":"diag_port_btn","value":"diag_port::__PORT__"}]),
     (r"permission denied",
-     "err", "Brak uprawnień — Docker może wymagać sudo lub grupy docker",
-     [{"label":"🔧 Napraw uprawnienia","value":"fix_docker_perms"}]),
+     "err", "hp_no_perms",
+     [{"label":"fix_perms_btn","value":"fix_docker_perms"}]),
     (r"no such file or directory",
-     "err", "Brak pliku lub katalogu — sprawdź ścieżki woluminów",
-     [{"label":"⚙️ Ustawienia","value":"settings"}]),
+     "err", "hp_no_file",
+     [{"label":"settings","value":"settings"}]),
     (r"connection refused|connection reset by peer",
-     "warn", "Odmowa połączenia — zależna usługa może nie być gotowa",
-     [{"label":"🔄 Uruchom ponownie","value":"launch_all"}]),
+     "warn", "hp_conn_refused",
+     [{"label":"launch_all_btn","value":"launch_all"}]),
     (r'variable .+? is not set|required.*not set|env.*missing',
-     "err", "Brakuje zmiennej środowiskowej",
-     [{"label":"⚙️ Konfiguracja","value":"settings"}]),
+     "err", "hp_missing_env",
+     [{"label":"config_btn","value":"settings"}]),
     (r"network .+? not found|network .+? declared as external",
-     "err", f"Brak sieci Docker — uruchom `docker network create {PROJECT['network']}`",
-     [{"label":"🚀 Uruchom ponownie","value":"launch_all"}]),
+     "err", "hp_no_network",
+     [{"label":"launch_all_btn","value":"launch_all"}]),
     (r"oci runtime|oci error|cannot start container",
-     "err", "Błąd Docker runtime",
-     [{"label":"🐋 Pokaż logi","value":"pick_logs"}]),
+     "err", "hp_runtime_error",
+     [{"label":"show_logs_btn","value":"pick_logs"}]),
     (r"health_status.*unhealthy|container.*unhealthy",
-     "warn", "Kontener niezdrowy (healthcheck nie przechodzi)",
-     [{"label":"📋 Pokaż logi","value":"pick_logs"}]),
+     "warn", "hp_unhealthy",
+     [{"label":"show_logs_btn","value":"pick_logs"}]),
     (r"exec.*not found|executable file not found",
-     "err", "Nie znaleziono wykonywalnego pliku w obrazie",
-     [{"label":"🔧 Przebuduj","value":"launch_all"}]),
+     "err", "hp_exec_not_found",
+     [{"label":"rebuild_btn","value":"launch_all"}]),
     (r"Read-only file system",
-     "err", "Wolumin zamontowany jako read-only — napraw uprawnienia lub sprawdź `volumes:`",
-     [{"label":"🔧 Napraw uprawnienia woluminu","value":"fix_readonly_volume::__NAME__"},
-      {"label":"⚙️ Ustawienia","value":"settings"}]),
+     "err", "hp_readonly_vol",
+     [{"label":"fix_vol_perms_btn","value":"fix_readonly_volume::__NAME__"},
+      {"label":"settings","value":"settings"}]),
     (r"unable to initialize certificates resolver.*no storage",
-     "err", "Traefik: brak ścieżki certyfikatów ACME — napraw automatycznie lub ustaw ręcznie",
-     [{"label":"🔧 Napraw ACME storage","value":"fix_acme_storage"},
-      {"label":"⚙️ Konfiguracja","value":"settings"}]),
+     "err", "hp_traefik_acme",
+     [{"label":"fix_acme_btn","value":"fix_acme_storage"},
+      {"label":"config_btn","value":"settings"}]),
     (r"letsencrypt.*storage|acme.*storage|certificatesresolvers|ACME_STORAGE.*variable is not set",
-     "warn", "Traefik ACME/Let's Encrypt: brakuje konfiguracji storage",
-     [{"label":"🔧 Napraw ACME storage","value":"fix_acme_storage"},
-      {"label":"⚙️ Ustawienia","value":"settings"}]),
+     "warn", "hp_acme_storage",
+     [{"label":"fix_acme_btn","value":"fix_acme_storage"},
+      {"label":"settings","value":"settings"}]),
     (r"ACME_STORAGE.*not set|\"ACME_STORAGE\".*Defaulting",
-     "warn", "Traefik: `ACME_STORAGE` nie ustawiony — certyfikaty nie będą działać",
-     [{"label":"🔧 Napraw ACME storage","value":"fix_acme_storage"}]),
+     "warn", "hp_acme_not_set",
+     [{"label":"fix_acme_btn","value":"fix_acme_storage"}]),
     (r"address already in use|listen.*address.*in use",
-     "err", "Port zajęty przez inny proces",
-     [{"label":"🔍 Diagnozuj port","value":"diag_port::__PORT__"}]),
+     "err", "hp_addr_in_use",
+     [{"label":"diag_port_btn","value":"diag_port::__PORT__"}]),
     (r"host not found in upstream [\"']?([\w-]+)[\"']?",
-     "err", "nginx: nie można znaleźć upstream — zależna usługa nie działa lub jest w innej sieci",
-     [{"label":"🚀 Uruchom wszystko","value":"launch_all"}]),
+     "err", "hp_nginx_upstream",
+     [{"label":"launch_all_full_btn","value":"launch_all"}]),
     (r"no route to host|network.*unreachable",
-     "err", "Brak trasy do hosta — sprawdź sieci Docker",
-     [{"label":"🚀 Uruchom ponownie","value":"launch_all"}]),
+     "err", "hp_no_route",
+     [{"label":"launch_all_btn","value":"launch_all"}]),
     (r"Pool overlaps with other one on this address space|invalid pool request",
-     "err", "Konflikt przestrzeni adresowej sieci Docker — stara sieć blokuje tworzenie nowej",
-     [{"label":"🔧 Usuń konfikującą sieć","value":"fix_network_overlap::__NETWORK__"},
-      {"label":"🧹 Wyczyść wszystkie sieci","value":"fix_network_overlap::"}]),
+     "err", "hp_pool_overlap",
+     [{"label":"remove_conflicting_network","value":"fix_network_overlap::__NETWORK__"},
+      {"label":"clean_unused_networks","value":"fix_network_overlap::"}]),
 ]
 
 def _docker_logs(name: str, tail: int = 40) -> str:
@@ -1308,15 +1319,16 @@ def _analyze_container_log(name: str) -> tuple[str, list]:
         if m:
             port = m.group(1) if m.lastindex and m.group(1).isdigit() else ""
             fixed_btns = [
-                {**b, "value": b["value"].replace("__PORT__", port).replace("__NAME__", name)}
+                {"label": _t_i18n(b["label"]), "value": b["value"].replace("__PORT__", port).replace("__NAME__", name)}
                 for b in solutions
             ]
             # add LLM analysis button
-            fixed_btns.append({"label":"🧠 Analizuj z AI","value":f"ai_analyze::{name}"})
+            fixed_btns.append({"label":_t_i18n('analyze_with_ai'),"value":f"ai_analyze::{name}"})
             snippet = "\n".join(out.strip().splitlines()[-6:])
-            return f"**{message}**\n```\n{snippet}\n```", fixed_btns
+            _msg = _t_i18n(message) if message in _STRINGS else message
+            return f"**{_msg}**\n```\n{snippet}\n```", fixed_btns
     # No known pattern — return last lines
     snippet = "\n".join(out.strip().splitlines()[-5:])
-    return (f"Nieznany błąd — ostatnie logi:\n```\n{snippet}\n```",
-            [{"label":"🧠 Analizuj z AI","value":f"ai_analyze::{name}"},
-             {"label":"📋 Pokaż pełne logi","value":f"logs::{name}"}])
+    return (_t_i18n('unknown_error_logs', snippet=snippet),
+            [{"label":_t_i18n('analyze_with_ai'),"value":f"ai_analyze::{name}"},
+             {"label":_t_i18n('show_full_logs'),"value":f"logs::{name}"}])

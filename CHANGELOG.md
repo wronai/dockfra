@@ -1,3 +1,24 @@
+## [1.0.50] - 2026-02-21
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/fixes.py
+- update dockfra/i18n.py
+- update dockfra/steps.py
+- update project.functions.toon
+- update shared/tickets/.pipeline/T-0002.json
+- update shared/tickets/.pipeline/error_log.json
+- update shared/tickets/T-0002.json
+- ... and 1 more
+
+
 ## [1.0.49] - 2026-02-21
 
 ### Summary
