@@ -579,6 +579,18 @@ class TestTicketDiffAPI:
 class TestDBModule:
     """Test dockfra.db module directly."""
 
+    def setup_method(self):
+        import tempfile, pathlib
+        from dockfra import db
+        self._db_path = pathlib.Path(tempfile.mktemp(suffix='.db'))
+        db.init_db(self._db_path)
+
+    def teardown_method(self):
+        from dockfra import db
+        db._DB_PATH = None
+        if self._db_path.exists():
+            self._db_path.unlink()
+
     def test_append_and_get_events(self):
         from dockfra import db
         eid = db.append_event("test_event", {"foo": "bar"}, src="test")
@@ -605,3 +617,117 @@ class TestDBModule:
         ids = [e["id"] for e in events]
         assert eid1 not in ids
         assert eid2 in ids
+
+    def test_append_batch(self):
+        from dockfra import db
+        before = db.get_max_id()
+        ids = db.append_batch([
+            ("batch_a", {"n": 1}, "test"),
+            ("batch_b", {"n": 2}, "test"),
+            ("batch_c", {"n": 3}, "test"),
+        ])
+        assert len(ids) == 3
+        assert all(i > before for i in ids)
+
+    def test_count_events(self):
+        from dockfra import db
+        db.append_event("count_test_type", {}, src="count_test_src")
+        total = db.count_events()
+        assert total > 0
+        typed = db.count_events(event_type="count_test_type")
+        assert typed >= 1
+        sourced = db.count_events(src="count_test_src")
+        assert sourced >= 1
+
+    def test_get_events_with_type_filter(self):
+        from dockfra import db
+        db.append_event("filter_type_x", {"val": "x"}, src="test")
+        db.append_event("filter_type_y", {"val": "y"}, src="test")
+        events = db.get_events(since_id=0, limit=1000, event_type="filter_type_x")
+        assert all(e["event"] == "filter_type_x" for e in events)
+        assert len(events) >= 1
+
+    def test_get_latest_by_type(self):
+        from dockfra import db
+        db.append_event("latest_test", {"seq": 1}, src="test")
+        db.append_event("latest_test", {"seq": 2}, src="test")
+        db.append_event("latest_test", {"seq": 3}, src="test")
+        latest = db.get_latest_by_type("latest_test", limit=2)
+        assert len(latest) == 2
+        assert latest[0]["data"]["seq"] == 3  # most recent first
+        assert latest[1]["data"]["seq"] == 2
+
+
+class TestEventBus:
+    """Test dockfra.event_bus module."""
+
+    def test_get_bus_singleton(self):
+        from dockfra.event_bus import get_bus
+        bus1 = get_bus()
+        bus2 = get_bus()
+        assert bus1 is bus2
+
+    def test_emit_persists_to_store(self, app_client):
+        from dockfra.event_bus import init_bus
+        from dockfra import db
+        bus = init_bus(db)
+        before = bus.query_max_id()
+        eid = bus.emit("test.bus_emit", {"hello": "world"}, src="test")
+        assert eid > before
+
+    def test_query_events_returns_emitted(self, app_client):
+        from dockfra.event_bus import init_bus
+        from dockfra import db
+        bus = init_bus(db)
+        before = bus.query_max_id()
+        bus.emit("test.query_check", {"key": "val"}, src="test")
+        events = bus.query_events(since_id=before, limit=10)
+        found = [e for e in events if e["event"] == "test.query_check"]
+        assert len(found) >= 1
+        assert found[0]["data"]["key"] == "val"
+
+    def test_subscribe_and_emit(self):
+        from dockfra.event_bus import get_bus, Event
+        bus = get_bus()
+        received = []
+        bus.subscribe("test.sub_event", lambda ev: received.append(ev))
+        bus.emit("test.sub_event", {"n": 42}, src="test")
+        assert len(received) == 1
+        assert received[0].data["n"] == 42
+        assert received[0].src == "test"
+
+    def test_subscribe_all(self):
+        from dockfra.event_bus import get_bus
+        bus = get_bus()
+        received = []
+        bus.subscribe_all(lambda ev: received.append(ev.event))
+        bus.emit("test.global_a", {}, src="test")
+        bus.emit("test.global_b", {}, src="test")
+        assert "test.global_a" in received
+        assert "test.global_b" in received
+
+    def test_event_types_are_strings(self):
+        from dockfra.event_bus import EventType
+        assert EventType.MESSAGE == "message"
+        assert EventType.TICKET_CREATED == "ticket.created"
+        assert isinstance(EventType.PIPELINE_STARTED.value, str)
+
+
+class TestEventsAPIFilters:
+    """Test CQRS query filters on /api/events/since endpoint."""
+
+    def test_events_filter_by_type(self, app_client):
+        """Events endpoint should support ?type= filter."""
+        r = app_client.get("/api/events/since/0?limit=5&type=message")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        for ev in data["events"]:
+            assert ev["event"] == "message"
+
+    def test_events_filter_by_src(self, app_client):
+        """Events endpoint should support ?src= filter."""
+        r = app_client.get("/api/events/since/0?limit=5&src=cli")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        for ev in data["events"]:
+            assert ev["src"] == "cli"

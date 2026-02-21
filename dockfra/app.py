@@ -45,8 +45,10 @@ from . import tickets as _tickets
 from .pipeline import PipelineState, StepResult, run_step, evaluate_implementation, evaluate_test_output, build_retry_prompt
 from . import engines as _engines
 from . import db as _db
+from .event_bus import get_bus, init_bus, EventType
 
 _db.init_db(ROOT / ".dockfra.db")
+_bus = init_bus(_db)
 
 STEPS = {
     "welcome":          lambda f: step_welcome(),
@@ -1705,11 +1707,12 @@ def api_action():
     form  = data.get("form", {})
     if not value:
         return json.dumps({"ok": False, "error": "Missing action/message"}), 400
-    # Record CLI user input to SQLite and broadcast to web clients
-    msg_id = f"cli-{_db.get_max_id()}"
-    _conversation.append({"id": msg_id, "role": "user", "text": value, "src": "cli", "timestamp": time.time()})
-    _db.append_event("message", {"id": msg_id, "role": "user", "text": value, "src": "cli"}, src="cli")
-    socketio.emit("message", {"id": msg_id, "role": "user", "text": value, "src": "cli"})
+    # CQRS Command: record CLI user input via event bus → persists + notifies
+    msg_id = f"cli-{_bus.query_max_id()}"
+    msg_data = {"id": msg_id, "role": "user", "text": value, "src": "cli"}
+    _conversation.append({**msg_data, "timestamp": time.time()})
+    _bus.emit(EventType.MESSAGE, msg_data, src="cli")
+    socketio.emit("message", msg_data)
     events = _run_action_sync(value, form)
     return json.dumps({"ok": True, "result": _events_to_rest(events)})
 
@@ -2014,24 +2017,29 @@ def api_tickets_sync():
         return json.dumps({"ok": False, "error": str(e)}), 500
     return json.dumps({"ok": True, "results": results})
 
+# ── CQRS Query endpoints ─────────────────────────────────────────────────────
+
 @app.route("/api/events/since/<int:since_id>")
 def api_events_since(since_id):
-    """Return new events from SQLite since given event id (for CLI TUI polling)."""
+    """CQRS Query: return new events since given cursor (for CLI TUI polling)."""
     limit = min(int(request.args.get("limit", 200)), 1000)
-    events = _db.get_events(since_id=since_id, limit=limit)
-    return json.dumps({"events": events, "max_id": _db.get_max_id()})
+    event_type = request.args.get("type")
+    src = request.args.get("src")
+    events = _bus.query_events(since_id, limit) if not (event_type or src) \
+        else _db.get_events(since_id=since_id, limit=limit, event_type=event_type, src=src)
+    return json.dumps({"events": events, "max_id": _bus.query_max_id()})
 
 
 @app.route("/api/stream")
 def api_stream():
-    """SSE stream: push new events from SQLite to connected clients in real-time."""
+    """CQRS Query: SSE stream — push new events to connected clients in real-time."""
     from flask import Response, stream_with_context
-    since_id = int(request.args.get("since", _db.get_max_id()))
+    since_id = int(request.args.get("since", _bus.query_max_id()))
 
     def generate():
         cursor = since_id
         while True:
-            events = _db.get_events(since_id=cursor, limit=100)
+            events = _bus.query_events(cursor, 100)
             for ev in events:
                 cursor = ev["id"]
                 payload = json.dumps({

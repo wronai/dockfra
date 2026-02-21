@@ -286,15 +286,24 @@ def show_missing_env(stack_name: str):
     missing = preflight_check(stacks_to_check)
     if missing:
         msg(f"Uzupełnij brakujące zmienne dla stacku `{stack_name}`:")
+        suggestions = _detect_suggestions()
         for e in missing:
+            sk  = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+            cur = _state.get(sk, e.get("default", ""))
+            sug = suggestions.get(e["key"], {})
+            if not cur and sug.get("value"):
+                cur = sug["value"]
             if e["type"] == "select":
                 opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-                select(e["key"], e["label"], opts, e.get("default", ""))
+                select(e["key"], e["label"], opts, cur,
+                       desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
             else:
                 text_input(e["key"], e["label"],
-                           e.get("placeholder", ""),
-                           _state.get(_ENV_TO_STATE.get(e["key"], ""), ""),
-                           sec=(e["type"] == "password"))
+                           e.get("placeholder", ""), cur,
+                           sec=(e["type"] == "password"),
+                           hint=sug.get("hint", ""), chips=sug.get("chips", []),
+                           modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
+                           desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         buttons([
             {"label": "✅ Zapisz i uruchom",  "value": f"preflight_save_launch::{stack_name}"},
             {"label": "⚙️ Pełne ustawienia",   "value": "settings"},

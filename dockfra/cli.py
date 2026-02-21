@@ -502,6 +502,7 @@ def run_tui(client):
         "chat_off":  0,  "log_off":   0,
         "lock":      threading.Lock(),
         "event_cursor": 0,
+        "seen_msg_ids": set(),
     }
 
     def _fetch():
@@ -522,6 +523,12 @@ def run_tui(client):
                             # Skip CLI user messages — already added locally in _send
                             if e.get("src") == "cli" and d.get("role") == "user":
                                 continue
+                            # Deduplicate by message id (same id reused across server restarts)
+                            mid = d.get("id", "")
+                            if mid and mid in state["seen_msg_ids"]:
+                                continue
+                            if mid:
+                                state["seen_msg_ids"].add(mid)
                             new_chat.append({
                                 "role": d.get("role", "bot"),
                                 "text": d.get("text", ""),

@@ -1,3 +1,26 @@
+## [1.0.45] - 2026-02-21
+
+### Summary
+
+fix(docs): CLI interface improvements
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/cli.py
+- update dockfra/db.py
+- update dockfra/event_bus.py
+- update dockfra/fixes.py
+- update shared/tickets/.pipeline/T-0003.json
+- update shared/tickets/.pipeline/error_log.json
+- update shared/tickets/T-0002.json
+- update shared/tickets/T-0003.json
+
+
 ## [1.0.44] - 2026-02-21
 
 ### Summary
