@@ -2177,33 +2177,86 @@ def api_stats():
 
 @app.route("/api/ticket-diff/<ticket_id>")
 def api_ticket_diff(ticket_id):
-    """Return git commits and unified diff for a given ticket ID from the app repo."""
+    """Return git commits and unified diff for a given ticket ID.
+
+    Search order:
+    1) Developer container repo (/repo) — primary source for pipeline commits
+    2) Host repos (ROOT/app, ROOT) — fallback
+    """
     import subprocess as _sp
     ticket = _tickets.get(ticket_id)
     if not ticket:
         return json.dumps({"ok": False, "error": "Not found"}), 404
-    # Search in app repo first, then root repo
-    search_dirs = [ROOT / "app", ROOT]
+
     commits = []
     diff_text = ""
-    for repo_dir in search_dirs:
-        if not (repo_dir / ".git").exists():
-            continue
-        try:
-            # Find commits mentioning the ticket ID
+
+    # ── 1) Primary source: developer container (/repo) ───────────────────
+    try:
+        ri = _get_role("developer")
+        container = ri.get("container", "") if isinstance(ri, dict) else ""
+        user = ri.get("user", "developer") if isinstance(ri, dict) else "developer"
+        if container:
             log_out = _sp.check_output(
-                ["git", "log", "--oneline", "--all", f"--grep={ticket_id}", "--format=%H %s"],
-                cwd=str(repo_dir), text=True, stderr=_sp.DEVNULL, timeout=10
+                ["docker", "exec", "-u", user, container,
+                 "git", "-C", "/repo", "log", "--oneline", "--all",
+                 f"--grep={ticket_id}", "--format=%H %s"],
+                text=True, stderr=_sp.DEVNULL, timeout=10
             ).strip()
-            if not log_out:
+            if log_out:
+                hashes = []
+                for line in log_out.splitlines():
+                    parts = line.split(" ", 1)
+                    if len(parts) != 2:
+                        continue
+                    full_hash, subject = parts[0], parts[1]
+                    hashes.append(full_hash)
+                    commits.append({
+                        "hash": full_hash[:12],
+                        "subject": subject,
+                        "repo": "ssh-developer:/repo",
+                    })
+
+                diff_parts = []
+                for h in hashes[:5]:  # limit to 5 commits
+                    try:
+                        d = _sp.check_output(
+                            ["docker", "exec", "-u", user, container,
+                             "git", "-C", "/repo", "show", "--stat", "--patch", h],
+                            text=True, stderr=_sp.DEVNULL, timeout=10
+                        )
+                        diff_parts.append(d[:8000])
+                    except Exception:
+                        pass
+                diff_text = "\n\n".join(diff_parts)
+    except Exception:
+        pass
+
+    # ── 2) Fallback source: host repos ────────────────────────────────────
+    if not commits:
+        search_dirs = [ROOT / "app", ROOT]
+        for repo_dir in search_dirs:
+            if not (repo_dir / ".git").exists():
                 continue
-            for line in log_out.splitlines():
-                parts = line.split(" ", 1)
-                if len(parts) == 2:
-                    commits.append({"hash": parts[0][:12], "subject": parts[1], "repo": repo_dir.name})
-            # Get unified diff for all matching commits
-            hashes = [c["hash"] for c in commits if c["repo"] == repo_dir.name]
-            if hashes:
+            try:
+                # Find commits mentioning the ticket ID
+                log_out = _sp.check_output(
+                    ["git", "log", "--oneline", "--all", f"--grep={ticket_id}", "--format=%H %s"],
+                    cwd=str(repo_dir), text=True, stderr=_sp.DEVNULL, timeout=10
+                ).strip()
+                if not log_out:
+                    continue
+
+                hashes = []
+                for line in log_out.splitlines():
+                    parts = line.split(" ", 1)
+                    if len(parts) != 2:
+                        continue
+                    full_hash, subject = parts[0], parts[1]
+                    hashes.append(full_hash)
+                    commits.append({"hash": full_hash[:12], "subject": subject, "repo": repo_dir.name})
+
+                # Get unified diff for all matching commits
                 diff_parts = []
                 for h in hashes[:5]:  # limit to 5 commits
                     try:
@@ -2215,9 +2268,10 @@ def api_ticket_diff(ticket_id):
                     except Exception:
                         pass
                 diff_text = "\n\n".join(diff_parts)
-            break
-        except Exception:
-            continue
+                break
+            except Exception:
+                continue
+
     return json.dumps({
         "ok": True,
         "ticket_id": ticket_id,

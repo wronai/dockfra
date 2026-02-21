@@ -639,6 +639,35 @@ class TestTicketDiffAPI:
         data = json.loads(r.data)
         assert "commits" in data
 
+    def test_ticket_diff_reads_commits_from_developer_container(self, app_client, tickets_dir, monkeypatch):
+        from dockfra import tickets
+        from dockfra import app as app_mod
+
+        tickets.create("Diff from container", description="container git repo")
+
+        monkeypatch.setattr(app_mod, "_get_role", lambda _: {
+            "container": "dockfra-ssh-developer",
+            "user": "developer",
+        })
+
+        def _fake_check_output(cmd, **kwargs):
+            if cmd[:5] == ["docker", "exec", "-u", "developer", "dockfra-ssh-developer"]:
+                if "log" in cmd:
+                    return "8f64476abcde1234567890 feat(T-0001): add contact form\n"
+                if "show" in cmd:
+                    return "commit 8f64476abcde\n\n+line added\n"
+            raise RuntimeError(f"unexpected command: {cmd}")
+
+        monkeypatch.setattr("subprocess.check_output", _fake_check_output)
+
+        r = app_client.get("/api/ticket-diff/T-0001")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert len(data["commits"]) == 1
+        assert data["commits"][0]["hash"] == "8f64476abcde"
+        assert data["commits"][0]["repo"] == "ssh-developer:/repo"
+        assert "+line added" in data["diff"]
+
 
 class TestDBModule:
     """Test dockfra.db module directly."""

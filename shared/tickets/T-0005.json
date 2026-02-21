@@ -2,13 +2,13 @@
   "id": "T-0005",
   "title": "Dodaj funkcje kontaktu",
   "description": "Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e",
-  "status": "review",
+  "status": "done",
   "priority": "normal",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-21T09:27:49.990385+00:00",
-  "updated_at": "2026-02-21T14:21:35.618640+00:00",
+  "updated_at": "2026-02-21T14:27:28.477239+00:00",
   "comments": [
     {
       "author": "unknown",
@@ -64,6 +64,11 @@
       "author": "developer",
       "text": "Pipeline iteracja #4 zako\u0144czona (wynik: 98%). Silnik: Wbudowany LLM (OpenRouter). Model: google/gemini-3-flash-preview. Gotowe do review.",
       "timestamp": "2026-02-21T14:21:35.618623+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\u2705 Approved by manager.",
+      "timestamp": "2026-02-21T14:27:28.477229+00:00"
     }
   ],
   "github_issue_number": null
