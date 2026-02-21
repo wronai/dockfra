@@ -2,13 +2,34 @@
   "id": "T-0007",
   "title": "CLI autopilot auto-check ticket",
   "description": "",
-  "status": "open",
+  "status": "done",
   "priority": "normal",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-21T14:43:08.355082+00:00",
-  "updated_at": "2026-02-21T14:43:08.355105+00:00",
-  "comments": [],
+  "updated_at": "2026-02-21T15:19:11.506329+00:00",
+  "comments": [
+    {
+      "author": "developer",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T15:18:12.339552+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "AI implementation (built_in engine)",
+      "timestamp": "2026-02-21T15:18:21.411069+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 98%). Silnik: Wbudowany LLM (OpenRouter). Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T15:18:23.096161+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\u2705 Approved by manager.",
+      "timestamp": "2026-02-21T15:19:11.506322+00:00"
+    }
+  ],
   "github_issue_number": null
 }
