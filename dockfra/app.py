@@ -1330,6 +1330,26 @@ def _dispatch(value: str, form: dict):
     if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
     if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
     if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
+    if value.startswith("save_env_var::"):
+        var = value.split("::", 1)[1]
+        raw = form.get(var, "")
+        val = str(raw).strip() if raw is not None else ""
+        sk = _ENV_TO_STATE.get(var, var.lower())
+        _state[sk] = val
+        save_env({var: val})
+        save_state()
+        clear_widgets()
+        disp = mask(val) if any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD")) and val else (val or t('empty_val'))
+        msg(f"✅ Zapisano `{var}` = `{disp}` do `dockfra/.env`.")
+        buttons([
+            {"label": t('settings'), "value": "settings"},
+            {"label": t('menu'),     "value": "back"},
+        ])
+        return True
+    if value.startswith("rebuild_stack::"):
+        stack = value.split("::", 1)[1].strip() or "all"
+        step_do_launch({"stacks": stack, "environment": _state.get("environment", "local")})
+        return True
     # ── LLM key test action ─────────────────────────────────────────────────
     if value.startswith("test_llm_key::"):
         return_action = value.split("::", 1)[1]

@@ -150,6 +150,12 @@ def _sid_emit(event, data):
     # Capture log lines to global buffer
     if event == "log_line":
         _log_buffer.append({"text": data.get("text",""), "ts": time.time()})
+    # Remember last emitted buttons widget for this thread (helps merging UI)
+    if event == "widget" and isinstance(data, dict) and data.get("type") == "buttons":
+        try:
+            _tl.last_buttons_items = list(data.get("items", []) or [])
+        except Exception:
+            _tl.last_buttons_items = []
     # Always broadcast via SocketIO — web clients see CLI actions in real-time
     try:
         socketio.emit(event, data)
@@ -714,7 +720,7 @@ def _emit_log_error(line: str, fired: set):
         _resolved_fields = [{**f, "label": (_t_i18n(f["label"]) if f["label"] in _STRINGS else f["label"])} for f in extra_fields]
         _emit_config_form(_title, f"Wykryto w logach: `{line.strip()[:120]}`\n\n{_desc}",
                           _resolved_fields, settings_group, key, fired)
-        return  # one config-form per line
+        return True  # one config-form per line
     # ── Docker health patterns ────────────────────────────────────────────────
     for pattern, sev, message, solutions in _HEALTH_PATTERNS:
         key = pattern[:40]
@@ -827,7 +833,9 @@ def _emit_log_error(line: str, fired: set):
             if btns:
                 _sid_emit("widget", {"type": "buttons", "items": btns})
 
-        break  # one alert per line
+        return True  # one alert per line
+
+    return False
 
 def _strip_motd_line(text: str) -> bool:
     """Return True if the line is a MOTD box-drawing line that should be suppressed."""
@@ -849,6 +857,7 @@ def run_cmd(cmd, cwd=None):
                             text=True, cwd=str(cwd or ROOT))
     lines = []
     _fired: set = set()
+    _had_fixes = False
     in_box = False
     for line in proc.stdout:
         text = line.rstrip()
@@ -866,8 +875,16 @@ def run_cmd(cmd, cwd=None):
         log_id = f"log-{len(_logs)}"
         _logs.append({"id": log_id, "text": text, "timestamp": time.time()})
         _sid_emit("log_line", {"id": log_id, "text": text})
-        _emit_log_error(text, _fired)
+        try:
+            if _emit_log_error(text, _fired):
+                _had_fixes = True
+        except Exception:
+            pass
     proc.wait()
+    try:
+        _tl.had_auto_fixes = bool(_had_fixes)
+    except Exception:
+        pass
     return proc.returncode, "\n".join(lines)
 
 def docker_ps():
