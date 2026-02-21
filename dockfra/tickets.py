@@ -563,7 +563,7 @@ def sync_all():
 
 def format_ticket(t, verbose=False):
     """Format ticket for display."""
-    status_icon = {"open": "○", "in_progress": "◐", "closed": "●"}.get(t["status"], "?")
+    status_icon = {"open": "○", "in_progress": "◐", "review": "◑", "done": "●", "closed": "●"}.get(t["status"], "?")
     prio_icon = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
     line = f"  {status_icon} {t['id']:8s} {prio_icon} {t['title'][:50]:50s} → {t['assigned_to']}"
     if t.get("github_issue_number"):

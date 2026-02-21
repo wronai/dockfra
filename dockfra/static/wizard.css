@@ -262,6 +262,7 @@ header .sub{color:var(--muted);font-size:.85rem}
 .badge-yellow{border-color:rgba(251,191,36,.3);color:var(--yellow);background:rgba(251,191,36,.1)}
 .badge-green{border-color:rgba(74,222,128,.3);color:var(--green);background:rgba(74,222,128,.1)}
 .badge-red{border-color:rgba(248,113,113,.3);color:var(--red);background:rgba(248,113,113,.1)}
+.badge-cyan{border-color:rgba(34,211,238,.3);color:var(--cyan, #22d3ee);background:rgba(34,211,238,.1)}
 .badge-muted{color:var(--muted)}
 .stats-empty{font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:8px}
 .stats-action{background:none;border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:.7rem;padding:2px 10px;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -282,3 +283,50 @@ header .sub{color:var(--muted);font-size:.85rem}
 .stats-ticket-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
 .ticket-gh-link{font-size:.68rem;color:var(--accent);text-decoration:none;padding:1px 6px;border:1px solid rgba(124,131,245,.3);border-radius:4px;white-space:nowrap}
 .ticket-gh-link:hover{background:rgba(124,131,245,.15)}
+
+/* ── Ticket Diff Modal ──────────────────────────────────────────────────────── */
+.diff-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.diff-modal{background:var(--bg1);border:1px solid var(--border);border-radius:12px;width:min(92vw,1100px);height:min(88vh,800px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.diff-modal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;flex-shrink:0;background:var(--bg2)}
+.diff-modal-title{display:flex;align-items:center;gap:8px;min-width:0;flex:1;overflow:hidden}
+.diff-tid{font-family:'Cascadia Code','Fira Code',monospace;font-size:.85rem;font-weight:700;color:var(--accent);flex-shrink:0}
+.diff-status-badge{font-size:.68rem;padding:2px 8px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);white-space:nowrap;flex-shrink:0}
+#diff-modal-title-text{font-size:.88rem;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diff-modal-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.diff-tab-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:.75rem;padding:4px 10px;transition:all .15s;white-space:nowrap}
+.diff-tab-btn:hover{color:var(--text);border-color:var(--accent)}
+.diff-tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.diff-close-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px 9px;transition:all .15s;line-height:1}
+.diff-close-btn:hover{background:var(--red);border-color:var(--red);color:#fff}
+.diff-modal-body{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.diff-tab-content{flex:1;overflow-y:auto;min-height:0;padding:0}
+/* Diff pre */
+.diff-pre{margin:0;padding:12px 16px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.76rem;line-height:1.55;overflow-x:auto;white-space:pre;background:var(--bg1);color:var(--text);min-height:100%}
+.diff-add{color:#4ade80;display:block;background:rgba(74,222,128,.07)}
+.diff-del{color:#f87171;display:block;background:rgba(248,113,113,.07)}
+.diff-hunk{color:#60a5fa;display:block;background:rgba(96,165,250,.07);font-weight:600}
+.diff-file{color:#e2e8f0;display:block;font-weight:700;border-bottom:1px solid var(--border);padding-bottom:2px;margin-bottom:2px}
+.diff-meta{color:var(--muted);display:block;font-style:italic}
+.diff-ctx{color:var(--text);display:block;opacity:.75}
+/* Loading / empty */
+.diff-loading{padding:40px;text-align:center;color:var(--muted);font-size:.9rem}
+.diff-empty{padding:40px 24px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:10px;align-items:center}
+.diff-empty span{font-size:.9rem}
+.diff-empty small{font-size:.75rem;opacity:.7}
+.diff-empty code{background:var(--bg3);border-radius:4px;padding:1px 6px;font-size:.8em;color:var(--accent)}
+/* Commits tab */
+.diff-commits-list{padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.diff-commit-row{display:flex;align-items:baseline;gap:10px;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:.8rem;flex-wrap:wrap}
+.diff-commit-hash{font-family:'Cascadia Code','Fira Code',monospace;color:var(--accent);font-size:.78rem;flex-shrink:0;background:var(--bg3);padding:1px 6px;border-radius:4px}
+.diff-commit-repo{color:var(--muted);font-size:.72rem;flex-shrink:0}
+.diff-commit-subject{color:var(--text);flex:1;min-width:0}
+/* Ticket detail tab */
+.diff-ticket-detail{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.diff-ticket-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.diff-meta-sep{color:var(--border)}
+.diff-ticket-title{font-size:1.05rem;font-weight:600;color:var(--text);line-height:1.4}
+.diff-ticket-desc{font-size:.85rem;color:var(--muted);line-height:1.6;white-space:pre-wrap;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 14px}
+.diff-comments-section{display:flex;flex-direction:column;gap:6px}
+.diff-comments-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.diff-comment{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:.8rem;line-height:1.5}
+.diff-comment-ts{color:var(--muted);font-size:.72rem;margin-left:4px}

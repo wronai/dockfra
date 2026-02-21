@@ -60,6 +60,41 @@
   </div>
 </div>
 
+<!-- ── Ticket Diff Modal ─────────────────────────────────────────────────── -->
+<div id="diff-modal" class="diff-modal-overlay" style="display:none" onclick="if(event.target===this)closeDiffModal()">
+  <div class="diff-modal">
+    <div class="diff-modal-header">
+      <div class="diff-modal-title">
+        <span id="diff-modal-tid" class="diff-tid"></span>
+        <span id="diff-modal-status" class="diff-status-badge"></span>
+        <span id="diff-modal-title-text"></span>
+      </div>
+      <div class="diff-modal-actions">
+        <button class="diff-tab-btn active" data-tab="diff" onclick="switchDiffTab('diff')">📄 Diff</button>
+        <button class="diff-tab-btn" data-tab="commits" onclick="switchDiffTab('commits')">📝 Commits</button>
+        <button class="diff-tab-btn" data-tab="ticket" onclick="switchDiffTab('ticket')">🎫 Ticket</button>
+        <button class="diff-close-btn" onclick="closeDiffModal()" title="Zamknij">✕</button>
+      </div>
+    </div>
+    <div class="diff-modal-body">
+      <div id="diff-tab-diff" class="diff-tab-content">
+        <div id="diff-loading" class="diff-loading">⏳ Ładowanie diff...</div>
+        <pre id="diff-content" class="diff-pre" style="display:none"></pre>
+        <div id="diff-empty" class="diff-empty" style="display:none">
+          <span>🔍 Brak commitów powiązanych z tym ticketem.</span>
+          <small>Commity muszą zawierać ID ticketu w wiadomości (np. <code>feat(T-0001): ...</code>)</small>
+        </div>
+      </div>
+      <div id="diff-tab-commits" class="diff-tab-content" style="display:none">
+        <div id="diff-commits-list" class="diff-commits-list"></div>
+      </div>
+      <div id="diff-tab-ticket" class="diff-tab-content" style="display:none">
+        <div id="diff-ticket-detail" class="diff-ticket-detail"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='wizard.js') }}?v={{ cache_bust }}"></script>
 </body>
 </html>

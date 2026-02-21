@@ -361,18 +361,50 @@ def validate_docker() -> tuple[bool, str]:
         return False, f"błąd: {e}"
 
 
-def _prompt_api_key(return_action: str = ""):
+def _ensure_llm_key(return_action: str = "") -> tuple[bool, str]:
+    """Validate LLM key exists and works. If not, prompt user inline.
+
+    Returns (ok, key). When ok=False, an inline prompt has been emitted
+    and the caller should return/abort the current operation.
+    """
+    key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
+           or _state.get("developer_llm_api_key", "") or os.environ.get("OPENROUTER_API_KEY", ""))
+    if not key:
+        _prompt_api_key(return_action=return_action, reason="brak klucza API")
+        return False, ""
+    # Validate key actually works
+    ok, reason = validate_llm_connection()
+    if not ok:
+        _prompt_api_key(return_action=return_action, reason=reason)
+        return False, ""
+    return True, key
+
+
+def _prompt_api_key(return_action: str = "", reason: str = ""):
     """Show inline form to enter OPENROUTER_API_KEY when LLM is unavailable."""
-    msg("⚠️ **Brakuje klucza API** — skonfiguruj `OPENROUTER_API_KEY` poniżej:")
+    if reason:
+        msg(f"⚠️ **LLM niedostępny** — {reason}\n\nSkonfiguruj poprawny `OPENROUTER_API_KEY` poniżej:")
+    else:
+        msg("⚠️ **Brakuje klucza API** — skonfiguruj `OPENROUTER_API_KEY` poniżej:")
     text_input("OPENROUTER_API_KEY", "OpenRouter API Key",
                "sk-or-v1-...", _state.get("openrouter_key", ""), sec=True,
                help_url="https://openrouter.ai/keys")
+    # Combo: select popular models OR type custom model ID
+    cur_model = _state.get("llm_model", _schema_defaults().get("LLM_MODEL", ""))
     opts = [{"label": lbl, "value": val}
             for val, lbl in next(e["options"] for e in ENV_SCHEMA if e["key"] == "LLM_MODEL")]
-    select("LLM_MODEL", "Model LLM", opts, _state.get("llm_model", _schema_defaults().get("LLM_MODEL", "")))
-    btn_items = [{"label": "✅ Zapisz klucz", "value": "save_creds"}]
+    opts.append({"label": "✏️ Wpisz ręcznie…", "value": "__custom__"})
+    select("LLM_MODEL", "Model LLM", opts, cur_model)
+    text_input("LLM_MODEL_CUSTOM", "Model (ręcznie)",
+               "np. google/gemini-3-flash-preview", cur_model if cur_model and not any(o["value"] == cur_model for o in opts[:-1]) else "",
+               hint="Wpisz pełny identyfikator modelu z openrouter.ai/models")
+    # Buttons: test first, then save
+    btn_items = [
+        {"label": "🧪 Testuj połączenie", "value": f"test_llm_key::{return_action}"},
+        {"label": "✅ Zapisz i kontynuuj", "value": "save_creds"},
+    ]
     if return_action:
-        btn_items.append({"label": "🧠 Powtórz analizę", "value": return_action})
+        btn_items.append({"label": "▶️ Powtórz akcję", "value": return_action})
     buttons(btn_items)
 
 

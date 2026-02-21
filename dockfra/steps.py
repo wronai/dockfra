@@ -234,6 +234,12 @@ def step_save_creds(form):
             sk = _ENV_TO_STATE[env_key]
             _state[sk] = val
             env_updates[env_key] = val
+    # Handle custom model input: if LLM_MODEL is __custom__ or LLM_MODEL_CUSTOM is filled, use custom
+    model_custom = form.get("LLM_MODEL_CUSTOM", "").strip()
+    model_sel = form.get("LLM_MODEL", "").strip()
+    if model_custom and (model_sel == "__custom__" or model_custom):
+        _state["llm_model"] = model_custom
+        env_updates["LLM_MODEL"] = model_custom
     save_env(env_updates)
     msg("✅ Zapisano i zaktualizowano `dockfra/.env`.")
     key = _state.get("openrouter_key","")

@@ -32,7 +32,8 @@ from .steps import (
 from .fixes import (
     step_fix_container, _do_restart_container,
     step_suggest_commands, _run_suggested_cmd,
-    diag_port, show_missing_env, _prompt_api_key,
+    diag_port, show_missing_env, _prompt_api_key, _ensure_llm_key,
+    validate_llm_connection, validate_docker,
     fix_network_overlap, retry_launch, fix_vnc_port,
     fix_acme_storage, fix_readonly_volume, fix_docker_perms,
 )
@@ -41,6 +42,8 @@ from .discover import (
 )
 import os as _os, sys as _sys
 from . import tickets as _tickets
+from .pipeline import PipelineState, StepResult, run_step, evaluate_implementation, evaluate_test_output, build_retry_prompt
+from . import engines as _engines
 
 STEPS = {
     "welcome":          lambda f: step_welcome(),
@@ -797,12 +800,472 @@ def _step_project_stats():
     ])
 
 
+# ── Ticket management steps (software house workflow) ─────────────────────────
+
+def _step_show_ticket(tid: str):
+    """Show detailed ticket view with status-aware actions."""
+    clear_widgets()
+    t = _tickets.get(tid)
+    if not t:
+        msg(f"❌ Ticket `{tid}` nie znaleziony.")
+        buttons([{"label": "🏠 Menu", "value": "back"}])
+        return
+    si = {"open": "○", "in_progress": "◐", "review": "◑", "closed": "●", "done": "●"}.get(t["status"], "?")
+    pi = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}.get(t.get("priority", "normal"), "⚪")
+    gh_num = t.get("github_issue_number")
+    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+    gh_link = f" | [GH#{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})" if gh_num and gh_repo else ""
+    msg(f"## {si} {tid} — {t['title']}\n"
+        f"**Status:** {t['status']} | **Priorytet:** {pi} {t.get('priority','normal')} | **Przypisany:** {t.get('assigned_to','?')}{gh_link}\n\n"
+        f"**Opis:** {t.get('description','(brak)')}")
+    # Show comments
+    comments = t.get("comments", [])
+    if comments:
+        msg("### 💬 Komentarze")
+        for c in comments[-10:]:
+            ts = c.get("timestamp", "")[:16].replace("T", " ")
+            msg(f"**{c.get('author','?')}** ({ts}): {c.get('text','')}")
+    # Status-aware buttons
+    btn_items = []
+    if t["status"] == "open":
+        btn_items.append({"label": "▶ Pracuj (pełny pipeline)", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+    elif t["status"] == "in_progress":
+        btn_items.append({"label": "▶ Kontynuuj pipeline", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+        btn_items.append({"label": "🤖 Implement", "value": f"ssh_cmd::developer::implement::{tid}"})
+    elif t["status"] == "review":
+        btn_items.append({"label": "✅ Zatwierdź (manager)", "value": f"manager_approve::{tid}"})
+        btn_items.append({"label": "🔄 Odrzuć → ponów", "value": f"manager_reject::{tid}"})
+        if gh_repo:
+            btn_items.append({"label": "🔗 Zobacz na GitHub", "value": f"open_github::{gh_repo}"})
+    elif t["status"] in ("closed", "done"):
+        btn_items.append({"label": "🔄 Otwórz ponownie", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+    btn_items.append({"label": "📋 Wszystkie tickety do review", "value": "tickets_review"})
+    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    buttons(btn_items)
+
+
+def _step_tickets_review():
+    """Show all tickets in 'review' status — manager dashboard."""
+    clear_widgets()
+    all_tickets = _tickets.list_tickets()
+    review_tickets = [t for t in all_tickets if t.get("status") == "review"]
+    in_progress = [t for t in all_tickets if t.get("status") == "in_progress"]
+    open_tickets = [t for t in all_tickets if t.get("status") == "open"]
+    done_tickets = [t for t in all_tickets if t.get("status") in ("closed", "done")]
+
+    msg(f"## 📋 Panel Managera — Przegląd Ticketów\n"
+        f"**Do review:** {len(review_tickets)} | **W trakcie:** {len(in_progress)} | "
+        f"**Otwarte:** {len(open_tickets)} | **Zakończone:** {len(done_tickets)}")
+
+    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+
+    if review_tickets:
+        msg("### 👁️ Czekają na review")
+        for t in review_tickets:
+            gh_num = t.get("github_issue_number")
+            gh_link = f" [GH#{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})" if gh_num and gh_repo else ""
+            msg(f"- **◑ {t['id']}** — {t['title']}{gh_link}")
+
+    if in_progress:
+        msg("### 🔄 W trakcie pracy")
+        for t in in_progress:
+            msg(f"- **◐ {t['id']}** — {t['title']} → {t.get('assigned_to','?')}")
+
+    if open_tickets:
+        msg("### ○ Otwarte (gotowe do przydzielenia)")
+        for t in open_tickets:
+            msg(f"- **○ {t['id']}** — {t['title']}")
+
+    # Action buttons
+    btn_items = []
+    for t in review_tickets:
+        btn_items.append({"label": f"✅ Zatwierdź {t['id']}", "value": f"manager_approve::{t['id']}"})
+        btn_items.append({"label": f"🔄 Odrzuć {t['id']}", "value": f"manager_reject::{t['id']}"})
+    btn_items.append({"label": "📝 Utwórz nowy ticket", "value": "ticket_create_wizard"})
+    btn_items.append({"label": "🤖 AI: zaproponuj features", "value": "manager_suggest_features"})
+    if gh_repo:
+        btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
+    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    buttons(btn_items)
+
+
+def _step_manager_approve(tid: str, form: dict):
+    """Manager approves a ticket — marks as done, pushes to GitHub, syncs."""
+    clear_widgets()
+    t = _tickets.get(tid)
+    if not t:
+        msg(f"❌ Ticket `{tid}` nie znaleziony.")
+        buttons([{"label": "🏠 Menu", "value": "back"}])
+        return
+    _tickets.update(tid, status="done")
+    _tickets.add_comment(tid, "manager", "✅ Review zatwierdzony przez managera. Ticket zamknięty.")
+    # Push status to GitHub Issues
+    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+    gh_num = t.get("github_issue_number")
+    gh_link = ""
+    if gh_repo and gh_num:
+        try:
+            _tickets.push_to_github(tid)
+            gh_link = f"\n🔗 [GitHub Issue #{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})"
+        except Exception:
+            pass
+    msg(f"## ✅ Ticket `{tid}` zatwierdzony\n"
+        f"**{t['title']}** — status: **done**{gh_link}\n\n"
+        f"Implementacja zatwierdzona przez managera. Ticket zamknięty.")
+    buttons([
+        {"label": "📋 Panel review", "value": "tickets_review"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+
+def _step_manager_reject(tid: str):
+    """Manager rejects a ticket — sends back to in_progress for rework."""
+    clear_widgets()
+    t = _tickets.get(tid)
+    if not t:
+        msg(f"❌ Ticket `{tid}` nie znaleziony.")
+        buttons([{"label": "🏠 Menu", "value": "back"}])
+        return
+    _tickets.update(tid, status="in_progress")
+    _tickets.add_comment(tid, "manager", "🔄 Review odrzucony. Wymaga poprawek.")
+    msg(f"## 🔄 Ticket `{tid}` odrzucony → in_progress\n"
+        f"**{t['title']}** wraca do developera.\n\n"
+        f"Developer może ponownie uruchomić pipeline klikając **▶ Pracuj**.")
+    buttons([
+        {"label": f"▶ Pracuj ponownie {tid}", "value": f"ssh_cmd::developer::ticket-work::{tid}"},
+        {"label": "📋 Panel review", "value": "tickets_review"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+
+def _step_manager_suggest_features():
+    """Manager uses LLM to analyze the project and suggest new features/tickets."""
+    clear_widgets()
+    msg("## 🤖 AI: Analiza projektu i propozycje features")
+    llm_ok, llm_key = _ensure_llm_key(return_action="manager_suggest_features")
+    if not llm_ok:
+        return
+    # Gather project context
+    existing_tickets = _tickets.list_tickets()
+    ticket_summary = "\n".join(
+        f"- [{t['status']}] {t['id']}: {t['title']}" for t in existing_tickets
+    ) or "(brak ticketów)"
+    # Read project structure
+    app_dir = ROOT / "app"
+    project_files = ""
+    try:
+        out = subprocess.check_output(
+            ["find", str(app_dir), "-maxdepth", "3", "-name", "*.py", "-o", "-name", "*.js",
+             "-o", "-name", "*.ts", "-o", "-name", "docker-compose*.yml"],
+            text=True, stderr=subprocess.DEVNULL, timeout=5)
+        project_files = out.strip()[:2000]
+    except Exception:
+        project_files = "(nie udało się odczytać struktury)"
+
+    progress("🧠 AI analizuje projekt...")
+    prompt = (
+        f"Jesteś managerem projektu software house. Przeanalizuj strukturę projektu i istniejące tickety.\n\n"
+        f"**Istniejące tickety:**\n{ticket_summary}\n\n"
+        f"**Pliki projektu:**\n```\n{project_files}\n```\n\n"
+        f"Zaproponuj 3-5 nowych features/ticketów, które powinny być zrealizowane.\n"
+        f"Dla każdego podaj:\n"
+        f"- Tytuł (krótki, po angielsku)\n"
+        f"- Opis (1-2 zdania)\n"
+        f"- Priorytet: critical/high/normal/low\n\n"
+        f"Format: JSON array: [{{\"title\": \"...\", \"description\": \"...\", \"priority\": \"...\"}}]"
+    )
+    reply = _llm_chat(prompt, system_prompt="You are a project manager. Respond ONLY with a valid JSON array.")
+    progress("🧠 AI", done=True)
+
+    # Try to parse and create tickets
+    created = []
+    try:
+        # Extract JSON from reply (might be wrapped in markdown)
+        import re as _re_local
+        json_match = _re_local.search(r'\[.*\]', reply, _re_local.DOTALL)
+        if json_match:
+            features = json.loads(json_match.group())
+            for feat in features[:5]:
+                t = _tickets.create(
+                    title=feat.get("title", "Untitled"),
+                    description=feat.get("description", ""),
+                    priority=feat.get("priority", "normal"),
+                    assigned_to="developer",
+                    created_by="manager-ai",
+                )
+                created.append(t)
+    except Exception as e:
+        msg(f"⚠️ Nie udało się sparsować propozycji AI: {e}\n\nSurowa odpowiedź:\n```\n{reply[:2000]}\n```")
+        buttons([{"label": "🔄 Spróbuj ponownie", "value": "manager_suggest_features"},
+                 {"label": "🏠 Menu", "value": "back"}])
+        return
+
+    if created:
+        msg(f"### ✅ Utworzono {len(created)} nowych ticketów:")
+        for t in created:
+            pi = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}.get(t.get("priority", "normal"), "⚪")
+            msg(f"- {pi} **{t['id']}** — {t['title']}\n  {t.get('description','')}")
+        # Push to GitHub if configured
+        gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+        if gh_repo:
+            for t in created:
+                try:
+                    _tickets.push_to_github(t["id"])
+                except Exception:
+                    pass
+            msg("🔗 Tickety wysłane do GitHub Issues")
+    else:
+        msg("⚠️ Brak propozycji features.")
+
+    btn_items = [
+        {"label": "📋 Panel review", "value": "tickets_review"},
+        {"label": "🤖 Zaproponuj więcej", "value": "manager_suggest_features"},
+        {"label": "🏠 Menu", "value": "back"},
+    ]
+    buttons(btn_items)
+
+
+def _step_test_llm_key(form: dict, return_action: str = ""):
+    """Test LLM key + model from the form in real-time. Shows result inline."""
+    clear_widgets()
+    # Read key and model from form
+    key = (form.get("OPENROUTER_API_KEY", "").strip()
+           or _state.get("openrouter_key", "")
+           or _os.environ.get("OPENROUTER_API_KEY", ""))
+    model_sel = form.get("LLM_MODEL", "").strip()
+    model_custom = form.get("LLM_MODEL_CUSTOM", "").strip()
+    model = model_custom if (model_sel == "__custom__" or model_custom) else model_sel
+    if not model:
+        model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
+
+    if not key:
+        msg("❌ **Brak klucza API** — wpisz klucz `OPENROUTER_API_KEY` i spróbuj ponownie.")
+        _prompt_api_key(return_action=return_action)
+        return
+
+    msg(f"🧪 Testuję połączenie...\n**Klucz:** `{key[:12]}...{key[-4:]}`\n**Model:** `{model}`")
+    progress("🧪 Testowanie LLM...")
+
+    # Real API call
+    try:
+        import urllib.request, urllib.error
+        payload = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "Say OK"}],
+            "max_tokens": 5,
+        }).encode()
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=payload,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+            reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            actual_model = data.get("model", model)
+            progress("🧪 Test", done=True)
+            msg(f"✅ **Połączenie OK!**\n"
+                f"- Model: `{actual_model}`\n"
+                f"- Odpowiedź: `{reply[:100]}`")
+            # Auto-save the working key+model
+            _state["openrouter_key"] = key
+            _state["llm_model"] = model
+            _os.environ["OPENROUTER_API_KEY"] = key
+            save_env({"OPENROUTER_API_KEY": key, "LLM_MODEL": model})
+            msg("💾 Klucz i model zapisane.")
+            btn_items = [{"label": "🏠 Menu", "value": "back"}]
+            if return_action:
+                btn_items.insert(0, {"label": "▶️ Kontynuuj", "value": return_action})
+            buttons(btn_items)
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode()[:300]
+        except Exception:
+            pass
+        progress("🧪 Test", error=True)
+        if e.code == 401:
+            msg(f"❌ **Nieprawidłowy klucz API** (401 Unauthorized)\n```\n{body}\n```")
+        elif e.code == 402:
+            msg(f"❌ **Brak środków** na koncie OpenRouter (402)\n```\n{body}\n```")
+        elif e.code == 400 and "model" in body.lower():
+            msg(f"❌ **Nieznany model** `{model}` — sprawdź identyfikator na openrouter.ai/models\n```\n{body}\n```")
+        else:
+            msg(f"❌ **Błąd HTTP {e.code}**\n```\n{body}\n```")
+        _prompt_api_key(return_action=return_action, reason=f"test nieudany (HTTP {e.code})")
+    except Exception as e:
+        progress("🧪 Test", error=True)
+        msg(f"❌ **Błąd połączenia:** {e}")
+        _prompt_api_key(return_action=return_action, reason=str(e))
+
+
+def _step_engine_select(form: dict):
+    """Show engine selection UI with auto-test results."""
+    clear_widgets()
+    msg("## 🔧 Silniki deweloperskie — wybierz narzędzie AI")
+    ri = _get_role("developer")
+    container = ri["container"]
+    user = ri["user"]
+
+    llm_key = (_state.get("openrouter_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
+    llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
+    env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+           "-e", f"LLM_MODEL={llm_model}"]
+    if _state.get("anthropic_api_key"):
+        env += ["-e", f"ANTHROPIC_API_KEY={_state['anthropic_api_key']}"]
+
+    progress("🔍 Wykrywam dostępne silniki...")
+    discovered = _engines.discover_engines(container, user)
+    progress("🔍 Wykrywanie", done=True)
+
+    progress("🧪 Testuję silniki...")
+    test_results = _engines.test_all_engines(container, user, env)
+    progress("🧪 Testy", done=True)
+
+    # Merge discover + test results
+    current_pref = _engines.get_preferred_engine()
+    first_ok = ""
+    for d, t in zip(discovered, test_results):
+        icon = "✅" if t["ok"] else ("⚠️" if d["available"] else "❌")
+        current = " ← aktualny" if d["id"] == current_pref else ""
+        msg(f"### {icon} {d['name']}{current}\n"
+            f"- **Status:** {'zainstalowany' if d['available'] else 'brak'} | "
+            f"**Test:** {t['message'][:120]}\n"
+            f"- {d['desc']}\n"
+            f"- Wymaga: `{d['needs_key']}`")
+        if t["ok"] and not first_ok:
+            first_ok = d["id"]
+
+    # Auto-select first working
+    if first_ok and not current_pref:
+        _engines.set_preferred_engine(first_ok)
+        msg(f"\n🎯 **Auto-wybrano:** `{first_ok}` (pierwszy działający)")
+    elif current_pref:
+        msg(f"\n🎯 **Aktualny silnik:** `{current_pref}`")
+
+    # Selection buttons
+    btn_items = []
+    for d, t in zip(discovered, test_results):
+        if t["ok"]:
+            label = f"✅ Użyj {d['name']}"
+        elif d["available"]:
+            label = f"⚠️ Użyj {d['name']} (test nieudany)"
+        else:
+            label = f"📦 Zainstaluj {d['name']}"
+        btn_items.append({"label": label, "value": f"set_engine::{d['id']}"})
+    btn_items.append({"label": "🔄 Testuj ponownie", "value": "engine_select"})
+    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    buttons(btn_items)
+
+
+def _step_set_engine(engine_id: str):
+    """Set preferred dev engine."""
+    clear_widgets()
+    _engines.set_preferred_engine(engine_id)
+    info = _engines.get_engine_info(engine_id)
+    name = info["name"] if info else engine_id
+    msg(f"✅ **Silnik ustawiony:** `{name}`\n\n"
+        f"Pipeline będzie używał tego silnika do implementacji.")
+    buttons([
+        {"label": "🔧 Zmień silnik", "value": "engine_select"},
+        {"label": "📋 Tickety", "value": "tickets_review"},
+        {"label": "🏠 Menu", "value": "back"},
+    ])
+
+
+def _step_engine_autotest():
+    """Auto-test all engines and auto-select first working one. Threaded."""
+    clear_widgets()
+    msg("## 🧪 Auto-test silników deweloperskich")
+    ri = _get_role("developer")
+    container = ri["container"]
+    user = ri["user"]
+    llm_key = (_state.get("openrouter_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
+    llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
+    env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+           "-e", f"LLM_MODEL={llm_model}"]
+
+    progress("🧪 Testuję silniki...")
+    engine_id, message = _engines.select_first_working(container, user, env)
+    progress("🧪 Auto-test", done=True)
+
+    if engine_id:
+        _engines.set_preferred_engine(engine_id)
+        info = _engines.get_engine_info(engine_id)
+        msg(f"✅ **Silnik gotowy:** `{info['name'] if info else engine_id}`\n"
+            f"- {message}")
+        buttons([
+            {"label": "🔧 Zmień silnik", "value": "engine_select"},
+            {"label": "📋 Tickety", "value": "tickets_review"},
+            {"label": "🏠 Menu", "value": "back"},
+        ])
+    else:
+        msg(f"❌ **Żaden silnik nie działa.**\n{message}\n\n"
+            "Sprawdź `OPENROUTER_API_KEY` i instalację narzędzi.")
+        _prompt_api_key(return_action="engine_autotest")
+
+
 def _dispatch(value: str, form: dict):
     """Shared dispatch logic for both SocketIO and REST actions."""
     if value.startswith("logs::"):          step_show_logs(value.split("::",1)[1]); return True
     if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
     if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
     if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
+    # ── LLM key test action ─────────────────────────────────────────────────
+    if value.startswith("test_llm_key::"):
+        return_action = value.split("::", 1)[1]
+        _step_test_llm_key(form, return_action)
+        return True
+    # ── Engine selection / auto-test ──────────────────────────────────────
+    if value == "engine_select":
+        _tl_sid = getattr(_tl, 'sid', None)
+        def _es():
+            _tl.sid = _tl_sid
+            _step_engine_select(form)
+            _tl.sid = None
+        threading.Thread(target=_es, daemon=True).start()
+        return True
+    if value == "engine_autotest":
+        _tl_sid = getattr(_tl, 'sid', None)
+        def _ea():
+            _tl.sid = _tl_sid
+            _step_engine_autotest()
+            _tl.sid = None
+        threading.Thread(target=_ea, daemon=True).start()
+        return True
+    if value.startswith("set_engine::"):
+        engine_id = value.split("::", 1)[1]
+        _step_set_engine(engine_id)
+        return True
+    # ── Ticket management actions ─────────────────────────────────────────────
+    if value.startswith("show_ticket::"):
+        tid = value.split("::", 1)[1]
+        _step_show_ticket(tid)
+        return True
+    if value == "tickets_review":
+        _step_tickets_review()
+        return True
+    if value.startswith("manager_approve::"):
+        tid = value.split("::", 1)[1]
+        _step_manager_approve(tid, form)
+        return True
+    if value.startswith("manager_reject::"):
+        tid = value.split("::", 1)[1]
+        _step_manager_reject(tid)
+        return True
+    if value.startswith("open_github::"):
+        repo = value.split("::", 1)[1]
+        msg(f"🔗 **GitHub:** [https://github.com/{repo}](https://github.com/{repo})")
+        buttons([{"label": "🏠 Menu", "value": "back"}])
+        return True
+    if value == "manager_suggest_features":
+        _tl_sid = getattr(_tl, 'sid', None)
+        def _suggest():
+            _tl.sid = _tl_sid
+            _step_manager_suggest_features()
+            _tl.sid = None
+        threading.Thread(target=_suggest, daemon=True).start()
+        return True
     if value == "clone_and_launch_app":
         def _clone_and_launch():
             repo_url = _state.get("git_repo_url", "")
@@ -839,61 +1302,213 @@ def _dispatch(value: str, form: dict):
         cmd_   = parts[2] if len(parts) > 2 else ""
         arg_   = parts[3] if len(parts) > 3 else ""
         ri_    = _get_role(role_)
-        # Chain: ticket-work → implement (auto-start LLM work on the ticket)
+        # ── Full Software House Pipeline: ticket-work → implement → test → commit → review ──
         if cmd_ == "ticket-work" and arg_:
             _tl_sid = getattr(_tl, 'sid', None)
             container_ = ri_['container']
             user_ = ri_['user']
             def _chain_work():
                 _tl.sid = _tl_sid
-                try:
-                    # 1) Mark ticket as in_progress
-                    msg(f"▶️ Uruchamiam: `ticket-work {arg_}`")
-                    script1 = f"/home/{user_}/scripts/ticket-work.sh"
-                    shell1 = f"if [ -x '{script1}' ]; then '{script1}' {arg_}; else source ~/.bashrc 2>/dev/null; ticket-work {arg_}; fi"
-                    rc1, out1 = run_cmd(["docker", "exec", "-u", user_, container_, "bash", "-lc", shell1])
-                    out1 = (out1 or "").strip()
-                    if rc1 == 0:
-                        msg(f"✅ `ticket-work {arg_}`\n```\n{out1[:1000]}\n```" if out1 else f"✅ `ticket-work {arg_}`")
+                def _exec(script_name, script_arg="", extra_env=None):
+                    """Run a script in the developer container. Returns (rc, output)."""
+                    script = f"/home/{user_}/scripts/{script_name}.sh"
+                    if script_arg:
+                        inner = f"'{script}' {script_arg}"
                     else:
-                        msg(f"⚠️ `ticket-work {arg_}` (kod {rc1}):\n```\n{out1[:1000]}\n```" if out1 else f"⚠️ `ticket-work {arg_}` (kod {rc1})")
+                        inner = f"'{script}'"
+                    shell = f"if [ -x '{script}' ]; then {inner}; else source ~/.bashrc 2>/dev/null; {script_name} {script_arg}; fi"
+                    cmd_parts = ["docker", "exec"] + (extra_env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+                    return run_cmd(cmd_parts)
 
-                    # 2) Auto-run implement via LLM (only if key is available)
-                    llm_key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
-                               or _state.get("developer_llm_api_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
-                    if not llm_key:
-                        msg("⚠️ **Brak klucza OPENROUTER_API_KEY** — AI implementacja pominięta.\n"
-                            "Skonfiguruj klucz API, aby włączyć `implement`:")
-                        _prompt_api_key(return_action=f"ssh_cmd::developer::ticket-work::{arg_}")
-                    else:
-                        llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
-                        extra_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
-                                     "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
-                                     "-e", f"LLM_MODEL={llm_model}"]
-                        msg(f"🤖 Rozpoczynam AI implementację: `implement {arg_}`\nŚledzenie postępu w panelu logów →")
-                        script2 = f"/home/{user_}/scripts/implement.sh"
-                        shell2 = f"if [ -x '{script2}' ]; then '{script2}' {arg_}; else source ~/.bashrc 2>/dev/null; implement {arg_}; fi"
-                        rc2, out2 = run_cmd(["docker", "exec"] + extra_env + ["-u", user_, container_, "bash", "-lc", shell2])
-                        out2 = (out2 or "").strip()
-                        if rc2 == 0:
-                            msg(f"✅ Implementacja `{arg_}` zakończona\n```\n{out2[:3000]}\n```" if out2 else f"✅ Implementacja `{arg_}` zakończona")
+                pstate = PipelineState(arg_)
+                pstate.start_iteration()
+
+                try:
+                    # ─── Step 1: Validate LLM key ─────────────────────────
+                    llm_ok, llm_key = _ensure_llm_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
+                    if not llm_ok:
+                        return
+
+                    llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
+                    llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                               "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                               "-e", f"LLM_MODEL={llm_model}"]
+                    if _state.get("anthropic_api_key"):
+                        llm_env += ["-e", f"ANTHROPIC_API_KEY={_state['anthropic_api_key']}"]
+
+                    # ─── Step 0: Auto-select dev engine ────────────────────
+                    engine_id = _engines.get_preferred_engine()
+                    if not engine_id:
+                        # Auto-test and pick the first working engine
+                        engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
+                        if engine_id:
+                            _engines.set_preferred_engine(engine_id)
                         else:
-                            msg(f"⚠️ `implement {arg_}` (kod {rc2}):\n```\n{out2[:2000]}\n```" if out2 else f"⚠️ `implement {arg_}` (kod {rc2})")
+                            msg(f"❌ **Żaden silnik deweloperski nie działa** — {eng_msg}")
+                            pstate.record_decision("abort", "no working engine")
+                            buttons([
+                                {"label": "🔧 Wybierz silnik", "value": "engine_select"},
+                                {"label": "🏠 Menu", "value": "back"},
+                            ])
+                            return
+
+                    eng_info = _engines.get_engine_info(engine_id)
+                    eng_name = eng_info["name"] if eng_info else engine_id
+
+                    msg(f"## 🔄 Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
+                        f"**Silnik:** `{eng_name}` | **Model:** `{llm_model}`")
+
+                    # ─── Step 1: Pre-flight engine test ────────────────────
+                    msg(f"### 🧪 Krok 0/5: pre-flight test silnika")
+                    eng_ok, eng_test_msg = _engines.test_engine(engine_id, container_, user_, llm_env)
+                    if eng_ok:
+                        msg(f"✅ Silnik `{eng_name}` — {eng_test_msg[:120]}")
+                    else:
+                        msg(f"⚠️ Silnik `{eng_name}` nie przeszedł testu: {eng_test_msg[:200]}")
+                        pstate.record_decision("engine_fallback", f"{engine_id} test failed, trying fallback")
+                        # Try fallback to first working engine
+                        engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
+                        if engine_id:
+                            _engines.set_preferred_engine(engine_id)
+                            eng_info = _engines.get_engine_info(engine_id)
+                            eng_name = eng_info["name"] if eng_info else engine_id
+                            msg(f"🔄 Przełączam na: `{eng_name}` — {eng_msg[:120]}")
+                        else:
+                            msg("❌ **Żaden silnik nie działa.** Sprawdź API key.")
+                            _prompt_api_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
+                            return
+
+                    # ─── Step 2: Mark ticket as in_progress ───────────────
+                    msg(f"### ⏳ Krok 1/5: status → in_progress")
+                    r1 = run_step(_exec, "ticket-work", "ticket-work", arg_)
+                    pstate.record_step(r1)
+                    if r1.ok():
+                        msg(f"✅ Ticket `{arg_}` → **in_progress**")
+                    else:
+                        msg(f"⚠️ ticket-work (kod {r1.rc}): {r1.output[:500]}")
+
+                    # ─── Step 3: AI implementation (engine-driven, adaptive) ─
+                    strategy = pstate.get_strategy_adjustment("implement")
+                    if strategy == "change_model":
+                        msg("⚠️ **Wykryto powtarzający się błąd** — zmieniam model.")
+                        pstate.record_decision("change_model", "powtarzający się błąd implement >2x")
+                        fallback_models = ["google/gemini-2.0-flash-001", "anthropic/claude-3-5-haiku",
+                                           "openai/gpt-4o-mini", "deepseek/deepseek-chat-v3-0324"]
+                        for fm in fallback_models:
+                            if fm != llm_model:
+                                llm_model = fm
+                                break
+                        llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                                   "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                                   "-e", f"LLM_MODEL={llm_model}"]
+                        msg(f"🔄 Model: `{llm_model}`")
+                    elif strategy == "skip":
+                        pstate.record_decision("skip_implement", "powtarzający się błąd — pomijam")
+                        msg("⚠️ Pomijam implementację z powodu powtarzających się błędów.")
+                        r2 = StepResult("implement", 0, "(pominięto)", 0, "", 0.3)
+                        pstate.record_step(r2)
+                    elif strategy == "ask_user":
+                        can_retry, reason = pstate.should_retry("implement")
+                        if not can_retry:
+                            msg(f"🛑 **Pipeline zatrzymany** — {reason}\n\nWymagana ręczna interwencja.")
+                            pstate.record_decision("abort", reason)
+                            buttons([
+                                {"label": "🔄 Wymuś ponowienie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                                {"label": "🔧 Zmień silnik", "value": "engine_select"},
+                                {"label": "🏠 Menu", "value": "back"},
+                            ])
+                            return
+
+                    if strategy != "skip":
+                        # Use engine-specific implement command
+                        impl_cmd = _engines.get_implement_cmd(engine_id, arg_)
+                        msg(f"### 🤖 Krok 2/5: AI implementacja (`{eng_name}`, model: `{llm_model}`)")
+                        progress(f"🤖 {eng_name} implementuje...")
+
+                        def _engine_exec(cmd=impl_cmd, env=llm_env):
+                            shell = f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; then '/home/{user_}/scripts/engine-implement.sh' {engine_id} {arg_}; else {cmd}; fi"
+                            cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+                            return run_cmd(cmd_parts)
+
+                        r2 = run_step(_engine_exec, "implement")
+                        progress(f"🤖 {eng_name}", done=True)
+                        r2.score = evaluate_implementation(r2.output)
+                        r2.meta["engine"] = engine_id
+                        pstate.record_step(r2)
+                        if r2.ok():
+                            msg(f"✅ Implementacja via `{eng_name}` (wynik: {r2.score:.0%})\n```\n{r2.output[:3000]}\n```")
+                        else:
+                            msg(f"⚠️ implement via `{eng_name}` (kod {r2.rc}, wynik: {r2.score:.0%}): {r2.output[:1500]}")
+
+                    # ─── Step 4: Run tests (scored) ───────────────────────
+                    msg(f"### 🧪 Krok 3/5: testy lokalne")
+                    r3 = run_step(_exec, "test-local", "test-local")
+                    r3.score = evaluate_test_output(r3.output, r3.rc)
+                    pstate.record_step(r3)
+                    if r3.ok():
+                        msg(f"✅ Testy (wynik: {r3.score:.0%})\n```\n{r3.output[:1000]}\n```" if r3.output else f"✅ Testy (wynik: {r3.score:.0%})")
+                    else:
+                        msg(f"⚠️ Testy (wynik: {r3.score:.0%}) — kontynuuję\n```\n{r3.output[:1000]}\n```" if r3.output else f"⚠️ Testy (wynik: {r3.score:.0%})")
+
+                    # ─── Step 5: Git commit & push ────────────────────────
+                    ticket_data = _tickets.get(arg_)
+                    commit_title = ticket_data.get("title", arg_) if ticket_data else arg_
+                    commit_msg = f"feat({arg_}): {commit_title}"
+                    msg(f"### 📤 Krok 4/5: commit & push")
+                    r4 = run_step(_exec, "commit-push", "commit-push", f'"{commit_msg}"')
+                    pstate.record_step(r4)
+                    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+                    if r4.rc == 0 and r4.output:
+                        commit_line = r4.output.strip().split("\n")[-1]
+                        commit_hash = commit_line.split()[0] if commit_line else ""
+                        gh_link = f"https://github.com/{gh_repo}/commit/{commit_hash}" if gh_repo and commit_hash else ""
+                        link_text = f"\n🔗 [Zobacz na GitHub]({gh_link})" if gh_link else ""
+                        msg(f"✅ Commit: `{commit_line}`{link_text}")
+                    elif "Nothing to commit" in (r4.output or ""):
+                        msg("ℹ️ Brak zmian do commitowania")
+                    else:
+                        msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
+
+                    # ─── Step 6: Update ticket → review ───────────────────
+                    msg(f"### 📋 Krok 5/5: status → review")
+                    _tickets.update(arg_, status="review")
+                    _tickets.add_comment(arg_, "developer",
+                        f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
+                        f"Model: {llm_model}. Gotowe do review.")
+                    r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
+                    pstate.record_step(r5)
+                    if gh_repo:
+                        try:
+                            _tickets.push_to_github(arg_)
+                        except Exception:
+                            pass
+
+                    # ─── Adaptive Summary ─────────────────────────────────
+                    overall = pstate.compute_overall_score()
+                    pstate.finished_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+                    pstate.save()
+
+                    score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
+                    msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
+                        f"**Wynik:** {overall:.0%} | **Status:** review | **Model:** `{llm_model}`\n\n"
+                        f"{pstate.summary()}")
+
+                    btn_items = [
+                        {"label": f"👁️ Pokaż ticket {arg_}", "value": f"show_ticket::{arg_}"},
+                        {"label": "📋 Tickety do review", "value": "tickets_review"},
+                    ]
+                    if overall < 0.5:
+                        btn_items.insert(0, {"label": "🔄 Ponów pipeline (adaptacyjnie)", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
+                    if gh_repo:
+                        btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
+                    btn_items.append({"label": "🏠 Menu", "value": "back"})
+                    buttons(btn_items)
+
                 except Exception as e:
-                    msg(f"❌ Błąd: {e}")
+                    msg(f"❌ Pipeline błąd: {e}")
+                    pstate.record_step(StepResult("pipeline", -1, "", 0, str(e), 0.0))
+                    pstate.save()
                 finally:
-                    try:
-                        ri2 = _get_role(role_)
-                        port = _state.get(f"SSH_{role_.upper()}_PORT", ri2["port"])
-                        buttons([
-                            {"label": f"{ri2['icon']} Wróć do akcji", "value": f"ssh_info::{role_}::{port}"},
-                            {"label": "🏠 Menu", "value": "back"},
-                        ])
-                    except Exception:
-                        buttons([
-                            {"label": "🔧 Wróć do akcji", "value": f"ssh_info::{role_}::2200"},
-                            {"label": "🏠 Menu", "value": "back"},
-                        ])
                     _tl.sid = None
             threading.Thread(target=_chain_work, daemon=True).start()
         else:
@@ -1207,6 +1822,59 @@ def api_stats():
         "integrations": integrations,
         "suggestions": suggestions,
     })
+
+@app.route("/api/ticket-diff/<ticket_id>")
+def api_ticket_diff(ticket_id):
+    """Return git commits and unified diff for a given ticket ID from the app repo."""
+    import subprocess as _sp
+    ticket = _tickets.get(ticket_id)
+    if not ticket:
+        return json.dumps({"ok": False, "error": "Not found"}), 404
+    # Search in app repo first, then root repo
+    search_dirs = [APP, ROOT]
+    commits = []
+    diff_text = ""
+    for repo_dir in search_dirs:
+        if not (repo_dir / ".git").exists():
+            continue
+        try:
+            # Find commits mentioning the ticket ID
+            log_out = _sp.check_output(
+                ["git", "log", "--oneline", "--all", f"--grep={ticket_id}", "--format=%H %s"],
+                cwd=str(repo_dir), text=True, stderr=_sp.DEVNULL, timeout=10
+            ).strip()
+            if not log_out:
+                continue
+            for line in log_out.splitlines():
+                parts = line.split(" ", 1)
+                if len(parts) == 2:
+                    commits.append({"hash": parts[0][:12], "subject": parts[1], "repo": repo_dir.name})
+            # Get unified diff for all matching commits
+            hashes = [c["hash"] for c in commits if c["repo"] == repo_dir.name]
+            if hashes:
+                diff_parts = []
+                for h in hashes[:5]:  # limit to 5 commits
+                    try:
+                        d = _sp.check_output(
+                            ["git", "show", "--stat", "--patch", h],
+                            cwd=str(repo_dir), text=True, stderr=_sp.DEVNULL, timeout=10
+                        )
+                        diff_parts.append(d[:8000])
+                    except Exception:
+                        pass
+                diff_text = "\n\n".join(diff_parts)
+            break
+        except Exception:
+            continue
+    return json.dumps({
+        "ok": True,
+        "ticket_id": ticket_id,
+        "title": ticket.get("title", ""),
+        "status": ticket.get("status", ""),
+        "commits": commits,
+        "diff": diff_text,
+    })
+
 
 @app.route("/api/tickets/sync", methods=["POST"])
 def api_tickets_sync():

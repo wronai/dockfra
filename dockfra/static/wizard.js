@@ -136,7 +136,7 @@ setInterval(loadLogs, 2000);
 function tryRenderTickets(text) {
   // Match format_ticket output: "  ○ T-0001   🟡 Title → developer"
   // Also match: "○ T-0001 — Title" (legacy/inline format)
-  const ticketRe = /([○◐●])\s+(T-\d{4,})\s+[🔴🟠🟡🟢⚪]?\s*(.+?)\s*(?:→\s*\w+)?$/gm;
+  const ticketRe = /([○◐◑●])\s+(T-\d{4,})\s+[🔴🟠🟡🟢⚪]?\s*(.+?)\s*(?:→\s*\w+)?$/gm;
   const tickets = [];
   let m;
   while ((m = ticketRe.exec(text)) !== null) {
@@ -154,22 +154,39 @@ function tryRenderTickets(text) {
   const wrap = document.createElement('div');
   wrap.className = 'ticket-cards';
   tickets.forEach(tk => {
-    const statusMap = {'○':'open','◐':'in_progress','●':'closed'};
+    const statusMap = {'○':'open','◐':'in_progress','◑':'review','●':'closed'};
     const status = statusMap[tk.icon] || 'open';
-    const colorMap = {'open':'var(--accent)','in_progress':'var(--yellow)','closed':'var(--muted)'};
+    const colorMap = {'open':'var(--accent)','in_progress':'var(--yellow)','review':'var(--cyan, #0ff)','closed':'var(--muted)'};
     const card = document.createElement('div');
     card.className = 'ticket-card';
+    // Context-sensitive buttons based on status
+    let actionsHtml = '';
+    if (status === 'open') {
+      actionsHtml = `
+        <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Uruchom pełny pipeline">▶ Pracuj</button>
+        <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>`;
+    } else if (status === 'in_progress') {
+      actionsHtml = `
+        <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Kontynuuj pipeline">▶ Pracuj</button>
+        <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}" title="AI implementacja">🤖</button>
+        <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>`;
+    } else if (status === 'review') {
+      actionsHtml = `
+        <button class="ticket-btn ticket-btn-done" data-action="manager_approve::${tk.id}" title="Zatwierdź">✅ Approve</button>
+        <button class="ticket-btn" data-action="manager_reject::${tk.id}" title="Odrzuć">🔄 Reject</button>
+        <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>`;
+    } else {
+      actionsHtml = `
+        <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>
+        <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Otwórz ponownie">🔄 Reopen</button>`;
+    }
     card.innerHTML = `
       <div class="ticket-card-header">
         <span class="ticket-id" style="color:${colorMap[status]}">${tk.icon} ${tk.id}</span>
         <span class="ticket-status">${status.replace('_',' ')}</span>
       </div>
       <div class="ticket-title">${tk.title}</div>
-      <div class="ticket-actions">
-        <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Zacznij pracę">▶ Pracuj</button>
-        <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}" title="AI implementacja">🤖 Implement</button>
-        <button class="ticket-btn ticket-btn-done" data-action="ssh_cmd::developer::ticket-done::${tk.id}" title="Oznacz jako done">✅ Done</button>
-      </div>`;
+      <div class="ticket-actions">${actionsHtml}</div>`;
     wrap.appendChild(card);
   });
   return wrap;
@@ -224,6 +241,10 @@ chat.addEventListener('click', e => {
   if (!btn) return;
   const value = btn.dataset.action;
   if (!value) return;
+  if (value.startsWith('show_ticket::')) {
+    openDiffModal(value.split('::')[1]);
+    return;
+  }
   const label = btn.closest('.ticket-card').querySelector('.ticket-id').textContent + ' — ' + btn.textContent.trim();
   sendAction(value, label);
 });
@@ -622,6 +643,24 @@ function renderSelect(d){
     sel.appendChild(opt);
   });
   field.appendChild(sel);
+  // Toggle custom model input visibility when LLM_MODEL changes
+  if(d.name === 'LLM_MODEL'){
+    sel.addEventListener('change', () => {
+      const customField = document.getElementById('field_LLM_MODEL_CUSTOM');
+      if(customField){
+        const wrap = customField.closest('.field');
+        if(wrap) wrap.style.display = sel.value === '__custom__' ? '' : 'none';
+      }
+    });
+    // Initial state: hide custom if not __custom__
+    setTimeout(() => {
+      const customField = document.getElementById('field_LLM_MODEL_CUSTOM');
+      if(customField){
+        const wrap = customField.closest('.field');
+        if(wrap) wrap.style.display = sel.value === '__custom__' ? '' : 'none';
+      }
+    }, 100);
+  }
   // Dynamic hint + arg placeholder when hint_map is provided
   if(d.hint_map){
     const hint = document.createElement('div');
@@ -857,8 +896,8 @@ async function updateStats() {
     if (tickets.length === 0) {
       html += '<div class="stats-empty" style="padding:12px 0">Brak ticketów.<br>Kliknij <strong>+ Nowy</strong> aby dodać.</div>';
     } else {
-      const statusIcon = {open:'○',in_progress:'◐',closed:'●'};
-      const statusCls  = {open:'badge-accent',in_progress:'badge-yellow',closed:'badge-muted'};
+      const statusIcon = {open:'○',in_progress:'◐',review:'◑',done:'●',closed:'●'};
+      const statusCls  = {open:'badge-accent',in_progress:'badge-yellow',review:'badge-cyan',done:'badge-muted',closed:'badge-muted'};
       const prioIcon   = {critical:'🔴',high:'🟠',normal:'🟡',low:'🟢'};
       tickets.forEach(tk => {
         const si = statusIcon[tk.status]||'○';
@@ -876,10 +915,22 @@ async function updateStats() {
           <div class="stats-ticket-title">${tk.title}</div>
           ${tk.description ? `<div class="stats-ticket-desc">${tk.description.slice(0,80)}${tk.description.length>80?'…':''}</div>` : ''}
           <div class="stats-ticket-actions">
-            <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
-            <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}">🤖 Impl</button>
-            <button class="ticket-btn ticket-btn-done" data-action="ssh_cmd::developer::ticket-done::${tk.id}">✅ Done</button>
-            ${!tk.github_issue_number ? `<button class="ticket-btn ticket-btn-gh" data-action="ticket_push_github::${tk.id}" title="Wypchnij do GitHub Issues">🔗 GitHub</button>` : ''}
+            ${tk.status === 'open' ? `
+              <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
+              <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
+            ` : tk.status === 'in_progress' ? `
+              <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
+              <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}">🤖</button>
+              <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
+            ` : tk.status === 'review' ? `
+              <button class="ticket-btn ticket-btn-done" data-action="manager_approve::${tk.id}">✅ Approve</button>
+              <button class="ticket-btn" data-action="manager_reject::${tk.id}">🔄 Reject</button>
+              <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
+            ` : `
+              <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
+              <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">🔄 Reopen</button>
+            `}
+            ${!tk.github_issue_number ? `<button class="ticket-btn ticket-btn-gh" data-action="ticket_push_github::${tk.id}" title="Wypchnij do GitHub Issues">🔗</button>` : ''}
           </div>
         </div>`;
       });
@@ -1226,3 +1277,136 @@ function submitChatInput() {
 }
 chatSend.addEventListener('click', submitChatInput);
 chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitChatInput(); } });
+
+// ── Ticket Diff Modal ─────────────────────────────────────────────────────────
+let _diffModalData = null;
+
+function openDiffModal(tid) {
+  const modal = document.getElementById('diff-modal');
+  if (!modal) return;
+  // Reset state
+  document.getElementById('diff-modal-tid').textContent = tid;
+  document.getElementById('diff-modal-title-text').textContent = '';
+  document.getElementById('diff-modal-status').textContent = '';
+  document.getElementById('diff-modal-status').className = 'diff-status-badge';
+  document.getElementById('diff-loading').style.display = '';
+  document.getElementById('diff-content').style.display = 'none';
+  document.getElementById('diff-empty').style.display = 'none';
+  document.getElementById('diff-commits-list').innerHTML = '';
+  document.getElementById('diff-ticket-detail').innerHTML = '';
+  switchDiffTab('diff');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  fetch(`/api/ticket-diff/${encodeURIComponent(tid)}`)
+    .then(r => r.json())
+    .then(d => {
+      _diffModalData = d;
+      document.getElementById('diff-modal-title-text').textContent = d.title || '';
+      const statusEl = document.getElementById('diff-modal-status');
+      statusEl.textContent = d.status || '';
+      const statusCls = {open:'badge-accent',in_progress:'badge-yellow',review:'badge-cyan',done:'badge-muted',closed:'badge-muted'};
+      statusEl.className = 'diff-status-badge ' + (statusCls[d.status] || 'badge-muted');
+      document.getElementById('diff-loading').style.display = 'none';
+
+      // Render diff tab
+      if (d.diff && d.diff.trim()) {
+        const pre = document.getElementById('diff-content');
+        pre.innerHTML = renderDiffText(d.diff);
+        pre.style.display = '';
+      } else {
+        document.getElementById('diff-empty').style.display = '';
+      }
+
+      // Render commits tab
+      const commitsList = document.getElementById('diff-commits-list');
+      if (d.commits && d.commits.length) {
+        commitsList.innerHTML = d.commits.map(c => `
+          <div class="diff-commit-row">
+            <code class="diff-commit-hash">${c.hash}</code>
+            <span class="diff-commit-repo">[${c.repo}]</span>
+            <span class="diff-commit-subject">${escHtml(c.subject)}</span>
+          </div>`).join('');
+      } else {
+        commitsList.innerHTML = '<div class="diff-empty">Brak commitów dla tego ticketu.</div>';
+      }
+
+      // Render ticket detail tab — fetch full ticket
+      fetch(`/api/tickets/${encodeURIComponent(tid)}`)
+        .then(r => r.json())
+        .then(tk => {
+          const det = document.getElementById('diff-ticket-detail');
+          const pi = {critical:'🔴',high:'🟠',normal:'🟡',low:'🟢'}[tk.priority||'normal']||'⚪';
+          const comments = (tk.comments||[]).slice(-20).map(c => {
+            const ts = (c.timestamp||'').slice(0,16).replace('T',' ');
+            return `<div class="diff-comment"><strong>${escHtml(c.author||'?')}</strong> <span class="diff-comment-ts">${ts}</span><br>${escHtml(c.text||'')}</div>`;
+          }).join('');
+          det.innerHTML = `
+            <div class="diff-ticket-meta">
+              <span class="diff-tid">${tid}</span>
+              <span class="diff-status-badge ${statusCls[tk.status]||'badge-muted'}">${tk.status||''}</span>
+              <span>${pi} ${tk.priority||'normal'}</span>
+              <span class="diff-meta-sep">→</span>
+              <span>${escHtml(tk.assigned_to||'?')}</span>
+            </div>
+            <div class="diff-ticket-title">${escHtml(tk.title||'')}</div>
+            ${tk.description ? `<div class="diff-ticket-desc">${escHtml(tk.description)}</div>` : ''}
+            ${comments ? `<div class="diff-comments-section"><div class="diff-comments-label">💬 Komentarze</div>${comments}</div>` : ''}`;
+        }).catch(() => {});
+    })
+    .catch(e => {
+      document.getElementById('diff-loading').style.display = 'none';
+      document.getElementById('diff-empty').style.display = '';
+      document.getElementById('diff-empty').querySelector('span').textContent = `❌ Błąd: ${e}`;
+    });
+}
+
+function closeDiffModal() {
+  const modal = document.getElementById('diff-modal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+  _diffModalData = null;
+}
+
+function switchDiffTab(tab) {
+  ['diff','commits','ticket'].forEach(t => {
+    document.getElementById(`diff-tab-${t}`).style.display = t === tab ? '' : 'none';
+    document.querySelectorAll('.diff-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+  });
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDiffModal(); });
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderDiffText(raw) {
+  return raw.split('\n').map(line => {
+    const e = escHtml(line);
+    if (line.startsWith('+++') || line.startsWith('---'))
+      return `<span class="diff-file">${e}</span>`;
+    if (line.startsWith('@@'))
+      return `<span class="diff-hunk">${e}</span>`;
+    if (line.startsWith('+'))
+      return `<span class="diff-add">${e}</span>`;
+    if (line.startsWith('-'))
+      return `<span class="diff-del">${e}</span>`;
+    if (line.startsWith('commit ') || line.startsWith('Author:') || line.startsWith('Date:'))
+      return `<span class="diff-meta">${e}</span>`;
+    return `<span class="diff-ctx">${e}</span>`;
+  }).join('\n');
+}
+
+// Also wire show_ticket:: clicks in stats panel
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action && action.startsWith('show_ticket::')) {
+    e.stopPropagation();
+    openDiffModal(action.split('::')[1]);
+  }
+});
