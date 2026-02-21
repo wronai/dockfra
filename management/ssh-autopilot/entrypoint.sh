@@ -18,7 +18,7 @@ Host ssh-monitor
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
 EOF
-chown -R autopilot:autopilot "$UH/.ssh"
+chown -R autopilot:autopilot "$UH/.ssh" 2>/dev/null || true 2>/dev/null || true
 
 # Autopilot aliases
 cat >> "$UH/.bashrc" << 'RC'

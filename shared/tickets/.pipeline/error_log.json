@@ -64,5 +64,23 @@
     "error": "=== Engine: claude_code | Ticket: T-0004 ===\nTitle: kontakt\nDescription: Dodaj now\u0105 us\u0142ug\u0119 Formularza kontaktowego dla frontend i backend\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
     "ticket_id": "T-0004",
     "ts": "2026-02-21T13:53:44.216732+00:00"
+  },
+  {
+    "step": "implement",
+    "error": "=== Engine: built_in | Ticket: T-0006 ===\nTitle: CLI shell smoke test autopilot\nDescription:\n\n[built_in] Using llm_client.py via OpenRouter...",
+    "ticket_id": "T-0006",
+    "ts": "2026-02-21T14:36:39.033842+00:00"
+  },
+  {
+    "step": "test-local",
+    "error": "Error response from daemon: container ab7d279f2157f3ba8456745759b105e34f6eb0d79aa22dbfda832628e90f3b91 is not running",
+    "ticket_id": "T-0006",
+    "ts": "2026-02-21T14:36:39.616163+00:00"
+  },
+  {
+    "step": "commit-push",
+    "error": "Error response from daemon: container 2b4d1fee0f9f3c8e5a5f294aaddc403ba01fcb648fccdd9cb10f12c978272642 is not running",
+    "ticket_id": "T-0006",
+    "ts": "2026-02-21T14:36:39.741868+00:00"
   }
 ]

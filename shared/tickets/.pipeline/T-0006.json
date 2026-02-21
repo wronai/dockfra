@@ -1,0 +1,67 @@
+{
+  "ticket_id": "T-0006",
+  "iteration": 1,
+  "steps": [
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0006\nComment added to T-0006\n\u2713 T-0006 marked as in_progress",
+      "duration": 0.14,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T14:36:32.033237+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 137,
+      "output": "=== Engine: built_in | Ticket: T-0006 ===\nTitle: CLI shell smoke test autopilot\nDescription:\n\n[built_in] Using llm_client.py via OpenRouter...",
+      "duration": 6.8,
+      "error": "=== Engine: built_in | Ticket: T-0006 ===\nTitle: CLI shell smoke test autopilot\nDescription:\n\n[built_in] Using llm_client.py via OpenRouter...",
+      "score": 0.55,
+      "meta": {
+        "engine": "built_in"
+      },
+      "ok": false,
+      "ts": "2026-02-21T14:36:39.033820+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 1,
+      "output": "Error response from daemon: container ab7d279f2157f3ba8456745759b105e34f6eb0d79aa22dbfda832628e90f3b91 is not running",
+      "duration": 0.48,
+      "error": "Error response from daemon: container ab7d279f2157f3ba8456745759b105e34f6eb0d79aa22dbfda832628e90f3b91 is not running",
+      "score": 0.2,
+      "meta": {},
+      "ok": false,
+      "ts": "2026-02-21T14:36:39.616146+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 1,
+      "output": "Error response from daemon: container 2b4d1fee0f9f3c8e5a5f294aaddc403ba01fcb648fccdd9cb10f12c978272642 is not running",
+      "duration": 0.03,
+      "error": "Error response from daemon: container 2b4d1fee0f9f3c8e5a5f294aaddc403ba01fcb648fccdd9cb10f12c978272642 is not running",
+      "score": 0.0,
+      "meta": {},
+      "ok": false,
+      "ts": "2026-02-21T14:36:39.741854+00:00"
+    },
+    {
+      "step": "status-review",
+      "rc": 0,
+      "output": "review",
+      "duration": 0,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T14:36:39.851091+00:00"
+    }
+  ],
+  "decisions": [],
+  "overall_score": 0.4700000000000001,
+  "started_at": "2026-02-21T14:36:29.073129+00:00",
+  "finished_at": "2026-02-21T14:36:39.851386+00:00"
+}

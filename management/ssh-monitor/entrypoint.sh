@@ -18,7 +18,7 @@ Host ssh-rpi3
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
 EOF
-chown -R monitor:monitor "$UH/.ssh"
+chown -R monitor:monitor "$UH/.ssh" 2>/dev/null || true
 
 # Monitor aliases (appended to base .bashrc)
 cat >> "$UH/.bashrc" << 'RC'

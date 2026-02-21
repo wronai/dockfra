@@ -17,7 +17,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        - subnet: 172.30.0.0/16
 
 volumes:
   ssh-keys:
@@ -55,7 +55,7 @@ services:
       - SSH_AUTOPILOT_HOST=ssh-autopilot
       - SSH_AUTOPILOT_PORT=2222
     volumes:
-      - ./keys/manager:/root/.ssh:ro
+      - ./keys/manager:/home/manager/.ssh/extra:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
       - ../shared/lib:/shared/lib:ro
@@ -96,7 +96,7 @@ services:
       - OPENROUTER_API_KEY=${AUTOPILOT_LLM_API_KEY}
       - LLM_MODEL=${AUTOPILOT_LLM_MODEL:-gpt-4o-mini}
     volumes:
-      - ./keys/autopilot:/root/.ssh:ro
+      - ./keys/autopilot:/home/autopilot/.ssh/extra:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
       - ../shared/lib:/shared/lib:ro
@@ -135,7 +135,7 @@ services:
       - OPENROUTER_API_KEY=${MONITOR_LLM_API_KEY}
       - LLM_MODEL=${MONITOR_LLM_MODEL:-gpt-4o-mini}
     volumes:
-      - ./keys/monitor:/root/.ssh:ro
+      - ./keys/monitor:/home/monitor/.ssh/extra:ro
       - ssh-keys:/keys
       - shared-tickets:/shared/tickets
       - ../shared/lib:/shared/lib:ro

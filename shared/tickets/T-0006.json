@@ -2,13 +2,24 @@
   "id": "T-0006",
   "title": "CLI shell smoke test autopilot",
   "description": "",
-  "status": "open",
+  "status": "review",
   "priority": "normal",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-21T14:33:15.736069+00:00",
-  "updated_at": "2026-02-21T14:33:15.736086+00:00",
-  "comments": [],
+  "updated_at": "2026-02-21T14:36:39.850947+00:00",
+  "comments": [
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T14:36:32.020092+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 41%). Silnik: Wbudowany LLM (OpenRouter). Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T14:36:39.850934+00:00"
+    }
+  ],
   "github_issue_number": null
 }
