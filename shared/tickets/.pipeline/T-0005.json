@@ -1,6 +1,6 @@
 {
   "ticket_id": "T-0005",
-  "iteration": 1,
+  "iteration": 2,
   "steps": [
     {
       "step": "ticket-work",
@@ -58,9 +58,40 @@
       "meta": {},
       "ok": true,
       "ts": "2026-02-21T09:28:47.499612+00:00"
+    },
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0005\nComment added to T-0005\n\u2713 T-0005 marked as in_progress",
+      "duration": 0.14,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:30:52.100454+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 1,
+      "output": "=== Engine: claude_code | Ticket: T-0005 ===\nTitle: Dodaj funkcje kontaktu\nDescription: Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "duration": 2.48,
+      "error": "=== Engine: claude_code | Ticket: T-0005 ===\nTitle: Dodaj funkcje kontaktu\nDescription: Dodaj funkcje kontaktu na frontend i backend, dodaj testy e2e\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "score": 0.55,
+      "meta": {
+        "engine": "claude_code"
+      },
+      "ok": false,
+      "ts": "2026-02-21T09:30:54.773514+00:00"
     }
   ],
-  "decisions": [],
+  "decisions": [
+    {
+      "decision": "auth_error_pause",
+      "reason": "engine claude_code auth error \u2014 czekam na u\u017cytkownika",
+      "iteration": 2,
+      "ts": "2026-02-21T09:30:54.831602+00:00"
+    }
+  ],
   "overall_score": 0.775,
   "started_at": "2026-02-21T09:28:41.457446+00:00",
   "finished_at": "2026-02-21T09:28:47.499955+00:00"
