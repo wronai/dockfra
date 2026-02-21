@@ -1,3 +1,14 @@
+## [1.0.49] - 2026-02-21
+
+### Summary
+
+docs(docs): configuration management system
+
+### Other
+
+- update dockfra/core.py
+
+
 ## [1.0.48] - 2026-02-21
 
 ### Summary

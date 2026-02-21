@@ -631,8 +631,8 @@ def _emit_log_error(line: str, fired: set):
         elif "fix_network_overlap::" in btn_values and network:
             # Show network removal with specific name pre-filled
             _sid_emit("widget", {"type": "buttons", "items": [
-                {"label": f"🔧 Usuń sieć `{network}`",  "value": f"fix_network_overlap::{network}"},
-                {"label": "🧹 Wyczyść wszystkie sieci", "value": "fix_network_overlap::"},
+                {"label": _t_i18n('remove_network', net=network),  "value": f"fix_network_overlap::{network}"},
+                {"label": _t_i18n('clean_unused_networks'), "value": "fix_network_overlap::"},
             ]})
 
         elif "fix_network_overlap::" in btn_values and not network:
