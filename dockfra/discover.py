@@ -318,6 +318,17 @@ def run_ssh_cmd(value: str, form: dict):
                         f"Następnie uruchom: `{cmd_str}`")
                     rc = 0
             else:
+                # Guard: LLM-dependent commands need OPENROUTER_API_KEY
+                _LLM_CMDS = {"implement", "ask", "review"}
+                llm_key = (_state.get("openrouter_key", "")
+                           or _state.get("openrouter_api_key", "")
+                           or _state.get("developer_llm_api_key", "")
+                           or os.environ.get("OPENROUTER_API_KEY", ""))
+                if cmd_name in _LLM_CMDS and not llm_key:
+                    from .fixes import _prompt_api_key
+                    msg(f"⚠️ `{cmd_name}` wymaga klucza **OPENROUTER_API_KEY**.")
+                    _prompt_api_key(return_action=f"ssh_cmd::{role}::{cmd_name}::{arg}")
+                    return
                 # Try direct script path first (works without .bash_profile / extensionless symlinks),
                 # fall back to sourcing .bashrc (works after container rebuild with new ssh-base-init.sh)
                 script = f"/home/{user}/scripts/{cmd_name}.sh"
@@ -332,10 +343,6 @@ def run_ssh_cmd(value: str, form: dict):
                     f"else source ~/.bashrc 2>/dev/null; {cmd_str}; fi"
                 )
                 # Pass LLM key from wizard state into container env
-                llm_key = (_state.get("openrouter_key", "")
-                           or _state.get("openrouter_api_key", "")
-                           or _state.get("developer_llm_api_key", "")
-                           or os.environ.get("OPENROUTER_API_KEY", ""))
                 llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
                 extra_env = []
                 if llm_key:

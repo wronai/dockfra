@@ -53,15 +53,29 @@ socket.on('disconnect', () => { connEl._state='disconnected'; connEl.textContent
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
 function renderMd(text){
-  return text
-    .replace(/^# (.+)$/gm,  '<h1>$1</h1>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+  // 1. Fenced code blocks  ```lang\n...\n```
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const escaped = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<pre class="md-code"${lang?' data-lang="'+lang+'"':''}><code>${escaped.trimEnd()}</code></pre>`;
+  });
+  // 2. Block-level elements (must come before inline replacements)
+  text = text
+    .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^---+$/gm,     '<hr>');
+  // 3. Inline elements
+  text = text
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g,  '<code>$1</code>')
+    .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+    .replace(/`([^`\n]+)`/g,   '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_, label, value) =>
-      `<button class="inline-action" data-action="${value.replace(/"/g,'&quot;')}">${label}</button>`)
-    .replace(/\n/g, '<br>');
+      `<button class="inline-action" data-action="${value.replace(/"/g,'&quot;')}">${label}</button>`);
+  // 4. Newlines — but not inside <pre> blocks
+  const parts = text.split(/(<pre[\s\S]*?<\/pre>)/);
+  text = parts.map((p, i) => i % 2 === 1 ? p : p.replace(/\n/g, '<br>')).join('');
+  return text;
 }
 
 // Delegate inline-action clicks inside chat bubbles
