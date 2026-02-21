@@ -1,3 +1,24 @@
+## [1.0.48] - 2026-02-21
+
+### Summary
+
+docs(docs): configuration management system
+
+### Docs
+
+- docs: update README
+- docs: update README
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/fixes.py
+- update dockfra/i18n.py
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+
+
 ## [1.0.47] - 2026-02-21
 
 ### Summary

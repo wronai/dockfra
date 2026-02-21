@@ -42,6 +42,7 @@ from .discover import (
 )
 import os as _os, sys as _sys
 from . import tickets as _tickets
+from .i18n import t, set_lang, get_lang, llm_lang_instruction
 from .pipeline import PipelineState, StepResult, run_step, evaluate_implementation, evaluate_test_output, build_retry_prompt
 from . import engines as _engines
 from . import db as _db
@@ -76,9 +77,18 @@ STEPS = {
 }
 
 # ── socket events ─────────────────────────────────────────────────────────────
+@socketio.on("set_lang")
+def on_set_lang(data):
+    """Handle language change from frontend."""
+    lang = data.get("lang", "pl") if isinstance(data, dict) else str(data)
+    _state["_lang"] = lang
+    set_lang(lang)
+
 @socketio.on("connect")
 def on_connect():
     _tl.sid = request.sid
+    # Restore language from state
+    set_lang(_state.get("_lang", "pl"))
     try:
         if not _conversation:
             reset_state()
@@ -91,9 +101,9 @@ def on_connect():
             step = _state.get("step","welcome")
             if step in ("welcome", None, ""):
                 buttons([
-                    {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
-                    {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-                    {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
+                    {"label": t('launch_infra'),   "value":"launch_all"},
+                    {"label": t('deploy_device'),  "value":"deploy_device"},
+                    {"label": t('settings'),       "value":"settings"},
                 ])
             else:
                 # For other steps, just replay messages, don't re-execute step logic
@@ -108,6 +118,7 @@ def on_disconnect():
 @socketio.on("action")
 def on_action(data):
     _tl.sid = request.sid
+    set_lang(_state.get("_lang", "pl"))
     try:
         value = data.get("value","")
         form  = data.get("form", {})
@@ -119,6 +130,7 @@ def on_action(data):
             _tl_sid = getattr(_tl, 'sid', None)
             def _ai_analyze_thread(name=cname):
                 _tl.sid = _tl_sid
+                set_lang(_state.get("_lang", "pl"))
                 key = _state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
                 if key: os.environ["OPENROUTER_API_KEY"] = key
                 if not _LLM_AVAILABLE or not _llm_config().get("api_key"):
@@ -129,15 +141,16 @@ def on_action(data):
                         ["docker","logs","--tail","60",name],
                         text=True, stderr=subprocess.STDOUT)
                 except Exception as e:
-                    msg(f"❌ Nie można pobrać logów: {e}"); return
-                progress("🧠 AI analizuje logi...")
-                prompt = (f"Kontener Docker `{name}` ma problem. Ostatnie logi:\n"
+                    msg(t('cannot_get_logs', err=e)); return
+                progress(t('ai_analyzing'))
+                prompt = (f"Docker container `{name}` has a problem. Recent logs:\n"
                           f"```\n{out[-3000:]}\n```\n"
-                          "Określ przyczynę błędu i podaj konkretne kroki naprawy.")
-                reply = _llm_chat(prompt, system_prompt=_WIZARD_SYSTEM_PROMPT)
+                          "Identify the root cause and suggest concrete repair steps.")
+                _sys_prompt = _WIZARD_SYSTEM_PROMPT + "\n\n" + llm_lang_instruction()
+                reply = _llm_chat(prompt, system_prompt=_sys_prompt)
                 progress("🧠 AI", done=True)
-                msg(f"### 🧠 Analiza AI: `{name}`\n{reply}")
-                buttons([{"label": "💡 Zaproponuj komendy", "value": f"suggest_commands::{name}"},
+                msg(t('ai_analysis_title', name=name) + f"\n{reply}")
+                buttons([{"label": t('suggest_commands'), "value": f"suggest_commands::{name}"},
                          {"label": "📋 Logi",               "value": f"logs::{name}"}])
                 _tl.sid = None
             threading.Thread(target=_ai_analyze_thread, daemon=True).start()
@@ -148,6 +161,7 @@ def on_action(data):
             user_text = value.strip()
             def _llm_thread():
                 _tl.sid = _tl_sid
+                set_lang(_state.get("_lang", "pl"))
                 # Inject API key from wizard state into env so llm_client finds it
                 key = _state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
                 if key:
@@ -155,13 +169,14 @@ def on_action(data):
                 if not _LLM_AVAILABLE or not _llm_config().get("api_key"):
                     _prompt_api_key()
                     return
-                progress("🧠 LLM myśli...")
+                progress(t('llm_thinking'))
                 history = [{"role": m["role"] if m["role"] != "bot" else "assistant",
                             "content": m["text"]}
                            for m in _conversation[-10:]
                            if m.get("text") and m["role"] in ("user","bot")]
+                _sys_prompt = _WIZARD_SYSTEM_PROMPT + "\n\n" + llm_lang_instruction()
                 reply = _llm_chat(user_text,
-                                  system_prompt=_WIZARD_SYSTEM_PROMPT,
+                                  system_prompt=_sys_prompt,
                                   history=history[:-1])
                 progress("🧠 LLM", done=True)
                 msg(reply)
@@ -614,31 +629,31 @@ def _load_integration_env():
 def _step_ticket_create_wizard(form):
     """Show ticket creation form in the wizard chat."""
     clear_widgets()
-    msg("## 📝 Utwórz nowy ticket")
+    msg(t('create_ticket_title'))
     from .core import text_input, select
-    text_input("ticket_title", "Tytuł ticketu", "Fix login bug", "")
-    text_input("ticket_desc", "Opis (opcjonalny)", "Szczegółowy opis zadania...", "")
-    select("ticket_priority", "Priorytet", [
+    text_input("ticket_title", t('ticket_title_label'), "Fix login bug", "")
+    text_input("ticket_desc", t('ticket_desc_label'), "...", "")
+    select("ticket_priority", t('priority_label'), [
         {"value": "low", "label": "🟢 Low"},
         {"value": "normal", "label": "🟡 Normal"},
         {"value": "high", "label": "🟠 High"},
         {"value": "critical", "label": "🔴 Critical"},
     ], "normal")
-    select("ticket_assigned", "Przydziel do", [
+    select("ticket_assigned", t('assign_to'), [
         {"value": "developer", "label": "🔧 Developer"},
         {"value": "monitor", "label": "📡 Monitor"},
         {"value": "autopilot", "label": "🤖 Autopilot"},
     ], "developer")
     buttons([
-        {"label": "✅ Utwórz ticket", "value": "ticket_create_do"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('create_ticket'), "value": "ticket_create_do"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 def _step_ticket_create_do(form):
     """Actually create the ticket from form data."""
     title = form.get("ticket_title", "").strip()
     if not title:
-        msg("❌ Tytuł ticketu jest wymagany.")
+        msg(t('ticket_title_required'))
         return
     clear_widgets()
     try:
@@ -654,19 +669,17 @@ def _step_ticket_create_do(form):
     except Exception as e:
         msg(f"❌ Błąd tworzenia ticketu: {e}")
     buttons([
-        {"label": "📝 Utwórz kolejny", "value": "ticket_create_wizard"},
-        {"label": "📋 Lista ticketów", "value": "ssh_cmd::manager::ticket-list::"},
-        {"label": "🔗 Sync do GitHub/Jira", "value": "ticket_sync"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('create_another'), "value": "ticket_create_wizard"},
+        {"label": t('ticket_list'), "value": "ssh_cmd::manager::ticket-list::"},
+        {"label": t('sync_services'), "value": "ticket_sync"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 def _step_integrations_setup():
     """Show integrations configuration form."""
     clear_widgets()
     env = load_env()
-    msg("## 🔗 Integracje z systemami zadań\n\n"
-        "Skonfiguruj połączenia z zewnętrznymi systemami zarządzania zadaniami.\n"
-        "Tickety będą synchronizowane automatycznie.")
+    msg(t('integrations_title') + "\n\n" + t('integrations_desc'))
     from .core import text_input
     # GitHub
     msg("### GitHub Issues")
@@ -694,9 +707,9 @@ def _step_integrations_setup():
                help_url="https://linear.app/settings/api")
     text_input("LINEAR_TEAM", "Linear Team ID", "team_id", env.get("LINEAR_TEAM", ""))
     buttons([
-        {"label": "💾 Zapisz integracje", "value": "integrations_save"},
-        {"label": "🔄 Synchronizuj teraz", "value": "ticket_sync"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('save_integrations'), "value": "integrations_save"},
+        {"label": t('sync_now'), "value": "ticket_sync"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 def _step_integrations_save(form):

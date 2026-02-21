@@ -37,6 +37,7 @@ from collections import deque
 from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
+from .i18n import t as _t_i18n, set_lang as _set_lang, get_lang as _get_lang, llm_lang_instruction as _llm_lang_instruction
 
 # Allow importing shared lib without installation
 _SHARED_LIB = Path(__file__).parent.parent / "shared" / "lib"
@@ -752,8 +753,9 @@ def _env_status_summary() -> str:
         if e.get("required_for") and not _state.get(sk):
             missing.append(e["key"])
     if missing:
-        return f"⚠️ Brakuje: `{'`, `'.join(missing[:4])}{'...' if len(missing)>4 else ''}`"
-    return "✅ Konfiguracja kompletna"
+        vars_str = '`, `'.join(missing[:4]) + ('...' if len(missing) > 4 else '')
+        return _t_i18n('env_status_missing', vars=vars_str)
+    return _t_i18n('env_status_ok')
 
 
 def _arp_devices() -> list[dict]:

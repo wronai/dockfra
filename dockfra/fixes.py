@@ -1,5 +1,6 @@
 """Fix, repair, and diagnostic functions."""
 from .core import *
+from .i18n import t, set_lang, get_lang, llm_lang_instruction
 from .steps import step_do_launch
 
 def step_fix_container(name: str):
@@ -12,19 +13,19 @@ def step_fix_container(name: str):
     attempts[name] = attempts.get(name, 0) + 1
     attempt = attempts[name]
 
-    msg(f"## 🔧 Naprawianie: `{name}` (próba #{attempt})")
+    msg(t('fixing_container', name=name, n=attempt))
 
     # Get current container status
     containers = docker_ps()
     cinfo = next((c for c in containers if c["name"] == name), None)
-    status_txt = cinfo["status"] if cinfo else "nieznany"
-    msg(f"**Stan:** {status_txt}")
+    status_txt = cinfo["status"] if cinfo else "?"
+    msg(t('status_label', status=status_txt))
 
     finding, btns = _analyze_container_log(name)
 
     if attempt >= 2:
         # Repeat failure → escalate to LLM immediately
-        msg(f"⚠️ To już **{attempt}. próba** naprawy tego kontenera. Uruchamiam analizę AI...")
+        msg(t('repeat_attempt', n=attempt))
         msg(finding)
         _tl_sid = getattr(_tl, 'sid', None)
         def _fix_llm(n=name, f=finding):
@@ -35,7 +36,7 @@ def step_fix_container(name: str):
                     text=True, stderr=subprocess.STDOUT)
             except Exception as e:
                 out = f"(błąd pobierania logów: {e})"
-            progress("🧠 AI analizuje problem...")
+            progress(t('ai_analyzing_problem'))
             prompt = (
                 f"Kontener Docker `{n}` restartuje się i nie daje się naprawić.\n"
                 f"To jest próba #{attempts.get(n,1)} naprawy.\n"
@@ -63,10 +64,10 @@ def step_fix_container(name: str):
         btns = [{"label": f"📋 Logi: {name}", "value": f"logs::{name}"}]
 
     # Add context-aware guided questions / quick fixes
-    btns.append({"label": "🔄 Restart kontenera",    "value": f"restart_container::{name}"})
-    btns.append({"label": "💡 Zaproponuj komendy",   "value": f"suggest_commands::{name}"})
-    btns.append({"label": "🧠 Analizuj z AI",        "value": f"ai_analyze::{name}"})
-    msg("Co chcesz zrobić?")
+    btns.append({"label": t('restart_container'),    "value": f"restart_container::{name}"})
+    btns.append({"label": t('suggest_commands'),   "value": f"suggest_commands::{name}"})
+    btns.append({"label": t('analyze_ai'),        "value": f"ai_analyze::{name}"})
+    msg(t('what_to_do'))
     buttons(btns)
 
 
@@ -138,8 +139,8 @@ def step_suggest_commands(name: str):
                 ["docker", "logs", "--tail", "80", name],
                 text=True, stderr=subprocess.STDOUT)
         except Exception as e:
-            msg(f"❌ Nie można pobrać logów: {e}"); return
-        progress("🧠 AI analizuje i generuje komendy...")
+            msg(t('cannot_get_logs', err=e)); return
+        progress(t('ai_analyzing_problem'))
         result = _llm_suggest_commands(name, logs)
         progress("🧠 AI", done=True)
         diagnosis = result.get("diagnosis", "")
@@ -147,7 +148,7 @@ def step_suggest_commands(name: str):
         if diagnosis:
             msg(f"**Diagnoza:** {diagnosis}")
         if not commands:
-            msg("⚠️ Brak konkretnych komend — spróbuj pełnej analizy AI.")
+            msg(t('no_commands'))
             buttons([{"label": "🧠 Pełna analiza AI", "value": f"ai_analyze::{name}"}])
             return
         msg(f"### Proponowane komendy ({len(commands)}):")
@@ -326,10 +327,10 @@ def validate_llm_connection() -> tuple[bool, str]:
     key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
            or os.environ.get("OPENROUTER_API_KEY", ""))
     if not key:
-        return False, "brak klucza"
+        return False, t('no_key')
     if key: os.environ["OPENROUTER_API_KEY"] = key
     if not _LLM_AVAILABLE:
-        return False, "moduł LLM niedostępny"
+        return False, t('llm_module_unavailable')
     try:
         import urllib.request, urllib.error
         payload = json.dumps({
@@ -343,15 +344,15 @@ def validate_llm_connection() -> tuple[bool, str]:
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             method="POST")
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return True, "połączenie OK"
+            return True, t('connection_ok_short')
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return False, "nieprawidłowy klucz API (401 Unauthorized)"
+            return False, t('invalid_key_401')
         if e.code == 402:
-            return False, "brak środków na koncie OpenRouter (402)"
-        return False, f"błąd HTTP {e.code}"
+            return False, t('no_funds_402')
+        return False, f"HTTP {e.code}"
     except Exception as e:
-        return False, f"błąd połączenia: {e}"
+        return False, f"error: {e}"
 
 
 def validate_docker() -> tuple[bool, str]:
@@ -361,13 +362,13 @@ def validate_docker() -> tuple[bool, str]:
                                       text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
         return True, f"Docker {out}"
     except FileNotFoundError:
-        return False, "Docker nie jest zainstalowany"
+        return False, t('docker_not_installed')
     except subprocess.CalledProcessError:
-        return False, "Docker daemon nie działa — uruchom Docker Desktop lub `sudo systemctl start docker`"
+        return False, t('docker_not_running')
     except subprocess.TimeoutExpired:
-        return False, "Docker nie odpowiada (timeout)"
+        return False, t('docker_timeout')
     except Exception as e:
-        return False, f"błąd: {e}"
+        return False, f"error: {e}"
 
 
 def _ensure_llm_key(return_action: str = "") -> tuple[bool, str]:
@@ -392,9 +393,9 @@ def _ensure_llm_key(return_action: str = "") -> tuple[bool, str]:
 def _prompt_api_key(return_action: str = "", reason: str = ""):
     """Show inline form to enter OPENROUTER_API_KEY when LLM is unavailable."""
     if reason:
-        msg(f"⚠️ **LLM niedostępny** — {reason}\n\nSkonfiguruj poprawny `OPENROUTER_API_KEY` poniżej:")
+        msg(t('llm_unavailable', reason=reason))
     else:
-        msg("⚠️ **Brakuje klucza API** — skonfiguruj `OPENROUTER_API_KEY` poniżej:")
+        msg(t('missing_api_key'))
     text_input("OPENROUTER_API_KEY", "OpenRouter API Key",
                "sk-or-v1-...", _state.get("openrouter_key", ""), sec=True,
                help_url="https://openrouter.ai/keys")
@@ -402,18 +403,18 @@ def _prompt_api_key(return_action: str = "", reason: str = ""):
     cur_model = _state.get("llm_model", _schema_defaults().get("LLM_MODEL", ""))
     opts = [{"label": lbl, "value": val}
             for val, lbl in next(e["options"] for e in ENV_SCHEMA if e["key"] == "LLM_MODEL")]
-    opts.append({"label": "✏️ Wpisz ręcznie…", "value": "__custom__"})
+    opts.append({"label": t('type_manually'), "value": "__custom__"})
     select("LLM_MODEL", "Model LLM", opts, cur_model)
     text_input("LLM_MODEL_CUSTOM", "Model (ręcznie)",
                "np. google/gemini-3-flash-preview", cur_model if cur_model and not any(o["value"] == cur_model for o in opts[:-1]) else "",
                hint="Wpisz pełny identyfikator modelu z openrouter.ai/models")
     # Buttons: test first, then save
     btn_items = [
-        {"label": "🧪 Testuj połączenie", "value": f"test_llm_key::{return_action}"},
-        {"label": "✅ Zapisz i kontynuuj", "value": "save_creds"},
+        {"label": t('test_connection'), "value": f"test_llm_key::{return_action}"},
+        {"label": t('save_continue'), "value": "save_creds"},
     ]
     if return_action:
-        btn_items.append({"label": "▶️ Powtórz akcję", "value": return_action})
+        btn_items.append({"label": t('repeat_action'), "value": return_action})
     buttons(btn_items)
 
 
@@ -611,7 +612,7 @@ def fix_readonly_volume(container: str = ""):
 
 def fix_docker_perms():
     clear_widgets()
-    msg("## 🔧 Naprawa uprawnień Docker")
+    msg(t('docker_perms_title'))
     msg("Uruchom poniższe komendy na hoście, a następnie wyloguj się i zaloguj ponownie:")
     code_block("sudo usermod -aG docker $USER\nnewgrp docker")
     msg("Lub jeśli jesteś rootem, ustaw socket:")

@@ -7,7 +7,7 @@
 **Manage any Docker Compose project** with an interactive web wizard, auto-discovery,
 SSH-isolated AI agents, ticket-driven workflows, and autonomous orchestration.
 
-[![Version](https://img.shields.io/badge/version-1.0.47-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.48-blue.svg)](CHANGELOG.md)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/compose/)
@@ -26,6 +26,56 @@ SSH-isolated AI agents, ticket-driven workflows, and autonomous orchestration.
 - **Device emulation** — `devices/` stack emulates production machines (RPi3 with SSH + HTTP/HTTPS)
 - **CLI + TUI** — 14 commands: `dockfra cli test`, `engines`, `doctor`, `tickets`, `pipeline`, `dev-logs`...
 - **Works with any project** — just point at a directory with `docker-compose.yml`
+
+## Who is Dockfra for?
+
+### 🧑‍💻 Solo developer / freelancer
+
+> **Problem:** You have a Docker Compose project with a database, backend, frontend, traefik — 50+ env vars scattered across files. Every setup is manual, every crash means an hour of digging through logs.
+>
+> **Dockfra:** Run `dockfra --root .` and get a web wizard that auto-discovers your services, asks about missing variables, suggests values, and launches everything in one click. When a container crashes — you get a diagnosis and a "fix" button.
+>
+> *Docker Compose is the engine. Dockfra is the cockpit with auto-suggestions.*
+
+### 👥 Small team (2–5 people)
+
+> **Problem:** Developer commits, but who deploys? Who checks logs? Who decides what's next? Everything goes through Slack, tickets in Jira live their own life, disconnected from code.
+>
+> **Dockfra:** Four SSH-isolated roles (Developer, Manager, Monitor, Autopilot) — each in a separate container with its own permissions. Manager creates a ticket, Developer implements it with AI assistance (Aider, Claude Code, or others), Monitor deploys and verifies. Everything in one system, tickets synced with GitHub Issues / Jira.
+>
+> *Ticket → code → deploy is one pipeline, not three tools.*
+
+### 🤖 AI coding enthusiast
+
+> **Problem:** You want to use AI for coding, but: which tool to pick? How to configure it in a container? What if one doesn't work — switch manually?
+>
+> **Dockfra:** Five AI engines (Built-in LLM, Aider, Claude Code, OpenCode, MCP SSH) auto-detected. The system tests which one works and picks the best. You can switch engines per ticket. AI codes in an isolated SSH container — no access to your host.
+>
+> *Claude Code is a hammer. Dockfra is a workshop — gives you a hammer, screwdriver, saw, and tells you which tool to use.*
+
+### ⚙️ DevOps / sysadmin
+
+> **Problem:** You set up infrastructure for clients — every project has a different set of containers, different variables, different ports. Documentation exists, but it's still manual work every time.
+>
+> **Dockfra:** Zero-config auto-discovery — scans `docker-compose.yml`, extracts all `${VAR:-default}`, groups, validates, offers preflight checks before launch. CLI with 14 commands: `dockfra cli doctor` diagnoses problems, `test` runs a full self-test, `engines` checks AI status. Works with any project — just a directory with `docker-compose.yml`.
+>
+> *Coolify is a PaaS (Heroku-like). Kamal is a deploy pipeline. Dockfra is ongoing management — from config, through AI-assisted coding, to device deployment.*
+
+### 📡 IoT / embedded developer
+
+> **Problem:** You want to test deployment on a Raspberry Pi, but you don't have a physical device handy, or you don't want to risk production.
+>
+> **Dockfra:** The `devices/` stack emulates RPi3 — SSH for deployment, HTTP server with health endpoint, VNC for visual inspection. Deploy from the Monitor role, automatic verification.
+
+### TL;DR
+
+| Audience | Value |
+|---|---|
+| **Solo dev** | "No manual config — the wizard does it for me" |
+| **Small team** | "Ticket → AI codes → review → deploy in one place" |
+| **AI coding fan** | "5 AI engines, automatic selection, SSH isolation" |
+| **DevOps** | "Any Docker Compose project, zero-config, CLI with diagnostics" |
+| **IoT dev** | "Device emulation without physical hardware" |
 
 ## 📖 Documentation
 

@@ -1,5 +1,6 @@
 """Wizard step functions — welcome, status, settings, launch, deploy."""
 from .core import *
+from .i18n import t, set_lang, get_lang, llm_lang_instruction
 from .discover import _SSH_ROLES, _get_role, _refresh_ssh_roles
 
 def step_welcome():
@@ -7,7 +8,7 @@ def step_welcome():
     cfg = detect_config()
     _state.update({k:v for k,v in cfg.items() if v})
     _refresh_ssh_roles()  # re-scan now that _state has git_repo_url
-    msg("# 👋 Dockfra Setup Wizard")
+    msg(t('welcome_title'))
 
     # ── Pre-flight connectivity checks ────────────────────────────────────────
     from .fixes import validate_docker, validate_llm_connection
@@ -19,8 +20,8 @@ def step_welcome():
     status_row(checks)
 
     if not docker_ok:
-        msg(f"❌ **Docker niedostępny** — {docker_msg}\n\nUruchom Docker i odśwież.")
-        buttons([{"label": "🔄 Sprawdź ponownie", "value": "back"}])
+        msg(t('docker_unavailable', detail=docker_msg))
+        buttons([{"label": t('check_again'), "value": "back"}])
         return
 
     all_missing = [e for e in ENV_SCHEMA
@@ -31,24 +32,24 @@ def step_welcome():
     if not llm_ok:
         from .fixes import _prompt_api_key
         if all_missing:
-            msg(f"Uzupełnij **{len(all_missing)}** brakujące ustawienia:")
+            msg(t('fill_missing_n', n=len(all_missing)))
             _emit_missing_fields(all_missing)
         _prompt_api_key(return_action="back")
         return
 
     if all_missing:
-        msg(f"Uzupełnij **{len(all_missing)}** brakujące ustawienia:")
+        msg(t('fill_missing_n', n=len(all_missing)))
         _emit_missing_fields(all_missing)
         buttons([
-            {"label": "✅ Zapisz i uruchom",    "value": "preflight_save_launch::all"},
-            {"label": "⚙️ Wszystkie ustawienia", "value": "settings"},
+            {"label": t('save_and_run'),    "value": "preflight_save_launch::all"},
+            {"label": t('all_settings'), "value": "settings"},
         ])
     else:
-        msg("✅ Konfiguracja kompletna. Co chcesz zrobić?")
+        msg(t('config_complete'))
         buttons([
-            {"label": "🚀 Uruchom infrastrukturę", "value": "launch_all"},
-            {"label": "📦 Wdróż na urządzenie",     "value": "deploy_device"},
-            {"label": "⚙️ Ustawienia (.env)",        "value": "settings"},
+            {"label": t('launch_infra'), "value": "launch_all"},
+            {"label": t('deploy_device'),     "value": "deploy_device"},
+            {"label": t('settings'),        "value": "settings"},
         ])
 
 
@@ -57,14 +58,14 @@ def step_status():
     clear_widgets()
     containers = docker_ps()
     if not containers:
-        msg("⚠️ Brak uruchomionych kontenerów.")
-        buttons([{"label":"🚀 Uruchom teraz","value":"launch_all"},{"label":"🏠 Menu","value":"back"}])
+        msg(t('no_containers'))
+        buttons([{"label": t('launch_now'),"value":"launch_all"},{"label": t('menu'),"value":"back"}])
         return
     running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
     failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
-    msg(f"## 📊 Stan systemu — {len(running)} ✅ OK · {len(failing)} 🔴 problemów")
+    msg(t('system_status', ok=len(running), fail=len(failing)))
     if failing:
-        msg(f"### 🔍 Analiza problemów ({len(failing)} kontenerów)")
+        msg(t('problem_analysis', n=len(failing)))
         for c in failing:
             finding, btns = _analyze_container_log(c["name"])
             msg(f"#### `{c['name']}` — {c['status']}\n{finding}")
@@ -72,29 +73,29 @@ def step_status():
                 btns.insert(0, {"label": f"📋 Logi: {c['name']}", "value": f"logs::{c['name']}"})
                 buttons(btns)
     buttons([
-        {"label":"🚀 Uruchom infrastrukturę",  "value":"launch_all"},
-        {"label":"📦 Wdróż na urządzenie",      "value":"deploy_device"},
-        {"label":"⚙️ Ustawienia (.env)",         "value":"settings"},
+        {"label": t('launch_infra'),  "value":"launch_all"},
+        {"label": t('deploy_device'),      "value":"deploy_device"},
+        {"label": t('settings'),         "value":"settings"},
     ])
 
 def step_pick_logs():
     clear_widgets()
     containers = docker_ps()
     if not containers:
-        msg("Brak kontenerów."); buttons([{"label":"← Wróć","value":"back"}]); return
-    msg("Wybierz kontener:")
+        msg(t('no_containers_short')); buttons([{"label": t('back'),"value":"back"}]); return
+    msg(t('pick_container'))
     items = [{"label":c["name"],"value":f"logs::{c['name']}"} for c in containers]
-    items.append({"label":"← Wróć","value":"back"})
+    items.append({"label": t('back'),"value":"back"})
     buttons(items)
 
 def step_show_logs(container):
     clear_widgets()
-    msg(f"📋 **Logi: `{container}`** (ostatnie 60 linii)")
+    msg(t('logs_title', name=container, n=60))
     try:
         out = subprocess.check_output(["docker","logs","--tail","60",container],text=True,stderr=subprocess.STDOUT)
         code_block(out[-4000:])
     except Exception as e: msg(f"❌ {e}")
-    buttons([{"label":"🔄 Odśwież","value":f"logs::{container}"},{"label":"← Inne logi","value":"pick_logs"}])
+    buttons([{"label": t('refresh'),"value":f"logs::{container}"},{"label": t('other_logs'),"value":"pick_logs"}])
 
 def step_settings(group: str = ""):
     """Show env editor for a specific group or group selector."""
@@ -160,13 +161,13 @@ def step_save_settings(group: str, form: dict):
     for e in entries:
         sk = _ENV_TO_STATE.get(e["key"], e["key"].lower())
         val = _state.get(sk, "")
-        display = mask(val) if e["type"] == "password" and val else (val or "(puste)")
+        display = mask(val) if e["type"] == "password" and val else (val or t('empty_val'))
         lines.append(f"{e['key']} = {display}")
-    msg(f"✅ **{group}** — zapisano do `dockfra/.env`\n" + "\n".join(f"- `{l}`" for l in lines))
+    msg(t('saved_to_env', group=group) + "\n" + "\n".join(f"- `{l}`" for l in lines))
     buttons([
-        {"label": "✏️ Edytuj dalej",  "value": f"settings_group::{group}"},
-        {"label": "← Wszystkie sekcje","value": "settings_nav"},
-        {"label": "🚀 Uruchom",       "value": "launch_all"},
+        {"label": t('edit_more'),  "value": f"settings_group::{group}"},
+        {"label": t('all_sections'),"value": "settings_nav"},
+        {"label": t('launch_infra'),       "value": "launch_all"},
     ])
 
 
@@ -191,23 +192,32 @@ def step_preflight_fill(stacks: list[str]):
         return False  # nothing missing, proceed
     clear_widgets()
     groups = list(dict.fromkeys(e["group"] for e in missing))
-    msg("## ⚠️ Brakujące zmienne")
-    msg(f"Przed uruchomieniem stacków `{', '.join(stacks)}` uzupełnij:`")
+    msg(t('missing_vars_title'))
+    msg(t('fill_missing_n', n=len(missing)))
     for e in missing:
         msg(f"- **{e['label']}** (`{e['key']}`)", role="bot")
-    msg("\nUzupełnij poniżej lub przejdź do ⚙️ Ustawienia:")
+    msg("")
+    suggestions = _detect_suggestions()
     for e in missing:
+        sk  = _ENV_TO_STATE.get(e["key"], e["key"].lower())
+        cur = _state.get(sk, e.get("default", ""))
+        sug = suggestions.get(e["key"], {})
+        if not cur and sug.get("value"):
+            cur = sug["value"]
         if e["type"] == "select":
             opts = [{"label": lbl, "value": val} for val, lbl in e["options"]]
-            select(e["key"], e["label"], opts, e.get("default", ""))
+            select(e["key"], e["label"], opts, cur)
         else:
             text_input(e["key"], e["label"],
-                       e.get("placeholder", ""), _state.get(_ENV_TO_STATE.get(e["key"],""), ""),
-                       sec=(e["type"] == "password"))
+                       e.get("placeholder", ""), cur,
+                       sec=(e["type"] == "password"),
+                       hint=sug.get("hint", ""), chips=sug.get("chips", []),
+                       modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
+                       desc=e.get("desc", ""))
     buttons([
-        {"label": "✅ Zapisz i uruchom",  "value": f"preflight_save_launch::{','.join(stacks)}"},
-        {"label": "⚙️ Pełne ustawienia",  "value": "settings"},
-        {"label": "← Wróć",              "value": "back"},
+        {"label": t('save_and_run'),  "value": f"preflight_save_launch::{','.join(stacks)}"},
+        {"label": t('full_settings'),  "value": "settings"},
+        {"label": t('back'),              "value": "back"},
     ])
     return True  # showed form, caller should stop
 
@@ -257,31 +267,31 @@ def step_save_creds(form):
         _state["llm_model"] = model_custom
         env_updates["LLM_MODEL"] = model_custom
     save_env(env_updates)
-    msg("✅ Zapisano i zaktualizowano `dockfra/.env`.")
+    msg(t('creds_saved'))
     key = _state.get("openrouter_key","")
     msg(f"- Git: `{_state.get('git_name','')}` <{_state.get('git_email','')}>")
     msg(f"- SSH: `{_state.get('github_key','')}`")
     msg(f"- API: `{mask(key) if key else '(brak)'}`")
     msg(f"- Model: `{_state.get('llm_model','')}`")
-    buttons([{"label":"🚀 Uruchom stacki","value":"launch_all"},{"label":"⚙️ Ustawienia","value":"settings"},{"label":"🏠 Menu","value":"back"}])
+    buttons([{"label": t('launch_stacks_btn'),"value":"launch_all"},{"label": t('settings'),"value":"settings"},{"label": t('menu'),"value":"back"}])
 
 def step_launch_all():
     _state["step"] = "launch_all"
     clear_widgets()
-    msg("## 🚀 Uruchamianie stacków")
-    select("stacks", "Stacki do uruchomienia", [
-        {"label": "Wszystkie (management + app + devices)", "value": "all"},
+    msg(t('launching_stacks'))
+    select("stacks", t('stacks_select_label'), [
+        {"label": "All (management + app + devices)", "value": "all"},
         {"label": "Management",                            "value": "management"},
         {"label": "App",                                   "value": "app"},
         {"label": "Devices",                               "value": "devices"},
     ], _state.get("stacks", "all"))
-    select("environment", "Środowisko", [
+    select("environment", t('environment_label'), [
         {"label": "Local",      "value": "local"},
         {"label": "Production", "value": "production"},
     ], _state.get("environment", "local"))
     buttons([
-        {"label": "▶️ Uruchom", "value": "do_launch"},
-        {"label": "← Wróć",    "value": "back"},
+        {"label": t('run_btn'), "value": "do_launch"},
+        {"label": t('back'),    "value": "back"},
     ])
 
 def step_launch_configure():

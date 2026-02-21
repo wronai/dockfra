@@ -42,13 +42,18 @@ function applyLang(){
 }
 document.getElementById('lang-select').addEventListener('change', e => {
   _lang = e.target.value; localStorage.setItem('wizard_lang', _lang); applyLang();
+  // Propagate language to backend for server-side i18n + LLM responses
+  if(typeof socket !== 'undefined' && socket.connected) socket.emit('set_lang', {lang: _lang});
 });
 applyLang();
+
+// Re-send language on every reconnect so backend threads use correct language
+function _syncLangToServer(){ if(typeof socket !== 'undefined' && socket.connected) socket.emit('set_lang', {lang: _lang}); }
 
 // ── Socket ────────────────────────────────────────────────────────────────────
 const socket = io({transports:['websocket','polling']});
 
-socket.on('connect',    () => { connEl._state='connected';    connEl.textContent = t('connected'); loadLogs(); });
+socket.on('connect',    () => { connEl._state='connected';    connEl.textContent = t('connected'); _syncLangToServer(); loadLogs(); });
 socket.on('disconnect', () => { connEl._state='disconnected'; connEl.textContent = t('disconnected'); });
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────

@@ -51,7 +51,7 @@ Dockfra sits at the intersection of three categories:
                               │
                        ┌──────┴───────┐
                        │   DOCKFRA    │
-                       │  v1.0.41     │
+                       │  v1.0.47     │
                        │ Docker mgmt  │
                        │ + 5 engines  │
                        │ + 4 SSH roles│
@@ -64,5 +64,15 @@ Dockfra sits at the intersection of three categories:
 2. **Multi-agent system** (4 SSH-isolated roles with independent LLM configs, autopilot orchestration)
 3. **Developer tooling** (5 AI engines — Aider, Claude Code, OpenCode, Built-in LLM, MCP SSH Manager)
 4. **Full lifecycle CLI** (14 commands: test, doctor, tickets, pipeline, engines, dev-health, dev-logs...)
+
+## Who picks Dockfra over alternatives?
+
+| Audience | Pain point | Dockfra value | Alternative gap |
+|---|---|---|---|
+| **Solo dev** | 50+ env vars, manual config, crash debugging | Web wizard + auto-discovery + fix buttons | Portainer: no env-aware wizard; Compose: no UI |
+| **Small team** | Ticket ↔ code ↔ deploy disconnected | 4 SSH roles, ticket pipeline, GitHub sync | Jira + Slack + Portainer = 3 tools |
+| **AI coding fan** | Which AI tool? Config? Fallback? | 5 engines, auto-select, per-ticket switch | Claude Code / Aider: single tool, no orchestration |
+| **DevOps** | Per-project setup, no diagnostics | Zero-config, `doctor`, `test`, preflight | Coolify: PaaS model; Kamal: deploy only |
+| **IoT dev** | No physical device for testing | `devices/` stack emulates RPi3 (SSH+HTTP+VNC) | No equivalent in any competitor |
 
 No other system in any single category provides all four.
