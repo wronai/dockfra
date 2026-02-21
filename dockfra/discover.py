@@ -319,7 +319,8 @@ def run_ssh_cmd(value: str, form: dict):
                     rc = 0
             else:
                 # Guard: LLM-dependent commands need OPENROUTER_API_KEY
-                _LLM_CMDS = {"implement", "ask", "review"}
+                _LLM_CMDS = {"implement", "ask", "review", "pilot-run", "pilot-plan",
+                              "create-from-plan", "plan", "analyze-logs"}
                 llm_key = (_state.get("openrouter_key", "")
                            or _state.get("openrouter_api_key", "")
                            or _state.get("developer_llm_api_key", "")
