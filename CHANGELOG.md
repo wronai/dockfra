@@ -1,3 +1,18 @@
+## [1.0.43] - 2026-02-21
+
+### Summary
+
+docs(docs): CLI interface improvements
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/cli.py
+- update dockfra/core.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+
+
 ## [1.0.42] - 2026-02-21
 
 ### Summary

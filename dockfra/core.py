@@ -108,7 +108,15 @@ _tl = threading.local()
 _log_buffer: deque = deque(maxlen=2000)
 
 def _sid_emit(event, data):
-    """Emit to all clients (single-user wizard) or to collector (REST mode)."""
+    """Emit to all clients, persist to SQLite, and optionally collect for REST."""
+    # Determine source: 'cli' when in REST/collector mode, 'web' otherwise
+    src = 'cli' if getattr(_tl, 'collector', None) is not None else 'web'
+    # Persist to SQLite (always — shared between CLI and web)
+    try:
+        from . import db as _db
+        _db.append_event(event, data, src=src)
+    except Exception:
+        pass
     # REST API collector mode: capture all emitted events
     collector = getattr(_tl, 'collector', None)
     if collector is not None:
@@ -116,10 +124,11 @@ def _sid_emit(event, data):
     # Capture log lines to global buffer
     if event == "log_line":
         _log_buffer.append({"text": data.get("text",""), "ts": time.time()})
-    # Always broadcast — SID-targeted emits from background threads silently
-    # fail with gevent async mode.  This is a single-user wizard so broadcast is fine.
-    if collector is None:
+    # Always broadcast via SocketIO — web clients see CLI actions in real-time
+    try:
         socketio.emit(event, data)
+    except Exception:
+        pass
 
 _PKG_DIR   = Path(__file__).parent.resolve()
 ROOT       = Path(os.environ.get("DOCKFRA_ROOT", str(_PKG_DIR.parent))).resolve()

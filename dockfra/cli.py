@@ -66,10 +66,11 @@ class WizardClient:
 
     def action(self, value, form=None):
         return self._post("/api/action", {"action": value, "form": form or {}})
-    def health(self):     return self._get("/api/health")
-    def containers(self): return self._get("/api/containers")
-    def logs(self, n=40): return self._get("/api/logs/tail", {"n": n})
-    def history(self):    return self._get("/api/history")
+    def health(self):                   return self._get("/api/health")
+    def containers(self):               return self._get("/api/containers")
+    def logs(self, n=40):               return self._get("/api/logs/tail", {"n": n})
+    def history(self):                  return self._get("/api/history")
+    def events_since(self, since_id=0): return self._get(f"/api/events/since/{since_id}")
     def ping(self):
         _, err = self._get("/api/containers", timeout=3)
         return err is None
@@ -500,6 +501,7 @@ def run_tui(client):
         "input":     "", "running":   True,
         "chat_off":  0,  "log_off":   0,
         "lock":      threading.Lock(),
+        "event_cursor": 0,
     }
 
     def _fetch():
@@ -509,29 +511,41 @@ def run_tui(client):
                 if h:
                     with state["lock"]:
                         state["processes"] = h.get("containers", [])
-                lg, _ = client.logs(200)
-                if lg:
+                # Use events_since for efficient incremental sync from SQLite
+                ev, _ = client.events_since(state["event_cursor"])
+                if ev:
+                    new_chat = []
+                    new_logs = []
+                    for e in ev.get("events", []):
+                        if e["event"] == "message":
+                            d = e["data"]
+                            # Skip CLI user messages — already added locally in _send
+                            if e.get("src") == "cli" and d.get("role") == "user":
+                                continue
+                            new_chat.append({
+                                "role": d.get("role", "bot"),
+                                "text": d.get("text", ""),
+                                "src":  e.get("src", ""),
+                            })
+                        elif e["event"] == "log_line":
+                            new_logs.append(e["data"].get("text", ""))
                     with state["lock"]:
-                        state["logs"] = [l.get("text","") for l in lg.get("lines",[])]
-                hi, _ = client.history()
-                if hi:
-                    with state["lock"]:
-                        state["chat"] = hi[-200:]
+                        state["event_cursor"] = ev.get("max_id", state["event_cursor"])
+                        if new_chat:
+                            state["chat"].extend(new_chat)
+                            state["chat"] = state["chat"][-400:]
+                        if new_logs:
+                            state["logs"].extend(new_logs)
+                            state["logs"] = state["logs"][-400:]
             except Exception:
                 pass
-            time.sleep(4)
+            time.sleep(2)
 
     def _send(text):
         with state["lock"]:
-            state["chat"].append({"role":"user","text":text})
+            state["chat"].append({"role": "user", "text": text, "src": "cli"})
         def _bg():
-            d, e = client.action(text)
-            with state["lock"]:
-                for item in (d or {}).get("result",[]):
-                    if item.get("type") == "message":
-                        state["chat"].append({"role":item.get("role","bot"),"text":item.get("text","")})
-                if e:
-                    state["chat"].append({"role":"bot","text":f"❌ {e}"})
+            client.action(text)  # server records user msg + reply to SQLite; _fetch will sync
         threading.Thread(target=_bg, daemon=True).start()
 
     fetch_t = threading.Thread(target=_fetch, daemon=True)

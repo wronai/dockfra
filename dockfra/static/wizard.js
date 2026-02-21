@@ -238,15 +238,16 @@ socket.on('message', d => {
   div.className = `msg ${d.role}`;
   if (d.id) div.setAttribute('data-msg-id', d.id);
   const text = d.role === 'bot' ? stripMotd(d.text) : d.text;
+  const srcBadge = d.src === 'cli' ? '<span class="cli-badge" title="CLI shell">💻</span>' : '';
   // Try to render ticket cards for my-tickets output
   const ticketCards = d.role === 'bot' ? tryRenderTickets(text) : null;
   if (ticketCards) {
-    div.innerHTML = `<div class="avatar">🤖</div><div class="bubble"></div><div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
+    div.innerHTML = `<div class="avatar">🤖</div><div class="bubble">${srcBadge}</div><div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
     div.querySelector('.bubble').appendChild(ticketCards);
   } else {
     div.innerHTML = `
       <div class="avatar">${d.role==='bot'?'🤖':'👤'}</div>
-      <div class="bubble">${renderMd(text)}</div>
+      <div class="bubble">${srcBadge}${renderMd(text)}</div>
       <div class="msg-copy" onclick="copyMessage(this)" title="Copy message">📋</div>`;
   }
   chat.appendChild(div);
