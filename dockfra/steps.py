@@ -14,10 +14,9 @@ def step_welcome():
     docker_ok, docker_msg = validate_docker()
     llm_ok, llm_msg = validate_llm_connection()
     checks = []
-    checks.append({"label": f"🐳 Docker: {docker_msg}", "done": docker_ok, "error": not docker_ok})
-    checks.append({"label": f"🤖 LLM: {llm_msg}", "done": llm_ok, "error": not llm_ok})
-    for c in checks:
-        status_row([c])
+    checks.append({"name": f"🐳 Docker", "ok": docker_ok, "detail": docker_msg})
+    checks.append({"name": f"🤖 LLM", "ok": llm_ok, "detail": llm_msg})
+    status_row(checks)
 
     if not docker_ok:
         msg(f"❌ **Docker niedostępny** — {docker_msg}\n\nUruchom Docker i odśwież.")

@@ -1,3 +1,17 @@
+## [1.0.41] - 2026-02-21
+
+### Summary
+
+feat(docs): CLI interface improvements
+
+### Other
+
+- build: update Makefile
+- update dockfra/app.py
+- update dockfra/cli.py
+- update dockfra/steps.py
+
+
 ## [1.0.40] - 2026-02-21
 
 ### Summary

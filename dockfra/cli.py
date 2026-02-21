@@ -3,14 +3,21 @@
 Dockfra CLI — terminal shell for the Setup Wizard.
 
 Usage:
-  python wizard/cli.py              # interactive REPL
-  python wizard/cli.py --tui        # three-panel curses TUI
-  python wizard/cli.py status       # container health
-  python wizard/cli.py health       # algorithmic analysis
-  python wizard/cli.py logs [N]     # last N log lines (default 40)
-  python wizard/cli.py launch       # launch all stacks
-  python wizard/cli.py ask "..."    # send to LLM assistant
-  python wizard/cli.py action <val> # raw wizard action
+  dockfra cli                       # interactive REPL
+  dockfra cli --tui                 # three-panel curses TUI
+  dockfra cli status                # container health
+  dockfra cli tickets               # list all tickets
+  dockfra cli diff <T-XXXX>         # show ticket diff & commits
+  dockfra cli pipeline <T-XXXX>     # run full pipeline for ticket
+  dockfra cli engines               # LLM engine status
+  dockfra cli dev-health            # ssh-developer health check
+  dockfra cli dev-logs [N]          # ssh-developer container logs
+  dockfra cli test                  # full system self-test
+  dockfra cli doctor                # diagnose & suggest fixes
+  dockfra cli logs [N]              # last N log lines (default 40)
+  dockfra cli launch [stack]        # launch stacks
+  dockfra cli ask "..."             # free-text LLM query
+  dockfra cli action <val>          # raw wizard action
 """
 import sys, os, json, time, threading, textwrap, re, argparse
 import urllib.request, urllib.error
@@ -182,13 +189,255 @@ def cmd_action(client, args):
     if err: print(red(f"❌ {err}")); return 1
     _render_result(data.get("result", [])); return 0
 
+def cmd_tickets(client, args):
+    data, err = client._get("/api/tickets")
+    if err: print(red(f"❌ {err}")); return 1
+    if not data:
+        print(dim("  Brak ticketów.")); return 0
+    status_icon = {"open": "○", "in_progress": "◐", "review": "◑", "done": "●", "closed": "●"}
+    status_clr  = {"open": cyan, "in_progress": yellow, "review": purple, "done": green, "closed": dim}
+    prio_icon   = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}
+    print(bold(f"\n🎫 Tickety ({len(data)})\n"))
+    for tk in data:
+        si = status_icon.get(tk["status"], "○")
+        sc = status_clr.get(tk["status"], dim)
+        pi = prio_icon.get(tk.get("priority", ""), "⚪")
+        print(f"  {sc(si + ' ' + tk['id']):<28} {pi} {bold(tk['title'])}")
+        print(f"     {dim(tk['status'])} · {dim(tk.get('assigned_to',''))} · {dim(str(len(tk.get('comments',[]))))} komentarzy")
+    print()
+    return 0
+
+def cmd_diff(client, args):
+    if not args: print(red("Usage: diff <ticket_id>")); return 1
+    tid = args[0]
+    data, err = client._get(f"/api/ticket-diff/{tid}")
+    if err: print(red(f"❌ {err}")); return 1
+    if not data or not data.get("ok"):
+        print(red(f"❌ {data.get('error', 'Unknown error') if data else 'No response'}")); return 1
+    commits = data.get("commits", [])
+    diff = data.get("diff", "")
+    print(bold(f"\n📄 Diff: {tid}") + f" — {data.get('title', '')}\n")
+    if not commits:
+        print(yellow("  Brak commitów dla tego ticketu."))
+        print(dim("  Commity muszą zawierać ID ticketu w wiadomości.\n"))
+        return 0
+    print(bold(f"  📝 Commity ({len(commits)})"))
+    for c in commits:
+        print(f"    {cyan(c['hash'])} {c['subject']}  {dim(c.get('repo',''))}")
+    if diff:
+        print(bold(f"\n  📊 Diff:"))
+        for line in diff.splitlines()[:80]:
+            if line.startswith('+') and not line.startswith('++'):
+                print(f"    {green(line)}")
+            elif line.startswith('-') and not line.startswith('--'):
+                print(f"    {red(line)}")
+            elif line.startswith('@@'):
+                print(f"    {cyan(line)}")
+            else:
+                print(f"    {dim(line)}")
+        if len(diff.splitlines()) > 80:
+            print(dim(f"    ... ({len(diff.splitlines()) - 80} more lines)"))
+    print()
+    return 0
+
+def cmd_engines(client, args):
+    data, err = client._get("/api/engine-status")
+    if err: print(red(f"❌ {err}")); return 1
+    pref = data.get("preferred", "")
+    engines = data.get("engines", [])
+    print(bold(f"\n🤖 Silniki LLM\n"))
+    for e in engines:
+        ok = e.get("ok", False)
+        icon = green("✅") if ok else red("🔴")
+        star = yellow(" ★ preferred") if e["id"] == pref else ""
+        print(f"  {icon} {bold(e['name']):<25}{star}")
+        print(f"     {dim(e.get('message',''))}")
+    if not engines:
+        print(dim("  Brak silników."))
+    print()
+    return 0
+
+def cmd_dev_health(client, args):
+    data, err = client._get("/api/developer-health")
+    if err: print(red(f"❌ {err}")); return 1
+    print(bold("\n🔧 SSH Developer Health\n"))
+    checks = [
+        ("Kontener", data.get("container") == "running", data.get("container", "?")),
+        ("Exec (SSH)", data.get("ssh") == "ok", data.get("ssh", "?")),
+        ("Git repo", data.get("git", "") not in ("fail", "no repo", ""), data.get("git", "?")),
+        ("Skrypty", (data.get("scripts", 0) or 0) > 0, f"{data.get('scripts', 0)} scripts"),
+    ]
+    for label, ok, detail in checks:
+        icon = green("✅") if ok else red("🔴")
+        print(f"  {icon} {label:<20} {dim(str(detail))}")
+    eng = data.get("engines", {})
+    if eng:
+        print(bold("\n  Silniki:"))
+        for name, avail in eng.items():
+            icon = green("✅") if avail else red("🔴")
+            print(f"    {icon} {name}")
+    overall = data.get("ok", False)
+    print(f"\n  {'✅ ' + green('Developer OK') if overall else '🔴 ' + red('Developer ma problemy')}\n")
+    return 0 if overall else 1
+
+def cmd_dev_logs(client, args):
+    n = int(args[0]) if args else 80
+    data, err = client._get("/api/developer-logs", {"n": n})
+    if err: print(red(f"❌ {err}")); return 1
+    logs = data.get("logs", "")
+    print(bold(f"\n📋 Developer logs ({data.get('container','')}) — last {n} lines\n"))
+    for line in logs.splitlines():
+        print(_colorize_log(line))
+    print()
+    return 0
+
+def cmd_test(client, args):
+    """Full system self-test: containers, developer health, engines, ticket API, diff API."""
+    print(bold("\n🧪 Dockfra System Test\n"))
+    errors = []
+    # 1. Wizard reachable
+    if client.ping():
+        print(green("  ✅ Wizard reachable"))
+    else:
+        print(red("  🔴 Wizard offline")); errors.append("wizard offline"); return 1
+    # 2. Container health
+    data, err = client.health()
+    if err:
+        print(red(f"  🔴 Health check: {err}")); errors.append("health")
+    else:
+        r, f_ = data["running"], data["failing"]
+        if f_ == 0:
+            print(green(f"  ✅ Containers: {r} running, 0 failing"))
+        else:
+            print(red(f"  🔴 Containers: {r} running, {f_} failing")); errors.append(f"{f_} containers failing")
+    # 3. Developer health
+    data, err = client._get("/api/developer-health")
+    if err:
+        print(red(f"  🔴 Developer health: {err}")); errors.append("dev-health")
+    elif data and data.get("ok"):
+        print(green(f"  ✅ Developer: container={data['container']} ssh={data['ssh']} git={data.get('git','?')}"))
+    else:
+        print(red(f"  🔴 Developer unhealthy: {data}")); errors.append("developer")
+    # 4. Engine status
+    data, err = client._get("/api/engine-status")
+    if err:
+        print(red(f"  🔴 Engine status: {err}")); errors.append("engines")
+    else:
+        working = [e["name"] for e in data.get("engines", []) if e.get("ok")]
+        failed  = [e["name"] for e in data.get("engines", []) if not e.get("ok")]
+        if working:
+            print(green(f"  ✅ Engines OK: {', '.join(working)}"))
+        if failed:
+            print(yellow(f"  ⚠️  Engines failed: {', '.join(failed)}"))
+        if not working:
+            errors.append("no working engines")
+    # 5. Tickets API
+    data, err = client._get("/api/tickets")
+    if err:
+        print(red(f"  🔴 Tickets API: {err}")); errors.append("tickets")
+    else:
+        print(green(f"  ✅ Tickets API: {len(data)} tickets"))
+    # 6. Stats API
+    data, err = client._get("/api/stats")
+    if err:
+        print(red(f"  🔴 Stats API: {err}")); errors.append("stats")
+    else:
+        print(green(f"  ✅ Stats API OK"))
+    # 7. Ticket diff (quick test)
+    tdata, _ = client._get("/api/tickets")
+    if tdata and len(tdata) > 0:
+        tid = tdata[0]["id"]
+        dd, derr = client._get(f"/api/ticket-diff/{tid}")
+        if derr:
+            print(red(f"  🔴 Diff API ({tid}): {derr}")); errors.append("diff")
+        elif dd and dd.get("ok"):
+            print(green(f"  ✅ Diff API ({tid}): {len(dd.get('commits',[]))} commits"))
+        else:
+            print(red(f"  🔴 Diff API ({tid}): {dd}")); errors.append("diff")
+    # Summary
+    print()
+    if errors:
+        print(red(f"  ❌ {len(errors)} problem(s): {', '.join(errors)}"))
+    else:
+        print(green(bold("  ✅ All tests passed!")))
+    print()
+    return 1 if errors else 0
+
+def cmd_doctor(client, args):
+    """Diagnose common issues and suggest fixes."""
+    print(bold("\n🩺 Dockfra Doctor\n"))
+    fixes = []
+    # 1. Wizard
+    if not client.ping():
+        print(red("  🔴 Wizard offline"))
+        fixes.append("Run: make restart")
+        return 1
+    print(green("  ✅ Wizard online"))
+    # 2. Containers
+    data, _ = client.health()
+    if data:
+        for c in data.get("containers", []):
+            if "Restarting" in c.get("status", ""):
+                print(red(f"  🔴 {c['name']} is restart-looping"))
+                fixes.append(f"docker logs {c['name']} --tail 20")
+            elif "Up" not in c.get("status", ""):
+                print(red(f"  🔴 {c['name']} is not running: {c['status']}"))
+                fixes.append(f"docker start {c['name']}")
+    # 3. Developer
+    dh, _ = client._get("/api/developer-health")
+    if dh:
+        if dh.get("container") != "running":
+            print(red("  🔴 ssh-developer not running"))
+            fixes.append("cd app && docker compose up -d ssh-developer")
+        elif dh.get("ssh") != "ok":
+            print(red("  🔴 ssh-developer exec failed"))
+            fixes.append("docker restart dockfra-ssh-developer")
+        else:
+            print(green("  ✅ ssh-developer healthy"))
+            if not dh.get("engines", {}).get("built_in"):
+                print(yellow("  ⚠️  built-in engine not available — check OPENROUTER_API_KEY"))
+                fixes.append("dockfra cli action prompt_api_key")
+    # 4. Engines
+    es, _ = client._get("/api/engine-status")
+    if es:
+        working = [e for e in es.get("engines", []) if e.get("ok")]
+        if not working:
+            print(red("  🔴 No working engines"))
+            fixes.append("Set OPENROUTER_API_KEY in wizard or .env")
+    # Summary
+    print()
+    if fixes:
+        print(bold("  🔧 Suggested fixes:"))
+        for f in fixes:
+            print(f"    {purple('→')} {f}")
+    else:
+        print(green(bold("  ✅ System healthy — no issues found!")))
+    print()
+    return 1 if fixes else 0
+
+def cmd_pipeline(client, args):
+    if not args: print(red("Usage: pipeline <ticket_id>")); return 1
+    tid = args[0]
+    print(yellow(f"🔄 Starting pipeline for {tid}..."))
+    data, err = client.action(f"ssh_cmd::developer::ticket-work::{tid}")
+    if err: print(red(f"❌ {err}")); return 1
+    _render_result(data.get("result", [])); return 0
+
 COMMANDS = {
-    "status":  (cmd_status,  "📊 Container health overview"),
-    "health":  (cmd_status,  "🔍 Algorithmic analysis (same as status)"),
-    "logs":    (cmd_logs,    "📋 logs [N]     — last N log lines (default 40)"),
-    "launch":  (cmd_launch,  "🚀 launch [stack] — launch stacks (default: all)"),
-    "ask":     (cmd_ask,     "🧠 ask <text>   — free-text LLM query"),
-    "action":  (cmd_action,  "▶️  action <val> — raw wizard action value"),
+    "status":     (cmd_status,     "📊 Container health overview"),
+    "health":     (cmd_status,     "🔍 Algorithmic analysis (same as status)"),
+    "logs":       (cmd_logs,       "📋 logs [N]     — last N log lines (default 40)"),
+    "launch":     (cmd_launch,     "🚀 launch [stack] — launch stacks (default: all)"),
+    "ask":        (cmd_ask,        "🧠 ask <text>   — free-text LLM query"),
+    "action":     (cmd_action,     "▶️  action <val> — raw wizard action value"),
+    "tickets":    (cmd_tickets,    "🎫 List all tickets"),
+    "diff":       (cmd_diff,       "📄 diff <T-XXXX> — show ticket diff and commits"),
+    "pipeline":   (cmd_pipeline,   "🔄 pipeline <T-XXXX> — run full pipeline for ticket"),
+    "engines":    (cmd_engines,    "🤖 Show LLM engine status"),
+    "dev-health": (cmd_dev_health, "🔧 Developer container health check"),
+    "dev-logs":   (cmd_dev_logs,   "📋 dev-logs [N] — ssh-developer container logs"),
+    "test":       (cmd_test,       "🧪 Full system self-test"),
+    "doctor":     (cmd_doctor,     "🩺 Diagnose issues and suggest fixes"),
 }
 
 # ── Interactive REPL ──────────────────────────────────────────────────────────
@@ -207,7 +456,7 @@ def run_repl(client):
 
     print(bold(cyan("\n🏗  Dockfra CLI — interactive shell")))
     print(dim(f"   Wizard: {client.base}"))
-    print(dim("   Commands: help | status | logs | launch | ask | action | quit\n"))
+    print(dim("   Commands: help | test | tickets | engines | dev-health | dev-logs | doctor | quit\n"))
     if not client.ping():
         print(red(f"⚠️  Wizard offline at {client.base}"))
         print(yellow("   Start:  dockfra\n"))

@@ -1842,7 +1842,7 @@ def api_ticket_diff(ticket_id):
     if not ticket:
         return json.dumps({"ok": False, "error": "Not found"}), 404
     # Search in app repo first, then root repo
-    search_dirs = [APP, ROOT]
+    search_dirs = [ROOT / "app", ROOT]
     commits = []
     diff_text = ""
     for repo_dir in search_dirs:

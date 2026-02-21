@@ -149,7 +149,7 @@ down-mgmt: ## Stop management stack
 	@cd $(MGMT) && docker compose down
 
 .PHONY: restart
-restart: down up ## Restart both stacks
+restart: stop init ## Full restart (stop all + reinitialize)
 
 .PHONY: build
 build: clone-app ## Build all images
