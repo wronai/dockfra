@@ -2,13 +2,19 @@
 # DOCKFRA DEVICES — Local Environment
 #
 # Services:
-#   ssh-rpi3  (:2224) — SSH deploy channel to RPi3
-#   vnc-rpi3  (:6080) — Web VNC access to RPi3
+#   ssh-rpi3   (:2224) — SSH deploy channel to RPi3
+#   web-rpi3   (:8090) — HTTP/HTTPS web server (emulates RPi3 nginx)
+#   vnc-rpi3   (:6082) — Web VNC access to RPi3
 #
-# Access via ssh-developer (app stack):
-#   ssh developer@localhost -p 2200
-#   push-to-rpi3.sh <artifact>
-#   run-on-rpi3.sh <command>
+# Emulates a complete RPi3 production device:
+#   - SSH access for deployment (deployer@:2224)
+#   - HTTP on :8090 (nginx serving /var/www/html)
+#   - Deploy dir /home/deployer/apps (artifacts land here)
+#   - Health endpoint /health returns JSON
+#
+# Test from ssh-monitor:
+#   curl http://web-rpi3:80/health
+#   ssh deployer@ssh-rpi3 -p 2222 'ls /home/deployer/apps'
 #
 # Network: dockfra-shared (external, connects to app/management stacks)
 ##############################################################
@@ -25,6 +31,8 @@ volumes:
   ssh-keys:
   vnc-data:
   desktop-app-data:
+  rpi3-www:
+  rpi3-apps:
 
 services:
 
@@ -48,10 +56,29 @@ services:
     volumes:
       - ssh-keys:/keys
       - desktop-app-data:/artifacts:ro
+      - rpi3-apps:/home/deployer/apps
+      - rpi3-www:/var/www/html
     healthcheck:
       test: ["CMD", "pgrep", "sshd"]
       interval: 30s
       timeout: 10s
+      retries: 3
+
+  web-rpi3:
+    image: nginx:alpine
+    container_name: dockfra-web-rpi3
+    hostname: web-rpi3
+    restart: unless-stopped
+    networks: [dockfra-shared, rpi3-net]
+    ports:
+      - "${HTTP_RPI3_PORT:-8090}:80"
+    volumes:
+      - rpi3-www:/usr/share/nginx/html:ro
+      - ./web-rpi3/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
       retries: 3
 
   vnc-rpi3:
@@ -61,7 +88,7 @@ services:
     restart: unless-stopped
     networks: [dockfra-shared, rpi3-net]
     ports:
-      - "${VNC_RPI3_PORT:-6080}:6080"
+      - "${VNC_RPI3_PORT:-6082}:6080"
     environment:
       - VNC_PASSWORD=${RPI3_VNC_PASSWORD:-rpi3vnc}
       - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1280}

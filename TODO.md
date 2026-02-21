@@ -1,66 +1,77 @@
 # Dockfra TODO
 
-_Last updated: 2026-02-20 — 8 modules, 3807 lines, 135 functions_
+_Last updated: 2026-02-21 — v1.0.41, 10 modules, 150+ functions, 15 containers, 5 engines_
 
 ---
 
 ## ✅ Completed
 
 ### Core & Architecture
-- [x] Python package refactor: `dockfra/` with core.py, app.py, steps.py, fixes.py, discover.py, cli.py
+- [x] Python package: `dockfra/` — core, app, steps, engines, pipeline, tickets, fixes, discover, cli, llm_client
 - [x] Central `PROJECT` config with `cname()`, `short_name()` — configurable via `DOCKFRA_PREFIX`
 - [x] Auto-discover stacks from subdirectories with `docker-compose.yml` (`STACKS` dict)
 - [x] Auto-discover env vars from compose files — parses `${VAR:-default}` patterns (55+ vars)
 - [x] `_build_env_schema()` — merges core + discovered + dockfra.yaml overrides (62 entries)
-- [x] Auto-generate `_ENV_TO_STATE` from `ENV_SCHEMA` (eliminated manual 22-line mapping)
 - [x] `dockfra.yaml` optional project config — override labels, types, groups, descriptions
-- [x] `_FIELD_META` — built-in descriptions for 40+ commonly used Docker variables
-- [x] Dynamic `_WIZARD_SYSTEM_PROMPT` — built from discovered stacks
-- [x] Dynamic `COMMON_PORTS` — built from ENV_SCHEMA port defaults
 - [x] Shared SSH base image (`shared/Dockerfile.ssh-base`) + per-role thin Dockerfiles
-- [x] Shared entrypoint init (`shared/ssh-base-init.sh`)
-- [x] Backward-compatible aliases: `MGMT`, `APP`, `DEVS` from `STACKS`
+- [x] MOTD box-drawing filter in `run_cmd()` — prevents MOTD leaking into pipeline output
 
-### Wizard
-- [x] Web setup wizard — Flask + SocketIO chat UI (652 + 1012 lines)
-- [x] Dynamic widgets: buttons, text_input (chips + eye toggle + desc + autodetect), select, code_block, progress, status_row, action_grid
-- [x] Inline missing-field forms with preflight checks
-- [x] Smart suggestions: git config/repo/branch, SSH keys, Docker networks, ARP scan, free ports, secrets
-- [x] ⚡ Auto-detect buttons for GIT_REPO_URL, GIT_BRANCH, APP_VERSION, APP_NAME
-- [x] ℹ️ Field descriptions with help tooltips
-- [x] DEVICE_IP priority chain: `devices/.env` → docker inspect → ARP REACHABLE → ARP STALE
-- [x] Eye toggle on all password/secret fields
-- [x] Settings sections with ✅/🔴N completeness icons
-- [x] 10 European languages (pl, en, de, fr, es, it, pt, cs, ro, nl)
-- [x] Docker Compose error analysis + interactive fix buttons
+### Dev Engines (`engines.py`)
+- [x] Engine registry: 5 engines (Built-in LLM, Aider, Claude Code, OpenCode, MCP SSH Manager)
+- [x] Auto-detect + test each engine in container (`discover_engines()`, `test_all_engines()`)
+- [x] Auto-select first working engine (`select_first_working()`)
+- [x] Persistent engine preference (`get/set_preferred_engine()`)
+- [x] Engine-specific implement commands (`get_implement_cmd()`)
+- [x] PATH fix for pip-installed tools (`/home/{user}/.local/bin`)
+
+### CLI (`cli.py` — 14 commands)
+- [x] `test` — full system self-test (wizard, containers, developer, engines, APIs)
+- [x] `doctor` — diagnose issues, suggest fixes
+- [x] `tickets` — list tickets with status/priority
+- [x] `diff <T-XXXX>` — show ticket diff + commits
+- [x] `pipeline <T-XXXX>` — run pipeline for ticket
+- [x] `engines` — LLM engine status
+- [x] `dev-health` / `dev-logs` — developer container diagnostics
+- [x] `status`, `logs`, `launch`, `ask`, `action` — core commands
+- [x] `--tui` — three-panel curses TUI (chat, processes, logs)
+- [x] Interactive REPL with readline history, tab completion
+
+### Wizard & API
+- [x] Web setup wizard — Flask + SocketIO chat UI
+- [x] 20+ API endpoints: `/api/tickets`, `/api/ticket-diff`, `/api/stats`, `/api/developer-health`, `/api/engine-status`, `/api/developer-logs`
+- [x] Diff view with commit history + unified diff
+- [x] Change count badges on ticket cards
+- [x] Clipboard copy limit: 45000 chars
 - [x] Dashboard at `/dashboard` — real-time container status + decision log
-- [x] REST API: `/api/env`, `/api/containers`, `/api/processes`, `/api/action`, `/api/detect/<key>`
-- [x] Git clone integration — clone app repo on first launch via `GIT_REPO_URL`
-- [x] Virtual developer role — shown when `app/` not cloned but `GIT_REPO_URL` set
-- [x] `[[label|action]]` inline action links in chat messages
-- [x] Shared `_dispatch()` for consistent SocketIO + REST API handling
+- [x] 10 European languages (pl, en, de, fr, es, it, pt, cs, ro, nl)
 
 ### Infrastructure
 - [x] Ticket-driven workflow with GitHub Issues sync
-- [x] Autopilot daemon with LLM decision loop
-- [x] SSH role isolation (4 roles: developer, manager, monitor, autopilot)
-- [x] Auto-repair: container restart, network overlap, ACME, volume perms, Docker socket
-- [x] Unified scripts directory per role
+- [x] Autopilot SSH communication with all roles (developer, manager, monitor)
+- [x] SSH role isolation (4 roles × ED25519 keys)
+- [x] Auto-repair: container restart, network overlap, ACME, volume perms
 - [x] shared/lib/ — llm_client.py, ticket_system.py, logger.py
 
+### Devices (`devices/`)
+- [x] RPi3 emulation: SSH deploy channel (ssh-rpi3 :2224)
+- [x] HTTP/HTTPS web server (web-rpi3 :8090) with `/health` + `/api/status`
+- [x] Shared volumes: `rpi3-www` (web), `rpi3-apps` (artifacts)
+- [x] Deploy helper scripts: `push-to-rpi3.sh`, `run-on-rpi3.sh`, `deploy-web.sh`
+- [x] VNC access (vnc-rpi3 :6082)
+
 ### Documentation
-- [x] docs/ARCHITECTURE.md — system design, modules, data flow
-- [x] docs/CONFIGURATION.md — dockfra.yaml, ENV_SCHEMA, auto-discovery
-- [x] docs/GETTING-STARTED.md — quickstart for any Docker project
-- [x] docs/SSH-ROLES.md — role system, commands, isolation
-- [x] docs/WIZARD-API.md — REST + WebSocket API reference
+- [x] README.md — badges, engines, CLI, architecture diagram, device emulation
+- [x] docs/ARCHITECTURE.md — engines, pipeline, CLI, device emulation, autopilot flow
+- [x] docs/CONFIGURATION.md, GETTING-STARTED.md, SSH-ROLES.md, WIZARD-API.md
 - [x] comparisons/ — vs Kamal, Coolify, Portainer, CrewAI/AutoGen, OpenDevin/Aider
+- [x] 36/36 pytest tests passing
 
 ---
 
 ## In Progress
 
 - [ ] Post-launch plugin system — config-driven UI from `dockfra.yaml` (see `docs/PLAN-post-launch-plugins.md`)
+- [ ] Full autonomous pipeline: autopilot → create ticket → developer implements → monitor deploys → verify
 
 ---
 
@@ -69,37 +80,33 @@ _Last updated: 2026-02-20 — 8 modules, 3807 lines, 135 functions_
 ### Core
 - [ ] `dockfra.yaml` `post_launch` hooks — config-driven post-launch buttons and actions
 - [ ] `dockfra.yaml` `fixes` section — project-specific fix plugins
-- [ ] Condition evaluators: `stack_running()`, `container_running()`, `ssh_roles_exist()`
 - [ ] i18n for all Python-side messages (currently Polish; `lang:` from dockfra.yaml)
-
-### Wizard
-- [ ] Wizard authentication — token or password protection
-- [ ] Wizard Docker container — Dockerfile + add to management/docker-compose.yml
 - [ ] Persistent `_state` across restarts (save to `dockfra/.env` on shutdown)
-- [ ] WebSocket streaming optimization (batch log lines)
 
-### App Stack
-- [ ] Generic app scaffolding — templates for common frameworks (Django, FastAPI, Next.js)
-- [ ] Database migrations — Alembic/Flyway integration
-- [ ] Health endpoint auto-detection from compose labels
+### Engines
+- [ ] OpenCode Go binary install automation (currently best-effort in Dockerfile)
+- [ ] MCP SSH Manager npm package validation (package name TBD)
+- [ ] Continue.dev integration (VS Code plugin, remote config via SSH)
+- [ ] Engine benchmark — compare implementation speed and quality per engine
 
 ### Devices Stack
+- [ ] HTTPS (self-signed cert) on web-rpi3 for TLS testing
+- [ ] Multiple device types (rpi4, jetson, generic-linux)
 - [ ] Auto-ping sweep when ARP cache is empty
 - [ ] SSH key auto-install to target device
-- [ ] Validate device reachability before launching devices stack
 
 ### Management Stack
 - [ ] Autopilot — full integration with ticket-system + LLM decision log
 - [ ] GitHub sync test in CI (ticket-push/pull)
-- [ ] Monitor daemon — extend health checks to devices stack
+- [ ] Monitor daemon — extend health checks to devices stack + HTTP verify
 
 ### Testing
-- [ ] Wizard API endpoint tests (all `/api/*` routes)
-- [ ] Integration test: wizard → launch → container health check
-- [ ] shared/lib unit tests (ticket_system: 14 functions, llm_client: 4 functions)
-- [ ] CLI tests (21 commands)
+- [ ] CLI tests (14 commands)
+- [ ] Engine integration tests (implement ticket with each engine)
+- [ ] shared/lib unit tests (ticket_system, llm_client)
+- [ ] Integration test: wizard → launch → pipeline → deploy → verify
 
 ### Docs
 - [ ] Video/GIF demo of wizard flow
-- [ ] API reference for app/backend REST endpoints
 - [ ] Deployment guide for production multi-server setup
+- [ ] Engine comparison benchmark results

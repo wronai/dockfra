@@ -1,3 +1,25 @@
+## [1.0.42] - 2026-02-21
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Docs
+
+- docs: update README
+- docs: update TODO.md
+- docs: update README
+- docs: update ARCHITECTURE.md
+
+### Other
+
+- docker: update docker-compose.yml
+- scripts: update entrypoint-rpi3.sh
+- update devices/web-rpi3/index.html
+- update devices/web-rpi3/nginx.conf
+- update dockfra/db.py
+
+
 ## [1.0.41] - 2026-02-21
 
 ### Summary
