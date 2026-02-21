@@ -1668,9 +1668,15 @@ def _dispatch(value: str, form: dict):
     return False
 
 def _run_action_sync(value: str, form: dict, timeout: float = 30.0) -> list[dict]:
-    """Run a wizard action synchronously (for REST API). Returns collected events."""
+    """Run a wizard action synchronously (for REST API). Returns collected events.
+
+    For threaded actions (SSH commands, pipelines), polls event bus until
+    the thread's output appears (buttons widget = end marker), up to timeout.
+    """
+    cursor_before = _bus.query_max_id()
     _tl.collector = []
     _tl.sid = None
+    dispatched = False
     try:
         if not _dispatch(value, form):
             if value.startswith("ai_analyze::"):
@@ -1688,10 +1694,35 @@ def _run_action_sync(value: str, form: dict, timeout: float = 30.0) -> list[dict
                 msg(reply)
             else:
                 msg(f"⚠️ Nieznana akcja: `{value}`")
+        else:
+            dispatched = True
     finally:
         collected = list(_tl.collector or [])
         _tl.collector = None
         _tl.sid = None
+
+    # If dispatch started a thread (SSH cmd, pipeline, etc.), the collector
+    # only captured synchronous events. Poll the event bus for async results.
+    if dispatched and not any(
+        e.get("event") == "widget" and e.get("data", {}).get("type") == "buttons"
+        for e in collected
+    ):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(0.5)
+            new_events = _bus.query_events(cursor_before, 200)
+            # Filter to message/widget events (skip log_line noise)
+            relevant = [e for e in new_events
+                        if e["event"] in ("message", "widget", "clear_widgets")]
+            # Check if we got a buttons widget (signals end of threaded action)
+            has_buttons = any(
+                e["event"] == "widget" and e.get("data", {}).get("type") == "buttons"
+                for e in relevant
+            )
+            if has_buttons:
+                collected = [{"event": e["event"], "data": e["data"]} for e in relevant]
+                break
+
     return collected
 
 def _events_to_rest(events: list[dict]) -> list[dict]:
@@ -1712,6 +1743,18 @@ def _events_to_rest(events: list[dict]) -> list[dict]:
                             "done": d.get("done",False), "error": d.get("error",False)})
             elif wt == "status_row":
                 out.append({"type": "status_row", "items": d.get("items",[])})
+            elif wt == "action_grid":
+                out.append({"type": "action_grid",
+                            "run_value": d.get("run_value",""),
+                            "commands": d.get("commands",[]),
+                            "label": d.get("label","")})
+            elif wt == "config_prompt":
+                out.append({"type": "config_prompt",
+                            "title": d.get("title",""),
+                            "desc": d.get("desc",""),
+                            "fields": d.get("fields",[]),
+                            "settings_group": d.get("settings_group",""),
+                            "action": d.get("action","")})
             elif wt in ("input","select","code"):
                 out.append({"type": wt, **{k:v for k,v in d.items() if k != "type"}})
     return out

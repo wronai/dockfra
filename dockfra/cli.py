@@ -132,6 +132,36 @@ def _render_result(items):
             print(f"  {icon} {item.get('label','')}")
         elif t == "code":
             print(dim(item.get("value", "")))
+        elif t == "action_grid":
+            run_val = item.get("run_value", "")
+            cmds = item.get("commands", [])
+            if cmds:
+                print()
+                print(bold("  Dostępne komendy:"))
+                for i, c in enumerate(cmds, 1):
+                    desc = c.get("desc", "")
+                    params = c.get("params", [])
+                    param_str = " ".join(f"<{p}>" for p in params) if params else ""
+                    tty_mark = dim(" [TTY]") if c.get("tty") else ""
+                    print(f"  {cyan(f'{i:>2})')} {bold(c['cmd']):<24} {desc}{tty_mark}")
+                    if param_str:
+                        print(f"       {dim('parametry:')} {param_str}")
+                print()
+                print(dim(f"  Uruchom: dockfra cli action \"ssh_cmd::<role>::<cmd>::<arg>\""))
+                print(dim(f"  Lub via REST: POST /api/action {{\"action\":\"{run_val}\", \"form\":{{\"ssh_cmd\":\"<cmd>\",\"ssh_arg\":\"<arg>\"}}}}"))
+        elif t == "config_prompt":
+            title = item.get("title", "")
+            desc = item.get("desc", "")
+            fields = item.get("fields", [])
+            print(f"\n  {yellow('⚠️')} {bold(title)}")
+            if desc:
+                for ln in desc.splitlines():
+                    print(f"     {dim(ln)}")
+            if fields:
+                print(f"     {dim('Wymagane pola:')}")
+                for fld in fields:
+                    ftype = fld.get('type', 'text')
+                    print(f"       {cyan(fld['name'])}: {fld.get('label','')} {dim('[' + ftype + ']')}")
 
 # ── One-shot commands ─────────────────────────────────────────────────────────
 def cmd_status(client, args):

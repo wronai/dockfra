@@ -1,3 +1,18 @@
+## [1.0.47] - 2026-02-21
+
+### Summary
+
+feat(docs): CLI interface improvements
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/cli.py
+- update dockfra/core.py
+- scripts: update autopilot-daemon.sh
+- update project.functions.toon
+
+
 ## [1.0.46] - 2026-02-21
 
 ### Summary

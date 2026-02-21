@@ -1203,6 +1203,15 @@ def _emit_config_form(title: str, desc: str, fields: list, settings_group: str,
         "settings_group": settings_group,
         "action": action,
     })
+    # Event sourcing: persist config error as domain event
+    try:
+        from dockfra.event_bus import get_bus, EventType
+        get_bus().emit(EventType.CONFIG_ERROR, {
+            "title": title, "settings_group": settings_group,
+            "fields": [f["name"] for f in fields],
+        }, src="health_monitor")
+    except Exception:
+        pass
 
 
 _HEALTH_PATTERNS = [

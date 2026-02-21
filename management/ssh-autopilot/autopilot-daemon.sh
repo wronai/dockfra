@@ -80,7 +80,7 @@ sleep 30
 while true; do
     CYCLE=$((CYCLE + 1))
 
-    if [ "${AUTOPILOT_ENABLED}" = "true" ]; then
+    if [ "${AUTOPILOT_ENABLED:-true}" = "true" ]; then
         run_cycle 2>&1 || log "Cycle error (continuing)"
     fi
 
