@@ -632,19 +632,23 @@ def _step_ticket_create_wizard(form):
     clear_widgets()
     msg(t('create_ticket_title'))
     from .core import text_input, select
-    text_input("ticket_title", t('ticket_title_label'), "Fix login bug", "")
-    text_input("ticket_desc", t('ticket_desc_label'), "...", "")
+    title_val = str((form or {}).get("ticket_title", "")).strip()
+    desc_val = str((form or {}).get("ticket_desc", "")).strip()
+    priority_val = str((form or {}).get("ticket_priority", "normal") or "normal")
+    assigned_val = str((form or {}).get("ticket_assigned", "developer") or "developer")
+    text_input("ticket_title", t('ticket_title_label'), "Fix login bug", title_val)
+    text_input("ticket_desc", t('ticket_desc_label'), "...", desc_val)
     select("ticket_priority", t('priority_label'), [
         {"value": "low", "label": "🟢 Low"},
         {"value": "normal", "label": "🟡 Normal"},
         {"value": "high", "label": "🟠 High"},
         {"value": "critical", "label": "🔴 Critical"},
-    ], "normal")
+    ], priority_val)
     select("ticket_assigned", t('assign_to'), [
         {"value": "developer", "label": "🔧 Developer"},
         {"value": "monitor", "label": "📡 Monitor"},
         {"value": "autopilot", "label": "🤖 Autopilot"},
-    ], "developer")
+    ], assigned_val)
     buttons([
         {"label": t('create_ticket'), "value": "ticket_create_do"},
         {"label": t('menu'), "value": "back"},
@@ -673,6 +677,104 @@ def _step_ticket_create_do(form):
         {"label": t('create_another'), "value": "ticket_create_wizard"},
         {"label": t('ticket_list'), "value": "ssh_cmd::manager::ticket-list::"},
         {"label": t('sync_services'), "value": "ticket_sync"},
+        {"label": t('menu'), "value": "back"},
+    ])
+
+
+def _ticket_missing_required_fields(ticket_like: dict) -> list[str]:
+    """Return missing required fields needed for high-quality implementation."""
+    missing: list[str] = []
+    if not str((ticket_like or {}).get("title", "")).strip():
+        missing.append("title")
+    if not str((ticket_like or {}).get("description", "")).strip():
+        missing.append("description")
+    return missing
+
+
+def _step_ticket_requirements_form(tid: str, form: dict | None = None):
+    """Prompt user for required ticket data before running implementation pipeline."""
+    clear_widgets()
+    tk = _tickets.get(tid)
+    if not tk:
+        msg(t('ticket_not_found', tid=tid))
+        buttons([{"label": t('menu'), "value": "back"}])
+        return
+
+    from .core import text_input, select
+    form = form or {}
+    title_val = str(form.get("ticket_title", tk.get("title", ""))).strip()
+    desc_val = str(form.get("ticket_desc", tk.get("description", ""))).strip()
+    priority_val = str(form.get("ticket_priority", tk.get("priority", "normal") or "normal"))
+    assigned_val = str(form.get("ticket_assigned", tk.get("assigned_to", "developer") or "developer"))
+
+    missing = _ticket_missing_required_fields({"title": title_val, "description": desc_val})
+    if missing:
+        missing_lines: list[str] = []
+        if "title" in missing:
+            missing_lines.append(f"- `{t('ticket_title_label')}`")
+        if "description" in missing:
+            missing_lines.append(f"- `{t('ticket_desc_required_label')}`")
+        msg(t('ticket_requirements_missing', tid=tid) + "\n" + "\n".join(missing_lines))
+    else:
+        msg(t('ticket_requirements_edit', tid=tid))
+
+    text_input("ticket_title", t('ticket_title_label'), "Fix login bug", title_val)
+    text_input(
+        "ticket_desc",
+        t('ticket_desc_required_label'),
+        "Scope, expected result, acceptance criteria...",
+        desc_val,
+    )
+    select("ticket_priority", t('priority_label'), [
+        {"value": "low", "label": "🟢 Low"},
+        {"value": "normal", "label": "🟡 Normal"},
+        {"value": "high", "label": "🟠 High"},
+        {"value": "critical", "label": "🔴 Critical"},
+    ], priority_val)
+    select("ticket_assigned", t('assign_to'), [
+        {"value": "developer", "label": "🔧 Developer"},
+        {"value": "monitor", "label": "📡 Monitor"},
+        {"value": "autopilot", "label": "🤖 Autopilot"},
+    ], assigned_val)
+    buttons([
+        {"label": t('save_and_continue'), "value": f"ticket_requirements_save::{tid}"},
+        {"label": f"👁️ {t('show_ticket')}", "value": f"show_ticket::{tid}"},
+        {"label": t('menu'), "value": "back"},
+    ])
+
+
+def _step_ticket_requirements_save(tid: str, form: dict):
+    """Save required ticket fields and propose continuing the pipeline."""
+    tk = _tickets.get(tid)
+    if not tk:
+        msg(t('ticket_not_found', tid=tid))
+        buttons([{"label": t('menu'), "value": "back"}])
+        return
+
+    title = str(form.get("ticket_title", "")).strip()
+    desc = str(form.get("ticket_desc", "")).strip()
+    priority = str(form.get("ticket_priority", tk.get("priority", "normal") or "normal"))
+    assigned = str(form.get("ticket_assigned", tk.get("assigned_to", "developer") or "developer"))
+
+    if not title or not desc:
+        msg(t('ticket_requirements_fill_all'))
+        _step_ticket_requirements_form(tid, form)
+        return
+
+    _tickets.update(
+        tid,
+        title=title,
+        description=desc,
+        priority=priority,
+        assigned_to=assigned,
+    )
+    _tickets.add_comment(tid, "manager", t('ticket_requirements_comment'))
+
+    clear_widgets()
+    msg(t('ticket_requirements_saved', tid=tid))
+    buttons([
+        {"label": t('continue_pipeline_btn'), "value": f"ssh_cmd::developer::ticket-work::{tid}"},
+        {"label": f"👁️ {t('show_ticket')}", "value": f"show_ticket::{tid}"},
         {"label": t('menu'), "value": "back"},
     ])
 
@@ -873,9 +975,11 @@ def _step_show_ticket(tid: str):
     btn_items = []
     if tk["status"] == "open":
         btn_items.append({"label": "▶ Work (full pipeline)", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+        btn_items.append({"label": t('edit_required_data'), "value": f"ticket_requirements::{tid}"})
     elif tk["status"] == "in_progress":
         btn_items.append({"label": "▶ Continue pipeline", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
         btn_items.append({"label": "🤖 Implement", "value": f"ssh_cmd::developer::implement::{tid}"})
+        btn_items.append({"label": t('edit_required_data'), "value": f"ticket_requirements::{tid}"})
     elif tk["status"] == "review":
         btn_items.append({"label": "✅ Approve (manager)", "value": f"manager_approve::{tid}"})
         btn_items.append({"label": "🔄 Reject → rework", "value": f"manager_reject::{tid}"})
@@ -1437,6 +1541,14 @@ def _dispatch(value: str, form: dict):
         tid = value.split("::", 1)[1]
         _step_manager_reject(tid)
         return True
+    if value.startswith("ticket_requirements::"):
+        tid = value.split("::", 1)[1]
+        _step_ticket_requirements_form(tid, form)
+        return True
+    if value.startswith("ticket_requirements_save::"):
+        tid = value.split("::", 1)[1]
+        _step_ticket_requirements_save(tid, form)
+        return True
     if value.startswith("open_url::"):
         url = value.split("::", 1)[1]
         msg(f"🔗 **Link:** [{url}]({url})")
@@ -1494,6 +1606,20 @@ def _dispatch(value: str, form: dict):
         ri_    = _get_role(role_)
         # ── Full Software House Pipeline: ticket-work → implement → test → commit → review ──
         if cmd_ == "ticket-work" and arg_:
+            tk_req = _tickets.get(arg_)
+            if not tk_req:
+                msg(t('ticket_not_found', tid=arg_))
+                buttons([{"label": t('menu'), "value": "back"}])
+                return True
+            missing = _ticket_missing_required_fields(tk_req)
+            if missing:
+                _step_ticket_requirements_form(arg_, {
+                    "ticket_title": tk_req.get("title", ""),
+                    "ticket_desc": tk_req.get("description", ""),
+                    "ticket_priority": tk_req.get("priority", "normal"),
+                    "ticket_assigned": tk_req.get("assigned_to", "developer"),
+                })
+                return True
             _tl_sid = getattr(_tl, 'sid', None)
             container_ = ri_['container']
             user_ = ri_['user']
