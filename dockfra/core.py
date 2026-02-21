@@ -1,5 +1,6 @@
 """Dockfra core — shared state, Flask app, UI helpers, env, docker utils."""
 import os, json, re as _re, subprocess, threading, time, socket as _socket, secrets as _secrets, sys
+from typing import TYPE_CHECKING
 
 __all__ = [
     # re-exported stdlib
@@ -19,6 +20,7 @@ __all__ = [
     '_ENV_TO_STATE', '_STATE_TO_ENV',
     # Paths & project config
     'ROOT', 'MGMT', 'APP', 'DEVS', 'WIZARD_DIR', 'WIZARD_ENV', '_PKG_DIR',
+    'DEPLOY_TARGETS', 'load_deploy_targets',
     'PROJECT', 'STACKS', 'cname', 'short_name',
     # ENV
     'ENV_SCHEMA', '_schema_defaults', 'load_env', 'save_env',
@@ -42,6 +44,9 @@ from pathlib import Path
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from .i18n import t as _t_i18n, set_lang as _set_lang, get_lang as _get_lang, llm_lang_instruction as _llm_lang_instruction, _STRINGS
+
+if TYPE_CHECKING:
+    from .deployers.base import DeployTarget, PlatformOS
 
 # Allow importing shared lib without installation
 _SHARED_LIB = Path(__file__).parent.parent / "shared" / "lib"
@@ -231,6 +236,133 @@ def _load_project_config() -> dict:
     return {}
 
 _PROJECT_CONFIG = _load_project_config()
+
+
+def _read_devices_env_var(*keys: str) -> str:
+    """Read first matching key from devices/.env.local or devices/.env."""
+    wanted = set(keys)
+    for path in (DEVS / ".env.local", DEVS / ".env"):
+        if not path.exists():
+            continue
+        for raw in path.read_text(errors="ignore").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            if k.strip() in wanted:
+                return v.strip().strip('"').strip("'")
+    return ""
+
+
+def _coerce_platform_os(value):
+    """Coerce string/os-like value to PlatformOS enum."""
+    from .deployers.base import PlatformOS
+
+    if isinstance(value, PlatformOS):
+        return value
+    raw = str(value or "linux").strip().lower()
+    aliases = {
+        "darwin": "macos",
+        "mac": "macos",
+        "windows": "windows_wsl",
+        "wsl": "windows_wsl",
+    }
+    raw = aliases.get(raw, raw)
+    try:
+        return PlatformOS(raw)
+    except Exception:
+        return PlatformOS.LINUX
+
+
+def _default_devices_target():
+    """Build fallback deploy target from devices env defaults."""
+    from .deployers.base import DeployTarget, PlatformOS
+
+    host = (
+        _read_devices_env_var("RPI3_HOST", "DEVICE_HOST", "DEVICE_IP")
+        or "192.168.1.100"
+    )
+    user = _read_devices_env_var("RPI3_USER", "DEVICE_USER") or "pi"
+    raw_port = _read_devices_env_var("RPI3_PORT", "DEVICE_PORT", "SSH_PORT") or "22"
+    try:
+        port = int(str(raw_port))
+    except Exception:
+        port = 22
+
+    return DeployTarget(
+        host=host,
+        port=port,
+        user=user,
+        platform="ssh_raw",
+        os=PlatformOS.LINUX,
+        labels={"source": "devices", "env": "edge"},
+        config={"service_manager": "systemd", "deploy_path": f"/home/{user}/apps"},
+    )
+
+
+def load_deploy_targets() -> dict[str, "DeployTarget"]:
+    """Load deploy targets from deploy-targets.yaml.
+
+    Fallback: when config is missing/invalid, create one default target from
+    devices/.env(.local).
+    """
+    from .deployers.base import DeployTarget
+
+    cfg_path = None
+    for name in ("deploy-targets.yaml", "deploy-targets.yml"):
+        p = ROOT / name
+        if p.exists():
+            cfg_path = p
+            break
+
+    data: dict = {}
+    if cfg_path:
+        try:
+            import yaml
+
+            parsed = yaml.safe_load(cfg_path.read_text())
+            if isinstance(parsed, dict):
+                data = parsed
+        except Exception:
+            data = {}
+
+    raw_targets = data.get("targets", {}) if isinstance(data, dict) else {}
+    targets: dict[str, DeployTarget] = {}
+
+    if isinstance(raw_targets, dict):
+        for target_id, raw in raw_targets.items():
+            if not isinstance(raw, dict):
+                continue
+            host = str(raw.get("host", "")).strip()
+            if not host:
+                continue
+            try:
+                port = int(raw.get("port", 22))
+            except Exception:
+                port = 22
+            user = str(raw.get("user", "deployer") or "deployer").strip()
+            platform = str(raw.get("platform", "docker_compose") or "docker_compose").strip()
+            labels_raw = raw.get("labels", {})
+            config_raw = raw.get("config", {})
+            labels = labels_raw if isinstance(labels_raw, dict) else {}
+            config = config_raw if isinstance(config_raw, dict) else {}
+            targets[str(target_id)] = DeployTarget(
+                host=host,
+                port=port,
+                user=user,
+                platform=platform,
+                os=_coerce_platform_os(raw.get("os", "linux")),
+                labels={str(k): str(v) for k, v in labels.items()},
+                config=dict(config),
+            )
+
+    if not targets:
+        targets["edge-rpi3"] = _default_devices_target()
+
+    return targets
+
+
+DEPLOY_TARGETS = load_deploy_targets()
 
 
 def _expand_env_vars(text: str) -> str:
