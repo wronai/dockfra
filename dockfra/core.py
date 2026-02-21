@@ -625,7 +625,12 @@ _STATE_SKIP_PERSIST = frozenset({
 def save_state():
     """Persist non-sensitive _state keys to dockfra/.state.json."""
     try:
-        data = {k: v for k, v in _state.items() if k not in _STATE_SKIP_PERSIST}
+        data = {
+            k: v
+            for k, v in _state.items()
+            if k not in _STATE_SKIP_PERSIST
+            and not any(s in k.lower() for s in ("password", "secret", "token", "api_key", "key"))
+        }
         _STATE_FILE.write_text(json.dumps(data, indent=2))
     except Exception:
         pass
@@ -696,9 +701,11 @@ def _emit_log_error(line: str, fired: set):
                 try:
                     var = m.group(gi)
                     if var and _re.match(r'^[A-Z][A-Z0-9_]{2,}$', var):
+                        sk = _ENV_TO_STATE.get(var, var.lower())
                         extra_fields = [{"name": var, "label": var, "type":
                             "password" if any(k in var for k in ("KEY","TOKEN","SECRET","PASSWORD")) else "text",
                             "placeholder": "", "chips": [], "value": _state.get(var.lower(), "")}]
+                        extra_fields[0]["value"] = _state.get(sk, "")
                         break
                 except Exception:
                     pass
@@ -768,20 +775,30 @@ def _emit_log_error(line: str, fired: set):
         elif "fix_network_overlap::" in btn_values and not network:
             _sid_emit("widget", {"type": "buttons", "items": btns})
 
-        elif "variable is not set" in line or "Defaulting to a blank string" in line:
+        elif ("variable is not set" in line
+              or "Defaulting to a blank string" in line
+              or "unbound variable" in line):
             # Extract var name and propose inline input
             _mv = _re.search(r'"([A-Z_]{3,})" variable is not set', line)
-            if _mv:
-                var = _mv.group(1)
+            _uv = _re.search(r':\s*([A-Z][A-Z0-9_]{2,})\s*:\s*unbound variable', line)
+            var = (_mv.group(1) if _mv else (_uv.group(1) if _uv else ""))
+            if var:
+                sk = _ENV_TO_STATE.get(var, var.lower())
                 _sid_emit("widget", {"type": "input", "name": var,
                                      "label": var, "placeholder": "",
-                                     "value": _state.get(var.lower(), ""),
+                                     "value": _state.get(sk, ""),
                                      "secret": "KEY" in var or "PASSWORD" in var or "SECRET" in var,
                                      "hint": f"Ustaw wartość zmiennej `{var}`",
                                      "chips": [], "modal_type": ""})
-                _sid_emit("widget", {"type": "buttons", "items": [
-                    {"label": f"💾 Zapisz {var}", "value": f"save_settings::General"},
-                ]})
+                btn_items = [
+                    {"label": f"💾 Zapisz {var}", "value": "save_settings::General"},
+                ]
+                if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
+                    env = _state.get("environment", "local")
+                    ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
+                    btn_items.append({"label": "🔄 Restart autopilot", "value": f"restart_container::{ap}"})
+                    btn_items.append({"label": "▶️ Sprawdź pilot-status", "value": "ssh_cmd::autopilot::pilot-status::"})
+                _sid_emit("widget", {"type": "buttons", "items": btn_items})
             else:
                 if btns:
                     _sid_emit("widget", {"type": "buttons", "items": btns})
@@ -1365,6 +1382,9 @@ _HEALTH_PATTERNS = [
      "warn", "hp_conn_refused",
      [{"label":"launch_all_btn","value":"launch_all"}]),
     (r'variable .+? is not set|required.*not set|env.*missing',
+     "err", "hp_missing_env",
+     [{"label":"config_btn","value":"settings"}]),
+    (r"unbound variable",
      "err", "hp_missing_env",
      [{"label":"config_btn","value":"settings"}]),
     (r"network .+? not found|network .+? declared as external",
