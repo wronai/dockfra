@@ -134,7 +134,7 @@ except ImportError:
     def sync_all(): return {}
 
     def format_ticket(t, verbose=False):
-        si={"open":"○","in_progress":"◐","closed":"●"}.get(t["status"],"?")
+        si={"open":"○","in_progress":"◐","review":"◑","done":"●","closed":"●"}.get(t["status"],"?")
         pi={"critical":"🔴","high":"🟠","normal":"🟡","low":"🟢"}.get(t["priority"],"⚪")
         line=f"  {si} {t['id']:8s} {pi} {t['title'][:50]:50s} → {t['assigned_to']}"
         if t.get("github_issue_number"): line+=f"  (GH#{t['github_issue_number']})"

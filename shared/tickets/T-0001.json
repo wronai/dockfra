@@ -2,13 +2,13 @@
   "id": "T-0001",
   "title": "Przetestuj ca\u0142y projekt",
   "description": "stworz testy e2e i unit tests",
-  "status": "in_progress",
+  "status": "done",
   "priority": "normal",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:20:33.434519+00:00",
-  "updated_at": "2026-02-21T00:11:56.724257+00:00",
+  "updated_at": "2026-02-21T00:54:15.990024+00:00",
   "comments": [
     {
       "author": "tester",
@@ -54,6 +54,46 @@
       "author": "developer",
       "text": "AI-assisted implementation generated",
       "timestamp": "2026-02-21T00:11:56.723790+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T00:19:09.728433+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T00:19:24.758392+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "AI-assisted implementation generated",
+      "timestamp": "2026-02-21T00:19:25.778398+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "AI-assisted implementation generated",
+      "timestamp": "2026-02-21T00:19:52.913827+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T00:52:54.605098+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "AI-assisted implementation generated",
+      "timestamp": "2026-02-21T00:53:14.114854+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 88%). Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T00:53:14.656655+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\u2705 Review zatwierdzony przez managera. Ticket zamkni\u0119ty.",
+      "timestamp": "2026-02-21T00:54:15.990009+00:00"
     }
   ],
   "github_issue_number": null

@@ -1474,7 +1474,7 @@ def _dispatch(value: str, form: dict):
                     _tickets.update(arg_, status="review")
                     _tickets.add_comment(arg_, "developer",
                         f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
-                        f"Model: {llm_model}. Gotowe do review.")
+                        f"Silnik: {eng_name}. Model: {llm_model}. Gotowe do review.")
                     r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
                     pstate.record_step(r5)
                     if gh_repo:
@@ -1490,7 +1490,7 @@ def _dispatch(value: str, form: dict):
 
                     score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
                     msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
-                        f"**Wynik:** {overall:.0%} | **Status:** review | **Model:** `{llm_model}`\n\n"
+                        f"**Wynik:** {overall:.0%} | **Silnik:** `{eng_name}` | **Model:** `{llm_model}`\n\n"
                         f"{pstate.summary()}")
 
                     btn_items = [
@@ -1499,6 +1499,7 @@ def _dispatch(value: str, form: dict):
                     ]
                     if overall < 0.5:
                         btn_items.insert(0, {"label": "🔄 Ponów pipeline (adaptacyjnie)", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
+                    btn_items.append({"label": "🔧 Zmień silnik", "value": "engine_select"})
                     if gh_repo:
                         btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
                     btn_items.append({"label": "🏠 Menu", "value": "back"})
