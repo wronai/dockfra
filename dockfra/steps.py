@@ -233,11 +233,11 @@ def step_setup_creds():
     msg(t('creds_shortcut_desc'))
     sug = _detect_suggestions()
     git_name_sug = sug.get("GIT_NAME", {})
-    text_input("GIT_NAME","Git user.name","Jan Kowalski",
+    text_input("GIT_NAME", t('git_user_name_label'), t('git_user_name_placeholder'),
                _state.get("git_name","") or git_name_sug.get("value",""),
                hint=git_name_sug.get("hint",""), autodetect=True)
     git_email_sug = sug.get("GIT_EMAIL", {})
-    text_input("GIT_EMAIL","Git user.email","jan@example.com",
+    text_input("GIT_EMAIL", t('git_user_email_label'), t('git_user_email_placeholder'),
                _state.get("git_email","") or git_email_sug.get("value",""),
                hint=git_email_sug.get("hint",""), autodetect=True)
     ssh_sug = sug.get("GITHUB_SSH_KEY", {})
@@ -245,13 +245,13 @@ def step_setup_creds():
                _state.get("github_key","") or ssh_sug.get("value",""),
                hint=ssh_sug.get("hint",""), chips=ssh_sug.get("chips",[]))
     or_sug = sug.get("OPENROUTER_API_KEY", {})
-    text_input("OPENROUTER_API_KEY","OpenRouter API Key","sk-or-v1-...",
+    text_input("OPENROUTER_API_KEY", t('openrouter_api_key_label'), t('openrouter_api_key_placeholder'),
                _state.get("openrouter_key","") or or_sug.get("value",""),
                sec=True, hint=or_sug.get("hint",""),
                help_url="https://openrouter.ai/keys")
     opts = [{"label": lbl, "value": val}
             for val,lbl in next(e["options"] for e in ENV_SCHEMA if e["key"]=="LLM_MODEL")]
-    select("LLM_MODEL","Model LLM", opts, _state.get("llm_model",_schema_defaults().get("LLM_MODEL","")))
+    select("LLM_MODEL", t('llm_model_label'), opts, _state.get("llm_model",_schema_defaults().get("LLM_MODEL","")))
     buttons([{"label":t('save'),"value":"save_creds"},{"label":t('all_settings'),"value":"settings"},{"label":t('back'),"value":"back"}])
 
 def step_save_creds(form):
@@ -273,10 +273,10 @@ def step_save_creds(form):
     save_env(env_updates)
     msg(t('creds_saved'))
     key = _state.get("openrouter_key","")
-    msg(f"- Git: `{_state.get('git_name','')}` <{_state.get('git_email','')}>")
-    msg(f"- SSH: `{_state.get('github_key','')}`")
-    msg(f"- API: `{mask(key) if key else t('no_key_short')}`")
-    msg(f"- Model: `{_state.get('llm_model','')}`")
+    msg(t('creds_git_line', name=_state.get('git_name',''), email=_state.get('git_email','')))
+    msg(t('creds_ssh_line', path=_state.get('github_key','')))
+    msg(t('creds_api_line', key=mask(key) if key else t('no_key_short')))
+    msg(t('creds_model_line', model=_state.get('llm_model','')))
     buttons([{"label": t('launch_stacks_btn'),"value":"launch_all"},{"label": t('settings'),"value":"settings"},{"label": t('menu'),"value":"back"}])
 
 def step_launch_all():
@@ -510,7 +510,7 @@ def step_do_launch(form):
             msg(t('error_analysis'))
             for name, out in failed:
                 analysis, solutions = _analyze_launch_error(name, out)
-                msg(f"### Stack: `{name}`\n{analysis}")
+                msg(t('stack_analysis_title', name=name) + "\n" + analysis)
                 msg(t('what_to_do'))
                 buttons(solutions)
                 time.sleep(0.1)
@@ -681,7 +681,7 @@ def step_launch_devices(form=None):
         subprocess.run(["docker","network","create",PROJECT["network"]],capture_output=True)
         progress(t('launching_devices'))
         rc, _ = run_cmd(["docker","compose","up","-d","--build"],cwd=DEVS)
-        progress("devices",done=(rc==0),error=(rc!=0))
+        progress(t('devices_stack_name'),done=(rc==0),error=(rc!=0))
         if rc==0:
             vnc_p = _state.get("VNC_RPI3_PORT", "6080")
             msg(t('devices_launched'))

@@ -24,7 +24,7 @@ Host ssh-autopilot
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
 EOF
-chown -R manager:manager "$UH/.ssh" 2>/dev/null || true 2>/dev/null || true
+chown -R manager:manager "$UH/.ssh" 2>/dev/null || true
 
 echo "[ssh-manager] Starting SSH :2222..."
 exec /usr/sbin/sshd -D -e

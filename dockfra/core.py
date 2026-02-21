@@ -272,11 +272,14 @@ def _render_post_launch(running_names: set, ssh_roles: dict):
     # SSH role buttons (auto-discovered)
     for role, ri in ssh_roles.items():
         p = _state.get(f"ssh_{role}_port", ri.get("port", "22"))
-        post_btns.append({"label": f"{ri['icon']} SSH {role.capitalize()}", "value": f"ssh_info::{role}::{p}"})
+        post_btns.append({
+            "label": _t_i18n('ssh_role_button', icon=ri['icon'], role=role.capitalize()),
+            "value": f"ssh_info::{role}::{p}",
+        })
     # Virtual developer: app/ not cloned yet but GIT_REPO_URL is set
     if "developer" not in ssh_roles and not (ROOT / "app").is_dir() and _state.get("git_repo_url"):
         dev_port = _state.get("ssh_developer_port", "2200")
-        post_btns.insert(0, {"label": "🔧 SSH Developer", "value": f"ssh_info::developer::{dev_port}"})
+        post_btns.insert(0, {"label": _t_i18n('ssh_developer_button'), "value": f"ssh_info::developer::{dev_port}"})
     # Config-driven hooks from dockfra.yaml
     for hook in _PROJECT_CONFIG.get("post_launch", []):
         cond = hook.get("condition", "")
@@ -738,7 +741,7 @@ def _emit_log_error(line: str, fired: set):
         _title = _t_i18n(title) if title in _STRINGS else title
         _desc = _t_i18n(desc) if desc in _STRINGS else desc
         _resolved_fields = [{**f, "label": (_t_i18n(f["label"]) if f["label"] in _STRINGS else f["label"])} for f in extra_fields]
-        _emit_config_form(_title, f"Wykryto w logach: `{line.strip()[:120]}`\n\n{_desc}",
+        _emit_config_form(_title, _t_i18n('detected_in_logs', line=line.strip()[:120], desc=_desc),
                           _resolved_fields, settings_group, key, fired)
         return True  # one config-form per line
     # ── Docker health patterns ────────────────────────────────────────────────
@@ -827,22 +830,22 @@ def _emit_log_error(line: str, fired: set):
                                      "label": var, "placeholder": _placeholder or "",
                                      "value": _state.get(sk, ""),
                                      "secret": _secret,
-                                     "hint": f"Ustaw wartość zmiennej `{var}`",
+                                     "hint": _t_i18n('set_env_var_hint', var=var),
                                      "chips": _chips, "modal_type": ""})
 
                 btn_items = [
-                    {"label": f"💾 Zapisz {var}", "value": f"save_env_var::{var}"},
+                    {"label": _t_i18n('save_env_var_button', var=var), "value": f"save_env_var::{var}"},
                     {"label": _t_i18n('settings'), "value": "settings"},
                 ]
                 group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
                 if group:
-                    btn_items.append({"label": f"⚙️ {group}", "value": f"settings_group::{group}"})
+                    btn_items.append({"label": _t_i18n('settings_group_button', group=group), "value": f"settings_group::{group}"})
                 if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
                     env = _state.get("environment", "local")
                     ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
-                    btn_items.append({"label": "🔧 Przebuduj management", "value": "rebuild_stack::management"})
-                    btn_items.append({"label": "🔄 Restart autopilot", "value": f"restart_container::{ap}"})
-                    btn_items.append({"label": "▶️ Sprawdź pilot-status", "value": "ssh_cmd::autopilot::pilot-status::"})
+                    btn_items.append({"label": _t_i18n('rebuild_management'), "value": "rebuild_stack::management"})
+                    btn_items.append({"label": _t_i18n('restart_autopilot'), "value": f"restart_container::{ap}"})
+                    btn_items.append({"label": _t_i18n('check_pilot_status'), "value": "ssh_cmd::autopilot::pilot-status::"})
                 _sid_emit("widget", {"type": "buttons", "items": btn_items})
             else:
                 if btns:
