@@ -192,6 +192,17 @@ function tryRenderTickets(text) {
       <div class="ticket-actions">${actionsHtml}</div>`;
     wrap.appendChild(card);
   });
+  // Async: fetch diff change counts for each ticket's diff button
+  tickets.forEach(tk => {
+    if (tk.icon === '○') return; // skip open tickets
+    fetch(`/api/ticket-diff/${encodeURIComponent(tk.id)}`).then(r=>r.json()).then(d => {
+      const count = (d.commits||[]).length;
+      wrap.querySelectorAll(`.ticket-btn-diff[data-action="show_diff::${tk.id}"]`).forEach(btn => {
+        btn.textContent = count > 0 ? `📄 ${count}` : '📄 0';
+        if (count > 0) btn.classList.add('has-changes');
+      });
+    }).catch(() => {});
+  });
   return wrap;
 }
 
@@ -980,6 +991,16 @@ async function updateStats() {
     if (!anyIntg) html += `<span class="stats-badge badge-muted">⚠️ brak</span>`;
     html += '</div></div>';
 
+    // ── Developer Health ──────────────────────────────────────────────────────
+    html += '<div class="stats-section"><div class="stats-title-row"><span class="stats-title">🔧 SSH Developer</span>';
+    html += `<button class="stats-action" onclick="sendAction('logs::dockfra-ssh-developer','📋 Developer logs')">Logi</button></div>`;
+    html += '<div id="stats-dev-health" class="stats-badges"><span class="stats-badge badge-muted">⏳ sprawdzam...</span></div></div>';
+
+    // ── LLM Engine Status ────────────────────────────────────────────────────
+    html += '<div class="stats-section"><div class="stats-title-row"><span class="stats-title">🤖 Silniki LLM</span>';
+    html += `<button class="stats-action" onclick="sendAction('engine_select','🔧 Silniki')">Konfiguruj</button></div>`;
+    html += '<div id="stats-engine-status" class="stats-badges"><span class="stats-badge badge-muted">⏳ testuję...</span></div></div>';
+
     // ── Suggestions ───────────────────────────────────────────────────────────
     const sugg = s.suggestions || [];
     if (sugg.length > 0) {
@@ -994,6 +1015,58 @@ async function updateStats() {
     }
 
     statsPanel.innerHTML = html;
+
+    // ── Async: fetch developer health ─────────────────────────────────────
+    fetch('/api/developer-health').then(r=>r.json()).then(dh => {
+      const el = document.getElementById('stats-dev-health');
+      if (!el) return;
+      let badges = '';
+      const ci = dh.container === 'running' ? 'badge-green' : 'badge-red';
+      badges += `<span class="stats-badge ${ci}">${dh.container === 'running' ? '✅' : '🔴'} kontener</span>`;
+      badges += `<span class="stats-badge ${dh.ssh === 'ok' ? 'badge-green' : 'badge-red'}">${dh.ssh === 'ok' ? '✅' : '🔴'} exec</span>`;
+      badges += `<span class="stats-badge badge-accent">📂 git: ${dh.git||'?'}</span>`;
+      badges += `<span class="stats-badge badge-muted">📜 ${dh.scripts||0} skryptów</span>`;
+      const eng = dh.engines || {};
+      if (eng.built_in) badges += `<span class="stats-badge badge-green">✅ built-in</span>`;
+      if (eng.aider) badges += `<span class="stats-badge badge-green">✅ aider</span>`;
+      if (eng.claude_code) badges += `<span class="stats-badge badge-green">✅ claude</span>`;
+      el.innerHTML = badges;
+    }).catch(() => {
+      const el = document.getElementById('stats-dev-health');
+      if (el) el.innerHTML = '<span class="stats-badge badge-red">🔴 niedostępny</span>';
+    });
+
+    // ── Async: fetch engine status ────────────────────────────────────────
+    fetch('/api/engine-status').then(r=>r.json()).then(es => {
+      const el = document.getElementById('stats-engine-status');
+      if (!el) return;
+      let badges = '';
+      (es.engines||[]).forEach(e => {
+        const ok = e.ok;
+        const pref = e.id === es.preferred ? ' ★' : '';
+        const cls = ok ? 'badge-green' : 'badge-red';
+        const icon = ok ? '✅' : '🔴';
+        badges += `<span class="stats-badge ${cls}" title="${e.message||''}">${icon} ${e.name}${pref}</span>`;
+      });
+      if (!badges) badges = '<span class="stats-badge badge-muted">⚠️ brak silników</span>';
+      el.innerHTML = badges;
+    }).catch(() => {
+      const el = document.getElementById('stats-engine-status');
+      if (el) el.innerHTML = '<span class="stats-badge badge-red">🔴 błąd testu</span>';
+    });
+
+    // ── Async: fetch diff change counts for ticket badges ─────────────────
+    tickets.forEach(tk => {
+      if (tk.status === 'open') return;
+      fetch(`/api/ticket-diff/${encodeURIComponent(tk.id)}`).then(r=>r.json()).then(d => {
+        const count = (d.commits||[]).length;
+        // Find all diff buttons for this ticket and add count badge
+        statsPanel.querySelectorAll(`.ticket-btn-diff[data-action="show_diff::${tk.id}"]`).forEach(btn => {
+          btn.textContent = count > 0 ? `📄 ${count}` : '📄 0';
+          if (count > 0) btn.classList.add('has-changes');
+        });
+      }).catch(() => {});
+    });
 
     // Delegate ticket-btn clicks inside stats panel
     statsPanel.querySelectorAll('.ticket-btn[data-action]').forEach(btn => {

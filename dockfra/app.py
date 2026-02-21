@@ -1887,6 +1887,91 @@ def api_ticket_diff(ticket_id):
     })
 
 
+@app.route("/api/developer-health")
+def api_developer_health():
+    """Quick health check of the ssh-developer container."""
+    import subprocess as _sp
+    ri = _get_role("developer")
+    container = ri["container"]
+    user = ri["user"]
+    results = {}
+    # Container running?
+    try:
+        r = _sp.run(["docker", "inspect", "-f", "{{.State.Status}}", container],
+                     capture_output=True, text=True, timeout=5)
+        results["container"] = r.stdout.strip()
+    except Exception:
+        results["container"] = "unknown"
+    # SSH reachable?
+    try:
+        r = _sp.run(["docker", "exec", "-u", user, container, "echo", "ok"],
+                     capture_output=True, text=True, timeout=5)
+        results["ssh"] = "ok" if r.returncode == 0 else "fail"
+    except Exception:
+        results["ssh"] = "fail"
+    # Git in /repo?
+    try:
+        r = _sp.run(["docker", "exec", "-u", user, container, "bash", "-c",
+                      "cd /repo && git rev-parse --short HEAD 2>/dev/null"],
+                     capture_output=True, text=True, timeout=5)
+        results["git"] = r.stdout.strip() or "no repo"
+    except Exception:
+        results["git"] = "fail"
+    # Scripts available?
+    try:
+        r = _sp.run(["docker", "exec", "-u", user, container, "bash", "-c",
+                      "ls /home/developer/scripts/*.sh 2>/dev/null | wc -l"],
+                     capture_output=True, text=True, timeout=5)
+        results["scripts"] = int(r.stdout.strip() or 0)
+    except Exception:
+        results["scripts"] = 0
+    # Engines available
+    try:
+        r = _sp.run(["docker", "exec", "-u", user, container, "bash", "-c",
+                      "command -v aider 2>/dev/null && echo aider_ok; command -v claude 2>/dev/null && echo claude_ok; python3 -c 'import sys;sys.path.insert(0,\"/shared/lib\");import llm_client;print(\"builtin_ok\")' 2>/dev/null"],
+                     capture_output=True, text=True, timeout=10)
+        out = r.stdout
+        results["engines"] = {
+            "built_in": "builtin_ok" in out,
+            "aider": "aider_ok" in out,
+            "claude_code": "claude_ok" in out,
+        }
+    except Exception:
+        results["engines"] = {}
+    results["ok"] = results.get("container") == "running" and results.get("ssh") == "ok"
+    return json.dumps(results)
+
+
+@app.route("/api/engine-status")
+def api_engine_status():
+    """Test all dev engines and return status. Used by stats panel."""
+    ri = _get_role("developer")
+    container = ri["container"]
+    user = ri["user"]
+    llm_key = (_state.get("openrouter_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
+    llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
+    env = ["-e", f"OPENROUTER_API_KEY={llm_key}", "-e", f"LLM_MODEL={llm_model}"]
+    preferred = _engines.get_preferred_engine()
+    results = _engines.test_all_engines(container, user, env)
+    return json.dumps({"engines": results, "preferred": preferred})
+
+
+@app.route("/api/developer-logs")
+def api_developer_logs():
+    """Return last N lines of ssh-developer container logs."""
+    import subprocess as _sp
+    ri = _get_role("developer")
+    n = min(int(request.args.get("n", 80)), 500)
+    try:
+        out = _sp.check_output(
+            ["docker", "logs", "--tail", str(n), ri["container"]],
+            text=True, stderr=_sp.STDOUT, timeout=10
+        )
+    except Exception as e:
+        out = f"Error: {e}"
+    return json.dumps({"logs": out, "container": ri["container"]})
+
+
 @app.route("/api/tickets/sync", methods=["POST"])
 def api_tickets_sync():
     """Sync tickets with external services (GitHub, Jira, Trello, Linear)."""

@@ -613,13 +613,39 @@ def _emit_log_error(line: str, fired: set):
 
         break  # one alert per line
 
+def _strip_motd_line(text: str) -> bool:
+    """Return True if the line is a MOTD box-drawing line that should be suppressed."""
+    import re
+    t = text.strip()
+    if not t:
+        return False
+    if re.match(r'^[╔┌╚└]', t):
+        return True
+    if re.match(r'^[║╠╣│]', t):
+        return True
+    if t and not re.sub(r'[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]', '', t):
+        return True
+    return False
+
+
 def run_cmd(cmd, cwd=None):
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, cwd=str(cwd or ROOT))
     lines = []
     _fired: set = set()
+    in_box = False
     for line in proc.stdout:
         text = line.rstrip()
+        # Filter MOTD box-drawing banners
+        t = text.strip()
+        if not in_box and t and t[0] in '╔┌':
+            in_box = True; continue
+        if in_box and t and t[0] in '╚└':
+            in_box = False; continue
+        if in_box:
+            continue
+        if _strip_motd_line(text):
+            continue
         lines.append(text)
         log_id = f"log-{len(_logs)}"
         _logs.append({"id": log_id, "text": text, "timestamp": time.time()})
