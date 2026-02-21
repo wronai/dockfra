@@ -2,6 +2,9 @@
 from .core import *
 from .i18n import t, set_lang, get_lang, llm_lang_instruction, _STRINGS
 from .discover import _SSH_ROLES, _get_role, _refresh_ssh_roles
+from .deployers import discover_plugins, get_plugin
+from .deployers.base import DeployStatus, DeployTarget
+from .deployers.manifest import build_manifest
 
 def step_welcome():
     _state["step"] = "welcome"
@@ -586,6 +589,40 @@ def step_deploy_device():
         {"label":t('back'),"value":"back"},
     ])
 
+
+def _get_docker_compose_plugin():
+    """Resolve docker-compose deployer plugin instance."""
+    discover_plugins()
+    return get_plugin("docker_compose")
+
+
+def _device_target_from_state(ip: str, user: str, port: str, key: str) -> DeployTarget:
+    """Build DeployTarget from deploy form state."""
+    try:
+        port_num = int(str(port))
+    except Exception:
+        port_num = 22
+    return DeployTarget(
+        host=ip,
+        port=port_num,
+        user=user,
+        platform="docker_compose",
+        config={
+            "identity_file": key,
+            "deploy_path": f"/home/{user}/apps/{DEVS.name}",
+            "compose_file": "docker-compose.yml",
+        },
+    )
+
+
+def _resolve_devices_compose_file() -> Path | None:
+    """Find devices compose file path."""
+    for name in ("docker-compose.yml", "docker-compose.yaml"):
+        p = DEVS / name
+        if p.exists():
+            return p
+    return None
+
 def _save_device_form(form):
     if form:
         _state.update({
@@ -600,11 +637,18 @@ def step_test_device(form):
     key = _state.get("github_key", str(Path.home()/".ssh/id_ed25519"))
     if not ip: msg(t('provide_ip')); step_deploy_device(); return
     msg(t('testing_connection', target=f'{user}@{ip}:{port}'))
+    target = _device_target_from_state(ip, user, port, key)
+    plugin = _get_docker_compose_plugin()
+
     def run():
-        rc, out = run_cmd(["ssh","-i",key,"-p",str(port),"-o","ConnectTimeout=8",
-                           "-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null",
-                           f"{user}@{ip}","uname -a && echo DOCKFRA_OK"])
-        if rc==0 and "DOCKFRA_OK" in out:
+        rc, out = -1, ""
+        if plugin and hasattr(plugin, "test_connection"):
+            rc, out = plugin.test_connection(target)
+        else:
+            rc, out = run_cmd(["ssh","-i",key,"-p",str(port),"-o","ConnectTimeout=8",
+                               "-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null",
+                               f"{user}@{ip}","uname -a && echo DOCKFRA_OK"])
+        if rc == 0:
             msg(t('connection_works'))
             socketio.emit("widget",{"type":"buttons","items":[
                 {"label":t('deploy_now'),"value":"do_deploy"},{"label":t('change_btn'),"value":"deploy_device"}]})
@@ -624,31 +668,48 @@ def step_do_deploy(form):
     key = _state.get("github_key", str(Path.home()/".ssh/id_ed25519"))
     if not ip: msg(t('provide_ip')); step_deploy_device(); return
     msg(t('deploy_to', target=f'{user}@{ip}:{port}'))
+
     def run():
-        container = _get_role("developer")["container"]
-        if container not in [c["name"] for c in docker_ps()]:
-            msg(t('container_not_running', name=container))
+        plugin = _get_docker_compose_plugin()
+        if not plugin:
+            msg("❌ Missing deploy plugin: docker_compose")
             socketio.emit("widget",{"type":"buttons","items":[
-                {"label":t('launch_stacks_btn'),"value":"launch_all"},{"label":t('back'),"value":"back"}]}); return
-        progress(t('copying_ssh_key'))
-        kpath = Path(key).expanduser()
-        if kpath.exists():
-            subprocess.run(["docker","cp",str(kpath),f"{container}:/tmp/dk"],capture_output=True)
-            subprocess.run(["docker","exec",container,"bash","-c",
-                "mkdir -p /home/developer/.ssh && cp /tmp/dk /home/developer/.ssh/id_ed25519 && "
-                "chmod 600 /home/developer/.ssh/id_ed25519 && rm /tmp/dk"],capture_output=True)
-        progress(t('ssh_key_ready'),done=True)
+                {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]})
+            return
+
+        compose_path = _resolve_devices_compose_file()
+        if compose_path is None:
+            msg(f"❌ Missing compose file in {DEVS}")
+            socketio.emit("widget",{"type":"buttons","items":[
+                {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]})
+            return
+
+        target = _device_target_from_state(ip, user, port, key)
+
         progress(t('testing_ssh_to', ip=ip))
-        rc, out = run_cmd(["docker","exec",container,
-            "ssh","-i","/home/developer/.ssh/id_ed25519","-p",str(port),
-            "-o","ConnectTimeout=8","-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null",
-            f"{user}@{ip}","uname -a && echo DOCKFRA_DEPLOY_OK"])
-        if rc!=0 or "DOCKFRA_DEPLOY_OK" not in out:
+        if not plugin.detect(target):
             progress(t('ssh_failed_to', ip=ip),error=True)
             msg(t('ssh_failed_from_container', ip=ip))
             socketio.emit("widget",{"type":"buttons","items":[
                 {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]}); return
         progress(t('ssh_success_to', ip=ip),done=True)
+
+        try:
+            manifest = build_manifest(compose_path, env=load_env())
+        except Exception as e:
+            msg(f"❌ Cannot build deploy manifest: {e}")
+            socketio.emit("widget",{"type":"buttons","items":[
+                {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]}); return
+
+        result = plugin.deploy(manifest, target)
+        if result.status == DeployStatus.FAILED:
+            progress(t('ssh_failed_to', ip=ip),error=True)
+            msg(result.message or t('launch_devices_error'))
+            if result.logs:
+                code_block(result.logs[-4000:])
+            socketio.emit("widget",{"type":"buttons","items":[
+                {"label":t('retry'),"value":"do_deploy"},{"label":t('back'),"value":"deploy_device"}]}); return
+
         msg(t('ssh_success_route', ip=ip))
         # Save to devices/.env.local
         _update_device_env(ip, user, port)

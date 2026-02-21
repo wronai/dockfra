@@ -238,7 +238,7 @@ def _load_project_config() -> dict:
 _PROJECT_CONFIG = _load_project_config()
 
 
-def _read_devices_env_var(*keys: str) -> str:
+def _read_devices_env_key(*keys: str) -> str:
     """Read first matching key from devices/.env.local or devices/.env."""
     wanted = set(keys)
     for path in (DEVS / ".env.local", DEVS / ".env"):
@@ -279,11 +279,11 @@ def _default_devices_target():
     from .deployers.base import DeployTarget, PlatformOS
 
     host = (
-        _read_devices_env_var("RPI3_HOST", "DEVICE_HOST", "DEVICE_IP")
+        _read_devices_env_key("RPI3_HOST", "DEVICE_HOST", "DEVICE_IP")
         or "192.168.1.100"
     )
-    user = _read_devices_env_var("RPI3_USER", "DEVICE_USER") or "pi"
-    raw_port = _read_devices_env_var("RPI3_PORT", "DEVICE_PORT", "SSH_PORT") or "22"
+    user = _read_devices_env_key("RPI3_USER", "DEVICE_USER") or "pi"
+    raw_port = _read_devices_env_key("RPI3_PORT", "DEVICE_PORT", "SSH_PORT") or "22"
     try:
         port = int(str(raw_port))
     except Exception:

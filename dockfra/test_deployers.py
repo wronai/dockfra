@@ -19,6 +19,7 @@ from dockfra.deployers.base import (
 from dockfra.deployers.health import HTTPHealthChecker
 from dockfra.deployers.manifest import build_manifest
 from dockfra.deployers.ssh_utils import ssh_run, test_connection
+from dockfra.deployers.docker_compose.plugin import Plugin as DockerComposePlugin
 
 
 def test_deployers_package_import_exports():
@@ -37,7 +38,7 @@ def test_deployer_plugin_is_abstract():
 def test_registry_empty_external_dir(tmp_path):
     plugins = discover_plugins(extra_dirs=[tmp_path], force_reload=True)
     assert isinstance(plugins, dict)
-    assert plugins == {}
+    assert "docker_compose" in plugins
 
 
 def test_registry_can_load_external_plugin(tmp_path):
@@ -173,3 +174,102 @@ def test_deploy_result_dataclass_fields():
 def test_platform_os_enum_values():
     assert PlatformOS.LINUX.value == "linux"
     assert PlatformOS.ANY.value == "any"
+
+
+def test_docker_compose_detect_with_docker(monkeypatch):
+    plugin = DockerComposePlugin()
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+
+    import dockfra.deployers.docker_compose.plugin as mod
+
+    monkeypatch.setattr(mod, "ssh_run", lambda *_a, **_kw: (0, "ok"))
+    assert plugin.detect(target) is True
+
+
+def test_docker_compose_detect_without_docker(monkeypatch):
+    plugin = DockerComposePlugin()
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+
+    import dockfra.deployers.docker_compose.plugin as mod
+
+    monkeypatch.setattr(mod, "ssh_run", lambda *_a, **_kw: (1, "docker: command not found"))
+    assert plugin.detect(target) is False
+
+
+def test_docker_compose_validate_missing_compose(tmp_path):
+    plugin = DockerComposePlugin()
+    manifest = DeployManifest(
+        app_name="app",
+        version="1.0.0",
+        compose_file=tmp_path / "missing.yml",
+    )
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+    errs = plugin.validate(manifest, target)
+    assert any("compose file not found" in e for e in errs)
+
+
+def test_docker_compose_validate_ok(tmp_path):
+    plugin = DockerComposePlugin()
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text("services:\n  web:\n    image: nginx:latest\n")
+    manifest = DeployManifest(app_name="app", version="1.0.0", compose_file=compose)
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+    assert plugin.validate(manifest, target) == []
+
+
+def test_docker_compose_deploy_mock(tmp_path, monkeypatch):
+    plugin = DockerComposePlugin()
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text("services:\n  web:\n    image: nginx:latest\n")
+    manifest = DeployManifest(app_name="app", version="1.0.0", compose_file=compose)
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+
+    import dockfra.deployers.docker_compose.plugin as mod
+
+    def fake_ssh_run(_target, cmd, timeout=0, connect_timeout=0):
+        if "mkdir -p" in cmd:
+            return 0, "mkdir ok"
+        if "pull" in cmd and "up -d" in cmd:
+            return 0, "deploy ok"
+        if " ps" in cmd:
+            return 0, "web  running"
+        return 0, "ok"
+
+    monkeypatch.setattr(mod, "ssh_run", fake_ssh_run)
+    monkeypatch.setattr(mod, "rsync_upload", lambda *_a, **_kw: (0, "sync ok"))
+
+    result = plugin.deploy(manifest, target)
+    assert result.status == DeployStatus.RUNNING
+    assert "Deployment completed" in result.message
+
+
+def test_docker_compose_rollback_mock(monkeypatch):
+    plugin = DockerComposePlugin()
+    target = DeployTarget(host="10.0.0.2", port=22, user="deployer")
+
+    import dockfra.deployers.docker_compose.plugin as mod
+
+    monkeypatch.setattr(mod, "ssh_run", lambda *_a, **_kw: (0, "rollback ok"))
+    result = plugin.rollback(target, rollback_id="rb-1")
+    assert result.status == DeployStatus.ROLLED_BACK
+    assert result.rollback_id == "rb-1"
+
+
+def test_docker_compose_health_check_mock(monkeypatch):
+    plugin = DockerComposePlugin()
+    target = DeployTarget(
+        host="10.0.0.2",
+        port=22,
+        user="deployer",
+        config={"health_urls": ["http://service.local/health"]},
+    )
+
+    import dockfra.deployers.docker_compose.plugin as mod
+
+    class _DummyChecker:
+        def check_http(self, url: str, timeout: int = 5):
+            return {"kind": "http", "target": url, "ok": True, "status": 200, "details": "OK"}
+
+    monkeypatch.setattr(mod, "HTTPHealthChecker", _DummyChecker)
+    checks = plugin.health_check(target)
+    assert checks and checks[0]["ok"] is True

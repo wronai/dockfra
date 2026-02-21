@@ -11,6 +11,7 @@ from .core import (
     app, socketio, _tl, _state, _conversation, _logs, _log_buffer,
     _sid_emit, _ENV_TO_STATE, _STATE_TO_ENV, reset_state,
     ENV_SCHEMA, load_env, save_env,
+    load_deploy_targets,
     ROOT, MGMT, _PKG_DIR, cname,
     _llm_chat, _llm_config, _LLM_AVAILABLE, _WIZARD_SYSTEM_PROMPT,
     msg, buttons, progress, mask, clear_widgets,
@@ -48,6 +49,10 @@ from .pipeline import PipelineState, StepResult, run_step, evaluate_implementati
 from . import engines as _engines
 from . import db as _db
 from .event_bus import get_bus, init_bus, EventType
+from .deployers import discover_plugins as _discover_deployers, get_plugin as _get_deployer, list_plugins as _list_deployers
+from .deployers.base import DeployStatus
+from .deployers.manifest import build_manifest as _build_manifest
+from pathlib import Path as _Path
 
 _db.init_db(ROOT / ".dockfra.db")
 _bus = init_bus(_db)
@@ -2119,6 +2124,63 @@ def _events_to_rest(events: list[dict]) -> list[dict]:
                 out.append({"type": wt, **{k:v for k,v in d.items() if k != "type"}})
     return out
 
+
+def _target_to_dict(target_id: str, target) -> dict:
+    """Serialize DeployTarget for REST API."""
+    return {
+        "id": target_id,
+        "host": target.host,
+        "port": target.port,
+        "user": target.user,
+        "platform": target.platform,
+        "os": getattr(target.os, "value", str(target.os)),
+        "labels": dict(target.labels),
+        "config": dict(target.config),
+    }
+
+
+def _result_to_dict(result) -> dict:
+    """Serialize DeployResult for REST API."""
+    return {
+        "status": getattr(result.status, "value", str(result.status)),
+        "message": result.message,
+        "logs": result.logs,
+        "rollback_id": result.rollback_id,
+        "health_checks": list(result.health_checks),
+    }
+
+
+def _resolve_target(target_id: str):
+    targets = load_deploy_targets()
+    return targets, targets.get(target_id)
+
+
+def _resolve_compose_path(payload: dict, target) -> _Path | None:
+    """Resolve compose file path from payload/target config/default stack."""
+    raw = str((payload or {}).get("compose_path", "")).strip()
+    if raw:
+        p = _Path(raw)
+        if not p.is_absolute():
+            p = (ROOT / raw).resolve()
+        return p
+
+    for key in ("compose_path_local", "compose_file_local", "compose_path"):
+        v = str(target.config.get(key, "")).strip()
+        if not v:
+            continue
+        p = _Path(v)
+        if not p.is_absolute():
+            p = (ROOT / v).resolve()
+        return p
+
+    stack = str(target.labels.get("stack", "devices")).strip() or "devices"
+    for name in ("docker-compose.yml", "docker-compose.yaml"):
+        p = ROOT / stack / name
+        if p.exists():
+            return p
+
+    return None
+
 @app.route("/api/action", methods=["POST"])
 def api_action():
     """Synchronous action endpoint for CLI/REST clients."""
@@ -2160,6 +2222,175 @@ def api_health():
         "containers": containers,
         "findings": findings,
     })
+
+
+@app.route("/api/deploy-targets")
+def api_deploy_targets():
+    """List configured deploy targets."""
+    targets = load_deploy_targets()
+    items = [_target_to_dict(tid, target) for tid, target in sorted(targets.items())]
+    return json.dumps({"ok": True, "targets": items})
+
+
+@app.route("/api/deploy-targets/<target_id>")
+def api_deploy_target(target_id):
+    """Return deploy target details and plugin status."""
+    _, target = _resolve_target(target_id)
+    if not target:
+        return json.dumps({"ok": False, "error": "Target not found"}), 404
+
+    _discover_deployers()
+    plugin = _get_deployer(target.platform)
+    status = None
+    if plugin:
+        try:
+            status = _result_to_dict(plugin.status(target))
+        except Exception as e:
+            status = {
+                "status": DeployStatus.FAILED.value,
+                "message": f"status() failed: {e}",
+                "logs": "",
+                "rollback_id": "",
+                "health_checks": [],
+            }
+
+    return json.dumps({
+        "ok": True,
+        "target": _target_to_dict(target_id, target),
+        "plugin": plugin.id if plugin else "",
+        "status": status,
+    })
+
+
+@app.route("/api/deploy-plugins")
+def api_deploy_plugins():
+    """List available deployer plugins."""
+    _discover_deployers()
+    return json.dumps({"ok": True, "plugins": _list_deployers()})
+
+
+@app.route("/api/deploy-test/<target_id>", methods=["POST"])
+def api_deploy_test(target_id):
+    """Test deploy connectivity for target/plugin."""
+    _, target = _resolve_target(target_id)
+    if not target:
+        return json.dumps({"ok": False, "error": "Target not found"}), 404
+
+    _discover_deployers()
+    plugin = _get_deployer(target.platform)
+    if not plugin:
+        return json.dumps({"ok": False, "error": f"Plugin not found: {target.platform}"}), 404
+
+    try:
+        if hasattr(plugin, "test_connection"):
+            rc, out = plugin.test_connection(target)
+            ok = rc == 0
+            details = out
+        else:
+            ok = bool(plugin.detect(target))
+            details = "detect()"
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}), 500
+
+    return json.dumps({
+        "ok": ok,
+        "target_id": target_id,
+        "plugin": plugin.id,
+        "details": details,
+    })
+
+
+@app.route("/api/deploy/<target_id>", methods=["POST"])
+def api_deploy(target_id):
+    """Trigger deployment via deployer plugin."""
+    payload = request.get_json(silent=True) or {}
+    _, target = _resolve_target(target_id)
+    if not target:
+        return json.dumps({"ok": False, "error": "Target not found"}), 404
+
+    _discover_deployers()
+    plugin = _get_deployer(target.platform)
+    if not plugin:
+        return json.dumps({"ok": False, "error": f"Plugin not found: {target.platform}"}), 404
+
+    compose_path = _resolve_compose_path(payload, target)
+    if compose_path is None or not compose_path.exists():
+        return json.dumps({
+            "ok": False,
+            "error": "Compose path not found. Pass compose_path in request body.",
+        }), 400
+
+    env_data = load_env()
+    env_override = payload.get("env", {})
+    if isinstance(env_override, dict):
+        for k, v in env_override.items():
+            env_data[str(k)] = "" if v is None else str(v)
+
+    try:
+        manifest = _build_manifest(compose_path, env=env_data)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"manifest error: {e}"}), 400
+
+    errors = plugin.validate(manifest, target)
+    if errors:
+        return json.dumps({"ok": False, "error": "validation failed", "details": errors}), 400
+
+    _bus.emit(EventType.DEPLOY_STARTED, {
+        "target_id": target_id,
+        "plugin": plugin.id,
+        "compose_path": str(compose_path),
+    }, src="api")
+
+    try:
+        result = plugin.deploy(manifest, target)
+    except Exception as e:
+        _bus.emit(EventType.DEPLOY_FAILED, {
+            "target_id": target_id,
+            "plugin": plugin.id,
+            "error": str(e),
+        }, src="api")
+        return json.dumps({"ok": False, "error": str(e)}), 500
+
+    result_data = _result_to_dict(result)
+    if result_data["status"] == DeployStatus.FAILED.value:
+        _bus.emit(EventType.DEPLOY_FAILED, {
+            "target_id": target_id,
+            "plugin": plugin.id,
+            "message": result_data.get("message", ""),
+        }, src="api")
+        return json.dumps({"ok": False, "result": result_data}), 500
+
+    _bus.emit(EventType.DEPLOY_COMPLETED, {
+        "target_id": target_id,
+        "plugin": plugin.id,
+        "status": result_data["status"],
+    }, src="api")
+    return json.dumps({"ok": True, "result": result_data})
+
+
+@app.route("/api/rollback/<target_id>", methods=["POST"])
+def api_rollback(target_id):
+    """Trigger rollback via deployer plugin."""
+    payload = request.get_json(silent=True) or {}
+    rollback_id = str(payload.get("rollback_id", "latest")).strip() or "latest"
+
+    _, target = _resolve_target(target_id)
+    if not target:
+        return json.dumps({"ok": False, "error": "Target not found"}), 404
+
+    _discover_deployers()
+    plugin = _get_deployer(target.platform)
+    if not plugin:
+        return json.dumps({"ok": False, "error": f"Plugin not found: {target.platform}"}), 404
+
+    try:
+        result = plugin.rollback(target, rollback_id)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}), 500
+
+    result_data = _result_to_dict(result)
+    ok = result_data["status"] == DeployStatus.ROLLED_BACK.value
+    return json.dumps({"ok": ok, "result": result_data})
 
 # ── Ticket CRUD API (uses dockfra.tickets module) ─────────────────────────────
 
