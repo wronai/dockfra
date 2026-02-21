@@ -31,7 +31,7 @@ chown -R "$SSH_USER:$SSH_USER" "$UH/.ssh" 2>/dev/null || \
 
 # ── Service env (LLM config, updatable via SSH) ──────────────
 if [ ! -f "$UH/.service-env" ]; then
-    env | grep -E '^(OPENROUTER_|LLM_|SERVICE_ROLE|TICKETS_DIR)' > "$UH/.service-env" 2>/dev/null || true
+    env | grep -E '^(OPENROUTER_|LLM_|AUTOPILOT_|SERVICE_ROLE|TICKETS_DIR)' > "$UH/.service-env" 2>/dev/null || true
 fi
 chown "$SSH_USER:$SSH_USER" "$UH/.service-env" 2>/dev/null || true
 

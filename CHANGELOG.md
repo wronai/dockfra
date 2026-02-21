@@ -1,3 +1,20 @@
+## [1.0.54] - 2026-02-21
+
+### Summary
+
+feat(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/static/wizard.js
+- config: update docker-compose-production.yml
+- docker: update docker-compose.yml
+- scripts: update ssh-base-init.sh
+
+
 ## [1.0.53] - 2026-02-21
 
 ### Summary

@@ -1330,6 +1330,30 @@ def _dispatch(value: str, form: dict):
     if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
     if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
     if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
+    if value == "save_env_vars":
+        env_updates: dict[str, str] = {}
+        for k, v in (form or {}).items():
+            if not isinstance(k, str):
+                continue
+            key = k.strip()
+            if not key or not _re.match(r'^[A-Z][A-Z0-9_]{2,}$', key):
+                continue
+            val = str(v).strip() if v is not None else ""
+            env_updates[key] = val
+            sk = _ENV_TO_STATE.get(key, key.lower())
+            _state[sk] = val
+        if env_updates:
+            save_env(env_updates)
+            save_state()
+            clear_widgets()
+            msg("✅ Zapisano zmienne do `dockfra/.env`:" + "\n" + "\n".join(f"- `{k}`" for k in sorted(env_updates)))
+        else:
+            msg("⚠️ Brak poprawnych zmiennych do zapisu.")
+        buttons([
+            {"label": t('settings'), "value": "settings"},
+            {"label": t('menu'),     "value": "back"},
+        ])
+        return True
     if value.startswith("save_env_var::"):
         var = value.split("::", 1)[1]
         raw = form.get(var, "")

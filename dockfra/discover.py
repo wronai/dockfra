@@ -290,6 +290,13 @@ def run_ssh_cmd(value: str, form: dict):
 
     def _run():
         _tl.sid = _tl_sid
+        # Reset per-thread UI tracking so we can safely merge proactive fix buttons
+        # emitted during this command execution.
+        try:
+            _tl.last_buttons_items = []
+            _tl.had_auto_fixes = False
+        except Exception:
+            pass
         try:
             if tty:
                 # TTY command (docker exec -it / SSH): run docker exec directly from host
@@ -372,10 +379,28 @@ def run_ssh_cmd(value: str, form: dict):
             try:
                 ri_ = _get_role(role)
                 port = _state.get(f"SSH_{role.upper()}_PORT", ri_["port"])
-                buttons([
+                nav_items = [
                     {"label": f"{ri_['icon']} {t('back_to_actions')}", "value": f"ssh_info::{role}::{port}"},
-                    {"label": t('menu'),                       "value": "back"},
-                ])
+                    {"label": t('menu'), "value": "back"},
+                ]
+
+                # If the command (or auto-diagnostics) already emitted buttons, merge them.
+                existing = getattr(_tl, 'last_buttons_items', None)
+                if isinstance(existing, list) and existing:
+                    merged = []
+                    seen = set()
+                    for it in (existing + nav_items):
+                        try:
+                            v = it.get('value')
+                            if not v or v in seen:
+                                continue
+                            seen.add(v)
+                        except Exception:
+                            pass
+                        merged.append(it)
+                    buttons(merged)
+                else:
+                    buttons(nav_items)
             except Exception:
                 buttons([
                     {"label": t('back_to_actions'), "value": f"ssh_info::{role}::2200"},

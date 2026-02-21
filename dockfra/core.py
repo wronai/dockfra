@@ -150,7 +150,6 @@ def _sid_emit(event, data):
     # Capture log lines to global buffer
     if event == "log_line":
         _log_buffer.append({"text": data.get("text",""), "ts": time.time()})
-    # Remember last emitted buttons widget for this thread (helps merging UI)
     if event == "widget" and isinstance(data, dict) and data.get("type") == "buttons":
         try:
             _tl.last_buttons_items = list(data.get("items", []) or [])
@@ -708,9 +707,20 @@ def _emit_log_error(line: str, fired: set):
                     var = m.group(gi)
                     if var and _re.match(r'^[A-Z][A-Z0-9_]{2,}$', var):
                         sk = _ENV_TO_STATE.get(var, var.lower())
+                        _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+                        _placeholder = ""
+                        _chips = []
+                        if var.endswith("_URL"):
+                            _placeholder = "https://..."
+                        elif var.endswith("_EMAIL"):
+                            _placeholder = "you@example.com"
+                        elif "PORT" in var:
+                            _placeholder = "8080"
+                        elif var.endswith("_ENABLED") or var.startswith("ENABLE_"):
+                            _chips = [{"label": "true", "value": "true"}, {"label": "false", "value": "false"}]
                         extra_fields = [{"name": var, "label": var, "type":
-                            "password" if any(k in var for k in ("KEY","TOKEN","SECRET","PASSWORD")) else "text",
-                            "placeholder": "", "chips": [], "value": _state.get(var.lower(), "")}]
+                            "password" if _secret else "text",
+                            "placeholder": _placeholder, "chips": _chips, "value": _state.get(var.lower(), "")}]
                         extra_fields[0]["value"] = _state.get(sk, "")
                         break
                 except Exception:
@@ -790,34 +800,42 @@ def _emit_log_error(line: str, fired: set):
             var = (_mv.group(1) if _mv else (_uv.group(1) if _uv else ""))
             if var:
                 sk = _ENV_TO_STATE.get(var, var.lower())
-                # Best-effort field metadata for unknown vars
                 _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
                 _placeholder = ""
+                _chips = []
                 if var.endswith("_URL"):
                     _placeholder = "https://..."
                 elif var.endswith("_EMAIL"):
                     _placeholder = "you@example.com"
                 elif "PORT" in var:
                     _placeholder = "8080"
+                elif var.endswith("_ENABLED") or var.startswith("ENABLE_"):
+                    _chips = [{"label": "true", "value": "true"}, {"label": "false", "value": "false"}]
+                elif var.endswith("_INTERVAL") or var.endswith("_INTERVAL_S"):
+                    _chips = [{"label": "60", "value": "60"}, {"label": "120", "value": "120"}, {"label": "300", "value": "300"}]
                 _sid_emit("widget", {"type": "input", "name": var,
                                      "label": var, "placeholder": "",
                                      "value": _state.get(sk, ""),
                                      "secret": _secret,
                                      "hint": f"Ustaw wartość zmiennej `{var}`",
-                                     "chips": [], "modal_type": ""})
-                # Apply inferred placeholder if we have one
+                                     "chips": _chips, "modal_type": ""})
+
                 if _placeholder:
+                    # Re-emit the same field with a better placeholder (frontend groups fields; last one wins in form)
                     _sid_emit("widget", {"type": "input", "name": var,
                                          "label": var, "placeholder": _placeholder,
                                          "value": _state.get(sk, ""),
                                          "secret": _secret,
                                          "hint": f"Ustaw wartość zmiennej `{var}`",
-                                         "chips": [], "modal_type": ""})
+                                         "chips": _chips, "modal_type": ""})
 
-                group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
                 btn_items = [
-                    {"label": f"💾 Zapisz {var}", "value": f"save_settings::{group}" if group else f"save_env_var::{var}"},
+                    {"label": f"💾 Zapisz {var}", "value": f"save_env_var::{var}"},
+                    {"label": _t_i18n('settings'), "value": "settings"},
                 ]
+                group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
+                if group:
+                    btn_items.append({"label": f"⚙️ {group}", "value": f"settings_group::{group}"})
                 if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
                     env = _state.get("environment", "local")
                     ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
@@ -1375,6 +1393,7 @@ def _emit_config_form(title: str, desc: str, fields: list, settings_group: str,
         return
     fired.add(fired_key)
     action = f"settings_group::{settings_group}" if settings_group and settings_group != "claude_code_login" else "settings"
+    save_action = "save_env_vars"
     # Enrich fields with current values from _state
     enriched = []
     for f in fields:
@@ -1388,6 +1407,7 @@ def _emit_config_form(title: str, desc: str, fields: list, settings_group: str,
         "fields": enriched,
         "settings_group": settings_group,
         "action": action,
+        "save_action": save_action,
     })
     # Event sourcing: persist config error as domain event
     try:

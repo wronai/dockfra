@@ -932,8 +932,8 @@ function openConfigModal(d){
     saveBtn.addEventListener('click', () => {
       const form = {};
       formEl.querySelectorAll('input[data-name]').forEach(el => { form[el.dataset.name] = el.value; });
-      const group = d.settings_group || 'General';
-      socket.emit('action', {value: `save_settings::${group}`, form});
+      const actionValue = d.save_action || `save_settings::${(d.settings_group || 'General')}`;
+      socket.emit('action', {value: actionValue, form});
       overlay.remove();
     });
     footer.appendChild(saveBtn);
