@@ -94,7 +94,7 @@ def step_show_logs(container):
     try:
         out = subprocess.check_output(["docker","logs","--tail","60",container],text=True,stderr=subprocess.STDOUT)
         code_block(out[-4000:])
-    except Exception as e: msg(f"❌ {e}")
+    except Exception as e: msg(t('cannot_get_logs', err=e))
     buttons([{"label": t('refresh'),"value":f"logs::{container}"},{"label": t('other_logs'),"value":"pick_logs"}])
 
 def step_settings(group: str = ""):
@@ -117,7 +117,7 @@ def step_settings(group: str = ""):
         return
     else:
         entries = [e for e in ENV_SCHEMA if e["group"] == group]
-        msg(f"## ⚙️ {group}")
+        msg(t('settings_group_title', group=group))
         suggestions = _detect_suggestions()
         for e in entries:
             sk  = _ENV_TO_STATE.get(e["key"], e["key"].lower())
@@ -685,8 +685,8 @@ def step_launch_devices(form=None):
         if rc==0:
             vnc_p = _state.get("VNC_RPI3_PORT", "6080")
             msg(t('devices_launched'))
-            msg(f"📺 VNC: http://localhost:{vnc_p}")
-            msg(f"🔒 SSH-RPi3: `ssh deployer@localhost -p {_state.get('SSH_RPI3_PORT','2224')}`")
+            msg(t('vnc_url', port=vnc_p))
+            msg(t('ssh_rpi3_hint', port=_state.get('SSH_RPI3_PORT','2224')))
         else:
             msg(t('launch_devices_error'))
     threading.Thread(target=run,daemon=True).start()
@@ -696,7 +696,7 @@ def step_post_launch_creds():
     dev_role = _get_role("developer")
     container = dev_role["container"]
     if container not in [c["name"] for c in docker_ps()]:
-        msg(f"❌ `{container}` nie działa.")
+        msg(t('container_not_running', name=container))
         buttons([{"label":t('launch_stacks_btn'),"value":"launch_all"},{"label":t('back'),"value":"back"}]); return
     msg(t('post_creds_title', user=dev_role['user']))
     key = _state.get("openrouter_key","")
