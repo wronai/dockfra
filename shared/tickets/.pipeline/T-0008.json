@@ -1,6 +1,6 @@
 {
   "ticket_id": "T-0008",
-  "iteration": 2,
+  "iteration": 3,
   "steps": [
     {
       "step": "ticket-work",
@@ -93,6 +93,63 @@
       "meta": {},
       "ok": false,
       "ts": "2026-02-21T14:50:02.259967+00:00"
+    },
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0008\nComment added to T-0008\n\u2713 T-0008 marked as in_progress",
+      "duration": 0.13,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T15:22:41.644452+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 0,
+      "output": "=== Engine: built_in | Ticket: T-0008 ===\nTitle: CLI make smoke\nDescription:\n\n[built_in] Using llm_client.py via OpenRouter...\n**File: `cli/smoke.py`**\n```python\nimport subprocess\nimport sys\n\ndef run_smoke_tests():\n    \"\"\"Run smoke tests for the CLI application.\"\"\"\n    try:\n        # Replace 'your_cli_command' with the actual command to test\n        result = subprocess.run(['your_cli_command', '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n        print(\"Smoke tests pa",
+      "duration": 10.84,
+      "error": "",
+      "score": 0.9500000000000002,
+      "meta": {
+        "engine": "built_in"
+      },
+      "ok": true,
+      "ts": "2026-02-21T15:22:52.664711+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 0,
+      "output": "\u2500\u2500\u2500 Local Tests \u2500\u2500\u2500\n  Backend tests... \u2717\n  HTTP backend... \u2713\n  HTTP mobile-backend... \u2713\n\n  Passed: 2 | Failed: 1",
+      "duration": 0.9,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T15:22:53.655729+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 0,
+      "output": "[main a3bb893] feat(T-0008): CLI make smoke\n 5 files changed, 66 insertions(+), 2 deletions(-)\n create mode 100644 cli/smoke.py\n create mode 100644 setup.py\n create mode 100644 tests/test_smoke.py\nCommit saved locally (no remote).\na3bb893 feat(T-0008): CLI make smoke",
+      "duration": 0.15,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T15:22:53.903652+00:00"
+    },
+    {
+      "step": "status-review",
+      "rc": 0,
+      "output": "review",
+      "duration": 0,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T15:22:54.004806+00:00"
     }
   ],
   "decisions": [
@@ -109,7 +166,7 @@
       "ts": "2026-02-21T14:50:02.307715+00:00"
     }
   ],
-  "overall_score": 0.7523809523809525,
+  "overall_score": 0.9800000000000001,
   "started_at": "2026-02-21T14:47:53.830823+00:00",
-  "finished_at": ""
+  "finished_at": "2026-02-21T15:22:54.005273+00:00"
 }
