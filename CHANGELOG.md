@@ -1,3 +1,16 @@
+## [1.0.35] - 2026-02-21
+
+### Summary
+
+feat(docs): new API capabilities
+
+### Other
+
+- update dockfra/app.py
+- update shared/tickets/T-0001.json
+- update shared/tickets/T-0002.json
+
+
 ## [1.0.34] - 2026-02-21
 
 ### Summary

@@ -839,9 +839,23 @@ def _dispatch(value: str, form: dict):
         cmd_   = parts[2] if len(parts) > 2 else ""
         arg_   = parts[3] if len(parts) > 3 else ""
         ri_    = _get_role(role_)
-        synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
-        run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
-        run_ssh_cmd(run_value_, synth_form)
+        # Chain: ticket-work → implement (auto-start LLM work on the ticket)
+        if cmd_ == "ticket-work" and arg_:
+            _tl_sid = getattr(_tl, 'sid', None)
+            def _chain_work():
+                _tl.sid = _tl_sid
+                run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
+                # 1) Mark ticket as in_progress
+                run_ssh_cmd(run_value_, {"ssh_cmd": "ticket-work", "ssh_arg": arg_})
+                import time; time.sleep(1)
+                # 2) Auto-run implement via LLM
+                msg(f"🤖 Auto-uruchamiam implementację: `implement {arg_}`")
+                run_ssh_cmd(run_value_, {"ssh_cmd": "implement", "ssh_arg": arg_})
+            threading.Thread(target=_chain_work, daemon=True).start()
+        else:
+            synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
+            run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
+            run_ssh_cmd(run_value_, synth_form)
         return True
     if value == "ticket_create_wizard":
         _tl_sid = getattr(_tl, 'sid', None)
