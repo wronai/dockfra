@@ -330,3 +330,15 @@ header .sub{color:var(--muted);font-size:.85rem}
 .diff-comments-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
 .diff-comment{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:.8rem;line-height:1.5}
 .diff-comment-ts{color:var(--muted);font-size:.72rem;margin-left:4px}
+/* Diff toast — inline notification for zero-change tickets */
+.diff-toast{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:6px 0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--text);animation:diffToastIn .25s ease-out}
+.diff-toast-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+.diff-toast-body{flex:1;line-height:1.5}
+.diff-toast-sub{font-size:.73rem;color:var(--muted)}
+.diff-toast-sub code{background:var(--bg2);border-radius:3px;padding:0 4px;font-size:.78em;color:var(--accent)}
+.diff-toast-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:2px 6px;line-height:1;flex-shrink:0;transition:color .15s}
+.diff-toast-close:hover{color:var(--red)}
+@keyframes diffToastIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* Diff button on ticket cards */
+.ticket-btn-diff{border-color:rgba(96,165,250,.3);color:var(--muted);font-size:.72rem}
+.ticket-btn-diff:hover{border-color:#60a5fa;color:#60a5fa;background:rgba(96,165,250,.08)}

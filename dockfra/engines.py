@@ -23,6 +23,28 @@ logger = logging.getLogger(__name__)
 _ENGINES: list[dict] = []
 
 
+def _strip_motd(text: str) -> str:
+    """Strip MOTD box-drawing banners from command output."""
+    import re
+    lines = text.split('\n')
+    keep = []
+    in_box = False
+    for line in lines:
+        t = line.strip()
+        if not in_box and re.match(r'^[╔┌]', t):
+            in_box = True; continue
+        if in_box and re.match(r'^[╚└]', t):
+            in_box = False; continue
+        if in_box:
+            continue
+        if re.match(r'^[║╠╣│]', t):
+            continue
+        if t and not re.sub(r'[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]', '', t):
+            continue
+        keep.append(line)
+    return '\n'.join(keep).strip()
+
+
 def _run_in_container(container: str, user: str, cmd: str,
                       extra_env: list[str] | None = None, timeout: int = 30) -> tuple[int, str]:
     """Run a command in the dev container. Returns (rc, output)."""
@@ -32,7 +54,7 @@ def _run_in_container(container: str, user: str, cmd: str,
     parts += ["-u", user, container, "bash", "-lc", cmd]
     try:
         r = subprocess.run(parts, capture_output=True, text=True, timeout=timeout)
-        return r.returncode, (r.stdout + r.stderr).strip()
+        return r.returncode, _strip_motd((r.stdout + r.stderr).strip())
     except subprocess.TimeoutExpired:
         return -1, "timeout"
     except Exception as e:

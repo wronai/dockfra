@@ -1,0 +1,30 @@
+{
+  "id": "T-0004",
+  "title": "kontakt",
+  "description": "Dodaj now\u0105 us\u0142ug\u0119 Formularza kontaktowego dla frontend i backend",
+  "status": "in_progress",
+  "priority": "normal",
+  "assigned_to": "developer",
+  "labels": [],
+  "created_by": "manager",
+  "created_at": "2026-02-21T01:03:05.111092+00:00",
+  "updated_at": "2026-02-21T01:07:02.418334+00:00",
+  "comments": [
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T01:03:13.580706+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 77%). Silnik: Claude Code CLI. Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T01:03:16.518664+00:00"
+    },
+    {
+      "author": "manager",
+      "text": "\ud83d\udd04 Review odrzucony. Wymaga poprawek.",
+      "timestamp": "2026-02-21T01:07:02.418326+00:00"
+    }
+  ],
+  "github_issue_number": null
+}

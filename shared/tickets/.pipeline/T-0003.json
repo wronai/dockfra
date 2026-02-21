@@ -1,0 +1,67 @@
+{
+  "ticket_id": "T-0003",
+  "iteration": 1,
+  "steps": [
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551         \ud83d\udd27 DEVELOPER \u2014 Ticket-Driven Dev Workspace           \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Tickets:                                                    \u2551\n\u2551    my-tickets               \u2014 Show tickets assigned to me    \u2551\n\u2551    ticket-work <T-XXXX>     \u2014 Start working on a ticket      \u2551\n\u2551    ticket-done <T-XXXX>     \u2014 Mark ticket as",
+      "duration": 0.12,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T01:00:25.330008+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 1,
+      "output": "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551         \ud83d\udd27 DEVELOPER \u2014 Ticket-Driven Dev Workspace           \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Tickets:                                                    \u2551\n\u2551    my-tickets               \u2014 Show tickets assigned to me    \u2551\n\u2551    ticket-work <T-XXXX>     \u2014 Start working on a ticket      \u2551\n\u2551    ticket-done <T-XXXX>     \u2014 Mark ticket as",
+      "duration": 2.43,
+      "error": "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551         \ud83d\udd27 DEVELOPER \u2014 Ticket-Driven Dev Workspace           \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Tickets:                                                    \u2551\n\u2551    my-tickets               \u2014 Show tickets assigned to me    \u2551\n\u2551    ticket-work <T-XXXX>     \u2014 Start working on a ticket      \u2551\n\u2551    ticket-done <T-XXXX>     \u2014 Mark ticket as",
+      "score": 0.6000000000000001,
+      "meta": {
+        "engine": "claude_code"
+      },
+      "ok": false,
+      "ts": "2026-02-21T01:00:27.925609+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 0,
+      "output": "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551         \ud83d\udd27 DEVELOPER \u2014 Ticket-Driven Dev Workspace           \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Tickets:                                                    \u2551\n\u2551    my-tickets               \u2014 Show tickets assigned to me    \u2551\n\u2551    ticket-work <T-XXXX>     \u2014 Start working on a ticket      \u2551\n\u2551    ticket-done <T-XXXX>     \u2014 Mark ticket as",
+      "duration": 0.12,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T01:00:28.128198+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 0,
+      "output": "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551         \ud83d\udd27 DEVELOPER \u2014 Ticket-Driven Dev Workspace           \u2551\n\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563\n\u2551                                                              \u2551\n\u2551  Tickets:                                                    \u2551\n\u2551    my-tickets               \u2014 Show tickets assigned to me    \u2551\n\u2551    ticket-work <T-XXXX>     \u2014 Start working on a ticket      \u2551\n\u2551    ticket-done <T-XXXX>     \u2014 Mark ticket as",
+      "duration": 0.08,
+      "error": "",
+      "score": 0.7,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T01:00:28.292619+00:00"
+    },
+    {
+      "step": "pipeline",
+      "rc": -1,
+      "output": "",
+      "duration": 0,
+      "error": "[Errno 13] Permission denied: '/home/tom/github/wronai/dockfra/shared/tickets/T-0003.json'",
+      "score": 0.0,
+      "meta": {},
+      "ok": false,
+      "ts": "2026-02-21T01:00:28.414236+00:00"
+    }
+  ],
+  "decisions": [],
+  "overall_score": 0.0,
+  "started_at": "2026-02-21T01:00:22.360968+00:00",
+  "finished_at": ""
+}

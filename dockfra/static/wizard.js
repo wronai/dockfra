@@ -169,15 +169,18 @@ function tryRenderTickets(text) {
       actionsHtml = `
         <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Kontynuuj pipeline">▶ Pracuj</button>
         <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}" title="AI implementacja">🤖</button>
+        <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}" title="Pokaż diff kodu">📄 Diff</button>
         <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>`;
     } else if (status === 'review') {
       actionsHtml = `
         <button class="ticket-btn ticket-btn-done" data-action="manager_approve::${tk.id}" title="Zatwierdź">✅ Approve</button>
         <button class="ticket-btn" data-action="manager_reject::${tk.id}" title="Odrzuć">🔄 Reject</button>
+        <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}" title="Pokaż diff kodu">📄 Diff</button>
         <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>`;
     } else {
       actionsHtml = `
         <button class="ticket-btn" data-action="show_ticket::${tk.id}" title="Szczegóły">👁️</button>
+        <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}" title="Pokaż diff kodu">📄 Diff</button>
         <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}" title="Otwórz ponownie">🔄 Reopen</button>`;
     }
     card.innerHTML = `
@@ -925,13 +928,16 @@ async function updateStats() {
             ` : tk.status === 'in_progress' ? `
               <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">▶ Pracuj</button>
               <button class="ticket-btn" data-action="ssh_cmd::developer::implement::${tk.id}">🤖</button>
+              <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}">📄 Diff</button>
               <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
             ` : tk.status === 'review' ? `
               <button class="ticket-btn ticket-btn-done" data-action="manager_approve::${tk.id}">✅ Approve</button>
               <button class="ticket-btn" data-action="manager_reject::${tk.id}">🔄 Reject</button>
+              <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}">📄 Diff</button>
               <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
             ` : `
               <button class="ticket-btn" data-action="show_ticket::${tk.id}">👁️</button>
+              <button class="ticket-btn ticket-btn-diff" data-action="show_diff::${tk.id}">📄 Diff</button>
               <button class="ticket-btn" data-action="ssh_cmd::developer::ticket-work::${tk.id}">🔄 Reopen</button>
             `}
             ${!tk.github_issue_number ? `<button class="ticket-btn ticket-btn-gh" data-action="ticket_push_github::${tk.id}" title="Wypchnij do GitHub Issues">🔗</button>` : ''}
@@ -1285,36 +1291,52 @@ chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKe
 // ── Ticket Diff Modal ─────────────────────────────────────────────────────────
 let _diffModalData = null;
 
-function openDiffModal(tid) {
+function _showDiffToast(tid, title) {
+  // Show inline toast when there are zero code changes
+  const toast = document.createElement('div');
+  toast.className = 'diff-toast';
+  toast.innerHTML = `<span class="diff-toast-icon">📄</span><div class="diff-toast-body"><strong>${escHtml(tid)}</strong> ${escHtml(title||'')}<br><span class="diff-toast-sub">Brak zmian w kodzie — commity muszą zawierać ID ticketu (np. <code>feat(${escHtml(tid)}): ...</code>)</span></div><button class="diff-toast-close" onclick="this.parentElement.remove()" title="Zamknij">✕</button>`;
+  const chat = document.getElementById('chat');
+  if (chat) { chat.appendChild(toast); chat.scrollTop = chat.scrollHeight; }
+  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 8000);
+}
+
+function openDiffModal(tid, forceModal) {
   const modal = document.getElementById('diff-modal');
   if (!modal) return;
-  // Reset state
-  document.getElementById('diff-modal-tid').textContent = tid;
-  document.getElementById('diff-modal-title-text').textContent = '';
-  document.getElementById('diff-modal-status').textContent = '';
-  document.getElementById('diff-modal-status').className = 'diff-status-badge';
-  document.getElementById('diff-loading').style.display = '';
-  document.getElementById('diff-content').style.display = 'none';
-  document.getElementById('diff-empty').style.display = 'none';
-  document.getElementById('diff-commits-list').innerHTML = '';
-  document.getElementById('diff-ticket-detail').innerHTML = '';
-  switchDiffTab('diff');
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
 
+  // Pre-flight: fetch diff first, decide whether to open modal or show toast
   fetch(`/api/ticket-diff/${encodeURIComponent(tid)}`)
     .then(r => r.json())
     .then(d => {
       _diffModalData = d;
+      const hasDiff = d.diff && d.diff.trim();
+      const hasCommits = d.commits && d.commits.length > 0;
+
+      // If zero changes and not forced — show inline toast, skip modal
+      if (!hasDiff && !hasCommits && !forceModal) {
+        _showDiffToast(tid, d.title);
+        return;
+      }
+
+      // Otherwise open the full modal
+      document.getElementById('diff-modal-tid').textContent = tid;
       document.getElementById('diff-modal-title-text').textContent = d.title || '';
       const statusEl = document.getElementById('diff-modal-status');
       statusEl.textContent = d.status || '';
       const statusCls = {open:'badge-accent',in_progress:'badge-yellow',review:'badge-cyan',done:'badge-muted',closed:'badge-muted'};
       statusEl.className = 'diff-status-badge ' + (statusCls[d.status] || 'badge-muted');
       document.getElementById('diff-loading').style.display = 'none';
+      document.getElementById('diff-content').style.display = 'none';
+      document.getElementById('diff-empty').style.display = 'none';
+      document.getElementById('diff-commits-list').innerHTML = '';
+      document.getElementById('diff-ticket-detail').innerHTML = '';
+      switchDiffTab('diff');
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
 
       // Render diff tab
-      if (d.diff && d.diff.trim()) {
+      if (hasDiff) {
         const pre = document.getElementById('diff-content');
         pre.innerHTML = renderDiffText(d.diff);
         pre.style.display = '';
@@ -1324,7 +1346,7 @@ function openDiffModal(tid) {
 
       // Render commits tab
       const commitsList = document.getElementById('diff-commits-list');
-      if (d.commits && d.commits.length) {
+      if (hasCommits) {
         commitsList.innerHTML = d.commits.map(c => `
           <div class="diff-commit-row">
             <code class="diff-commit-hash">${c.hash}</code>
@@ -1335,7 +1357,7 @@ function openDiffModal(tid) {
         commitsList.innerHTML = '<div class="diff-empty">Brak commitów dla tego ticketu.</div>';
       }
 
-      // Render ticket detail tab — fetch full ticket
+      // Render ticket detail tab
       fetch(`/api/tickets/${encodeURIComponent(tid)}`)
         .then(r => r.json())
         .then(tk => {
@@ -1359,9 +1381,7 @@ function openDiffModal(tid) {
         }).catch(() => {});
     })
     .catch(e => {
-      document.getElementById('diff-loading').style.display = 'none';
-      document.getElementById('diff-empty').style.display = '';
-      document.getElementById('diff-empty').querySelector('span').textContent = `❌ Błąd: ${e}`;
+      _showDiffToast(tid, `❌ Błąd: ${e}`);
     });
 }
 
@@ -1404,13 +1424,16 @@ function renderDiffText(raw) {
   }).join('\n');
 }
 
-// Also wire show_ticket:: clicks in stats panel
+// Intercept show_ticket:: and show_diff:: clicks globally — open diff modal client-side
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const action = btn.dataset.action;
   if (action && action.startsWith('show_ticket::')) {
-    e.stopPropagation();
+    e.preventDefault(); e.stopImmediatePropagation();
     openDiffModal(action.split('::')[1]);
+  } else if (action && action.startsWith('show_diff::')) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    openDiffModal(action.split('::')[1], true); // forceModal=true
   }
-});
+}, true); // capture phase — fires before delegated handlers
