@@ -1,12 +1,13 @@
 project: dockfra
-generated: "2026-02-21T10:22:43.305344"
-modules[26]{path,lang,items}:
-  tests/test_e2e.py,python,78
-  dockfra/i18n.py,python,6
+generated: "2026-02-21T16:57:52.384067"
+modules[31]{path,lang,items}:
+  test_parse.py,python,0
+  tests/test_e2e.py,python,162
+  dockfra/i18n.py,python,5
   dockfra/steps.py,python,22
   dockfra/cli.py,python,39
   dockfra/engines.py,python,30
-  dockfra/app.py,python,53
+  dockfra/app.py,python,57
   dockfra/__init__.py,python,0
   dockfra/llm_client.py,python,4
   dockfra/tickets.py,python,28
@@ -14,7 +15,7 @@ modules[26]{path,lang,items}:
   dockfra/__main__.py,python,4
   dockfra/fixes.py,python,18
   dockfra/event_bus.py,python,18
-  dockfra/core.py,python,40
+  dockfra/core.py,python,45
   dockfra/pipeline.py,python,26
   dockfra/db.py,python,9
   shared/lib/__init__.py,python,0
@@ -23,100 +24,187 @@ modules[26]{path,lang,items}:
   shared/lib/logger.py,python,6
   dockfra/static/wizard.js,javascript,45
   app/backend/app.py,python,8
+  app/src/index.js,javascript,0
   app/mobile-backend/app.py,python,4
   app/desktop-app/server.py,python,3
+  app/cypress/integration/contact.spec.js,javascript,0
   app/desktop-app/src/main.py,python,2
+  app/src/components/ContactForm.js,javascript,1
+  app/src/routes/contact.js,javascript,0
   app/backend/tests/test_api.py,python,11
 
 function_details:
   tests/test_e2e.py:
-    functions[78]{name,kind,sig,loc,async,lines,cc,does}:
-      tickets_dir,function,(tmp_path_factory),21-25,false,5,1,Create a temp tickets dir and point dockfra.tickets at it.
-      app_client,function,(tickets_dir),29-38,false,10,1,Create Flask test client — imports dockfra.app to register all routes.
-      clean_tickets,function,(tickets_dir),42-46,false,5,2,Clean tickets dir before each test.
-      TestTicketsModule.test_create_ticket,method,(tickets_dir),54-61,false,8,1,checks create ticket
-      TestTicketsModule.test_get_ticket,method,(tickets_dir),63-68,false,6,1,checks get ticket
-      TestTicketsModule.test_get_missing,method,(tickets_dir),70-72,false,3,1,checks get missing
-      TestTicketsModule.test_update_ticket,method,(tickets_dir),74-82,false,9,1,checks update ticket
-      TestTicketsModule.test_update_protected_fields,method,(tickets_dir),84-90,false,7,1,checks update protected fields
-      TestTicketsModule.test_add_comment,method,(tickets_dir),92-98,false,7,1,checks add comment
-      TestTicketsModule.test_list_tickets,method,(tickets_dir),100-110,false,11,1,checks list tickets
-      TestTicketsModule.test_close_ticket,method,(tickets_dir),112-116,false,5,1,checks close ticket
-      TestTicketsModule.test_auto_increment_ids,method,(tickets_dir),118-125,false,8,1,checks auto increment ids
-      TestTicketsModule.test_stats,method,(tickets_dir),127-137,false,11,1,checks stats
-      TestTicketsModule.test_format_ticket,method,(tickets_dir),139-146,false,8,1,checks format ticket
-      TestTicketsModule.test_format_ticket_verbose,method,(tickets_dir),148-154,false,7,1,checks format ticket verbose
-      TestTicketsModule.test_sync_all_no_integrations,method,(tickets_dir),156-159,false,4,1,checks sync all no integrations
-      TestTicketsModule.test_reload_env,method,(tickets_dir),161-171,false,11,1,checks reload env
-      TestTicketsAPI.test_list_empty,method,(app_client),179-183,false,5,1,checks list empty
-      TestTicketsAPI.test_create_ticket,method,(app_client),185-192,false,8,1,checks create ticket
-      TestTicketsAPI.test_create_ticket_no_title,method,(app_client),194-198,false,5,1,checks create ticket no title
-      TestTicketsAPI.test_get_ticket,method,(app_client),200-205,false,6,1,checks get ticket
-      TestTicketsAPI.test_get_ticket_not_found,method,(app_client),207-209,false,3,1,checks get ticket not found
-      TestTicketsAPI.test_update_ticket,method,(app_client),211-217,false,7,1,checks update ticket
-      TestTicketsAPI.test_update_ticket_not_found,method,(app_client),219-221,false,3,1,checks update ticket not found
-      TestTicketsAPI.test_add_comment,method,(app_client),223-231,false,9,1,checks add comment
-      TestTicketsAPI.test_add_comment_empty_text,method,(app_client),233-236,false,4,1,checks add comment empty text
-      TestTicketsAPI.test_add_comment_not_found,method,(app_client),238-240,false,3,1,checks add comment not found
-      TestTicketsAPI.test_list_with_filters,method,(app_client),242-255,false,14,1,checks list with filters
-      TestStatsAPI.test_stats_empty,method,(app_client),261-268,false,8,1,checks stats empty
-      TestStatsAPI.test_stats_with_tickets,method,(app_client),270-277,false,8,1,checks stats with tickets
-      TestStatsAPI.test_stats_suggestions_for_empty_project,method,(app_client),279-283,false,5,2,checks stats suggestions for empty project
-      TestStatsAPI.test_stats_integrations_structure,method,(app_client),285-290,false,6,2,checks stats integrations structure
-      TestHealthAPI.test_health_returns_json,method,(app_client),296-303,false,8,1,checks health returns json
-      TestHistoryAPI.test_history_returns_structure,method,(app_client),309-317,false,9,1,checks history returns structure
-      TestContainersAPI.test_containers_returns_list,method,(app_client),323-327,false,5,1,checks containers returns list
-      TestLogsTailAPI.test_logs_tail,method,(app_client),333-338,false,6,1,checks logs tail
-      TestSyncAPI.test_sync_no_integrations,method,(app_client),344-349,false,6,1,checks sync no integrations
-      TestProcessesAPI.test_processes_returns_list,method,(app_client),355-359,false,5,1,checks processes returns list
-      TestEnvAPI.test_env_returns_json,method,(app_client),365-369,false,5,1,checks env returns json
-      TestEventsAPI.test_events_since_zero,method,(app_client),377-385,false,9,1,Events from id=0 should return a list with max_id.
-      TestEventsAPI.test_events_since_future_id,method,(app_client),387-392,false,6,1,Events beyond max_id should return empty list.
-      TestEventsAPI.test_events_limit_respected,method,(app_client),394-399,false,6,1,Limit parameter should cap returned events.
-      TestEventsAPI.test_events_have_required_fields,method,(app_client),401-412,false,12,2,"Each event should have id, ts, src, event, data fields."
-      TestEventsAPI.test_events_ordered_by_id,method,(app_client),414-419,false,6,2,Events should be returned in ascending id order.
-      TestCLIWebSync.test_cli_action_creates_events,method,(app_client),425-442,false,18,1,POST /api/action should create events in SQLite.
-      TestCLIWebSync.test_cli_user_message_recorded,method,(app_client),444-460,false,17,5,CLI user message should appear in events with src=cli.
-      TestCLIWebSync.test_cli_bot_response_recorded,method,(app_client),462-477,false,16,4,Bot response to CLI action should also be in events.
-      TestCLIWebSync.test_cli_action_missing_value_returns_400,method,(app_client),479-484,false,6,1,POST /api/action with empty action should return 400.
-      TestCLIWebSync.test_history_includes_cli_messages,method,(app_client),486-495,false,10,1,/api/history conversation should include CLI-sourced messages.
-      TestSSEStream.test_stream_endpoint_exists,method,(app_client),501-505,false,5,1,SSE stream should return text/event-stream content type.
-      TestDeveloperHealthAPI.test_developer_health_returns_json,method,(app_client),511-516,false,6,1,checks developer health returns json
-      TestEngineStatusAPI.test_engine_status_returns_dict_with_engines,method,(app_client),522-529,false,8,1,checks engine status returns dict with engines
-      TestEngineStatusAPI.test_engine_status_has_required_fields,method,(app_client),531-537,false,7,2,checks engine status has required fields
-      TestDeveloperLogsAPI.test_developer_logs_returns_json,method,(app_client),543-549,false,7,1,checks developer logs returns json
-      TestTicketDiffAPI.test_ticket_diff_nonexistent_returns_404,method,(app_client),555-558,false,4,1,Non-existent ticket should return 404.
-      TestTicketDiffAPI.test_ticket_diff_returns_json,method,"(app_client, tickets_dir)",560-568,false,9,1,checks ticket diff returns json
-      TestTicketDiffAPI.test_ticket_diff_with_existing_ticket,method,"(app_client, tickets_dir)",570-576,false,7,1,checks ticket diff with existing ticket
-      TestDBModule.setup_method,method,(),582-586,false,5,1,initializes method
-      TestDBModule.teardown_method,method,(),588-592,false,5,2,teardown method
-      TestDBModule.test_append_and_get_events,method,(),594-603,false,10,3,checks append and get events
-      TestDBModule.test_get_max_id,method,(),605-610,false,6,1,checks get max id
-      TestDBModule.test_events_since_filters_correctly,method,(),612-619,false,8,2,checks events since filters correctly
-      TestDBModule.test_append_batch,method,(),621-630,false,10,2,checks append batch
-      TestDBModule.test_count_events,method,(),632-640,false,9,1,checks count events
-      TestDBModule.test_get_events_with_type_filter,method,(),642-648,false,7,2,checks get events with type filter
-      TestDBModule.test_get_latest_by_type,method,(),650-658,false,9,1,checks get latest by type
-      TestEventBus.test_get_bus_singleton,method,(app_client),664-668,false,5,1,checks get bus singleton
-      TestEventBus.test_emit_persists_to_store,method,"(app_client, tmp_path)",670-677,false,8,1,checks emit persists to store
-      TestEventBus.test_query_events_returns_emitted,method,"(app_client, tmp_path)",679-689,false,11,3,checks query events returns emitted
-      TestEventBus.test_subscribe_and_emit,method,(app_client),691-699,false,9,1,checks subscribe and emit
-      TestEventBus.test_subscribe_all,method,(app_client),701-709,false,9,1,checks subscribe all
-      TestEventBus.test_event_types_are_strings,method,(),711-715,false,5,1,checks event types are strings
-      TestEventsAPIFilters.test_events_filter_by_type,method,(app_client),721-727,false,7,2,Events endpoint should support ?type= filter.
-      TestEventsAPIFilters.test_events_filter_by_src,method,(app_client),729-735,false,7,2,Events endpoint should support ?src= filter.
-      TestTicketDomainEvents.test_ticket_create_emits_event,method,(app_client),741-750,false,10,1,checks ticket create emits event
-      TestTicketDomainEvents.test_ticket_update_emits_event,method,"(app_client, tickets_dir)",752-763,false,12,1,checks ticket update emits event
-      TestTicketDomainEvents.test_ticket_comment_emits_event,method,"(app_client, tickets_dir)",765-776,false,12,1,checks ticket comment emits event
-      TestTicketDomainEvents.test_ticket_close_emits_closed_event,method,"(app_client, tickets_dir)",778-789,false,12,1,checks ticket close emits closed event
+    functions[162]{name,kind,sig,loc,async,lines,cc,does}:
+      tickets_dir,function,(tmp_path_factory),22-26,false,5,1,Create a temp tickets dir and point dockfra.tickets at it.
+      app_client,function,(tickets_dir),30-39,false,10,1,Create Flask test client — imports dockfra.app to register all routes.
+      clean_tickets,function,(tickets_dir),43-47,false,5,2,Clean tickets dir before each test.
+      restore_wizard_files,function,(),51-66,false,16,5,Prevent tests from permanently mutating dockfra/.env and dockfra/.state.json.
+      TestTicketsModule.test_create_ticket,method,(tickets_dir),74-81,false,8,1,checks create ticket
+      TestTicketsModule.test_get_ticket,method,(tickets_dir),83-88,false,6,1,checks get ticket
+      TestTicketsModule.test_get_missing,method,(tickets_dir),90-92,false,3,1,checks get missing
+      TestTicketsModule.test_update_ticket,method,(tickets_dir),94-102,false,9,1,checks update ticket
+      TestTicketsModule.test_update_protected_fields,method,(tickets_dir),104-110,false,7,1,checks update protected fields
+      TestTicketsModule.test_add_comment,method,(tickets_dir),112-118,false,7,1,checks add comment
+      TestTicketsModule.test_list_tickets,method,(tickets_dir),120-130,false,11,1,checks list tickets
+      TestTicketsModule.test_close_ticket,method,(tickets_dir),132-136,false,5,1,checks close ticket
+      TestTicketsModule.test_auto_increment_ids,method,(tickets_dir),138-145,false,8,1,checks auto increment ids
+      TestTicketsModule.test_stats,method,(tickets_dir),147-157,false,11,1,checks stats
+      TestTicketsModule.test_format_ticket,method,(tickets_dir),159-166,false,8,1,checks format ticket
+      TestTicketsModule.test_format_ticket_verbose,method,(tickets_dir),168-174,false,7,1,checks format ticket verbose
+      TestTicketsModule.test_sync_all_no_integrations,method,(tickets_dir),176-179,false,4,1,checks sync all no integrations
+      TestTicketsModule.test_reload_env,method,(tickets_dir),181-191,false,11,1,checks reload env
+      TestTicketsAPI.test_list_empty,method,(app_client),199-203,false,5,1,checks list empty
+      TestTicketsAPI.test_create_ticket,method,(app_client),205-212,false,8,1,checks create ticket
+      TestTicketsAPI.test_create_ticket_no_title,method,(app_client),214-218,false,5,1,checks create ticket no title
+      TestTicketsAPI.test_get_ticket,method,(app_client),220-225,false,6,1,checks get ticket
+      TestTicketsAPI.test_get_ticket_not_found,method,(app_client),227-229,false,3,1,checks get ticket not found
+      TestTicketsAPI.test_update_ticket,method,(app_client),231-237,false,7,1,checks update ticket
+      TestTicketsAPI.test_update_ticket_not_found,method,(app_client),239-241,false,3,1,checks update ticket not found
+      TestTicketsAPI.test_add_comment,method,(app_client),243-251,false,9,1,checks add comment
+      TestTicketsAPI.test_add_comment_empty_text,method,(app_client),253-256,false,4,1,checks add comment empty text
+      TestTicketsAPI.test_add_comment_not_found,method,(app_client),258-260,false,3,1,checks add comment not found
+      TestTicketsAPI.test_list_with_filters,method,(app_client),262-275,false,14,1,checks list with filters
+      TestStatsAPI.test_stats_empty,method,(app_client),281-288,false,8,1,checks stats empty
+      TestStatsAPI.test_stats_with_tickets,method,(app_client),290-297,false,8,1,checks stats with tickets
+      TestStatsAPI.test_stats_suggestions_for_empty_project,method,(app_client),299-303,false,5,2,checks stats suggestions for empty project
+      TestStatsAPI.test_stats_integrations_structure,method,(app_client),305-310,false,6,2,checks stats integrations structure
+      TestHealthAPI.test_health_returns_json,method,(app_client),316-323,false,8,1,checks health returns json
+      TestHistoryAPI.test_history_returns_structure,method,(app_client),329-337,false,9,1,checks history returns structure
+      TestContainersAPI.test_containers_returns_list,method,(app_client),343-347,false,5,1,checks containers returns list
+      TestLogsTailAPI.test_logs_tail,method,(app_client),353-358,false,6,1,checks logs tail
+      TestSyncAPI.test_sync_no_integrations,method,(app_client),364-369,false,6,1,checks sync no integrations
+      TestProcessesAPI.test_processes_returns_list,method,(app_client),375-379,false,5,1,checks processes returns list
+      TestEnvAPI.test_env_returns_json,method,(app_client),385-389,false,5,1,checks env returns json
+      TestEventsAPI.test_events_since_zero,method,(app_client),397-405,false,9,1,Events from id=0 should return a list with max_id.
+      TestEventsAPI.test_events_since_future_id,method,(app_client),407-412,false,6,1,Events beyond max_id should return empty list.
+      TestEventsAPI.test_events_limit_respected,method,(app_client),414-419,false,6,1,Limit parameter should cap returned events.
+      TestEventsAPI.test_events_have_required_fields,method,(app_client),421-432,false,12,2,"Each event should have id, ts, src, event, data fields."
+      TestEventsAPI.test_events_ordered_by_id,method,(app_client),434-439,false,6,2,Events should be returned in ascending id order.
+      TestCLIWebSync.test_cli_action_creates_events,method,(app_client),445-462,false,18,1,POST /api/action should create events in SQLite.
+      TestCLIWebSync.test_cli_user_message_recorded,method,(app_client),464-480,false,17,5,CLI user message should appear in events with src=cli.
+      TestCLIWebSync.test_cli_bot_response_recorded,method,(app_client),482-497,false,16,4,Bot response to CLI action should also be in events.
+      TestCLIWebSync.test_cli_action_missing_value_returns_400,method,(app_client),499-504,false,6,1,POST /api/action with empty action should return 400.
+      TestCLIWebSync.test_history_includes_cli_messages,method,(app_client),506-515,false,10,1,/api/history conversation should include CLI-sourced messages.
+      TestSaveEnvActions.test_save_env_vars_writes_to_env,method,(app_client),519-543,false,25,1,checks save env vars writes to env
+      TestSaveEnvActions.test_save_env_var_single_writes_to_env,method,(app_client),545-559,false,15,1,checks save env var single writes to env
+      TestSSEStream.test_stream_endpoint_exists,method,(app_client),565-569,false,5,1,SSE stream should return text/event-stream content type.
+      TestDeveloperHealthAPI.test_developer_health_returns_json,method,(app_client),575-580,false,6,1,checks developer health returns json
+      TestEngineStatusAPI.test_engine_status_returns_dict_with_engines,method,(app_client),586-593,false,8,1,checks engine status returns dict with engines
+      TestEngineStatusAPI.test_engine_status_has_required_fields,method,(app_client),595-601,false,7,2,checks engine status has required fields
+      TestDeveloperLogsAPI.test_developer_logs_returns_json,method,(app_client),607-613,false,7,1,checks developer logs returns json
+      TestTicketDiffAPI.test_ticket_diff_nonexistent_returns_404,method,(app_client),619-622,false,4,1,Non-existent ticket should return 404.
+      TestTicketDiffAPI.test_ticket_diff_returns_json,method,"(app_client, tickets_dir)",624-632,false,9,1,checks ticket diff returns json
+      TestTicketDiffAPI.test_ticket_diff_with_existing_ticket,method,"(app_client, tickets_dir)",634-640,false,7,1,checks ticket diff with existing ticket
+      TestTicketDiffAPI.test_ticket_diff_reads_commits_from_developer_container,method,"(app_client, tickets_dir, monkeypatch)",642-669,false,28,1,checks ticket diff reads commits from developer container
+      TestDBModule.setup_method,method,(),675-679,false,5,1,initializes method
+      TestDBModule.teardown_method,method,(),681-685,false,5,2,teardown method
+      TestDBModule.test_append_and_get_events,method,(),687-696,false,10,3,checks append and get events
+      TestDBModule.test_get_max_id,method,(),698-703,false,6,1,checks get max id
+      TestDBModule.test_events_since_filters_correctly,method,(),705-712,false,8,2,checks events since filters correctly
+      TestDBModule.test_append_batch,method,(),714-723,false,10,2,checks append batch
+      TestDBModule.test_count_events,method,(),725-733,false,9,1,checks count events
+      TestDBModule.test_get_events_with_type_filter,method,(),735-741,false,7,2,checks get events with type filter
+      TestDBModule.test_get_latest_by_type,method,(),743-751,false,9,1,checks get latest by type
+      TestEventBus.test_get_bus_singleton,method,(app_client),757-761,false,5,1,checks get bus singleton
+      TestEventBus.test_emit_persists_to_store,method,"(app_client, tmp_path)",763-770,false,8,1,checks emit persists to store
+      TestEventBus.test_query_events_returns_emitted,method,"(app_client, tmp_path)",772-782,false,11,3,checks query events returns emitted
+      TestEventBus.test_subscribe_and_emit,method,(app_client),784-792,false,9,1,checks subscribe and emit
+      TestEventBus.test_subscribe_all,method,(app_client),794-802,false,9,1,checks subscribe all
+      TestEventBus.test_event_types_are_strings,method,(),804-808,false,5,1,checks event types are strings
+      TestEventsAPIFilters.test_events_filter_by_type,method,(app_client),814-820,false,7,2,Events endpoint should support ?type= filter.
+      TestEventsAPIFilters.test_events_filter_by_src,method,(app_client),822-828,false,7,2,Events endpoint should support ?src= filter.
+      TestTicketDomainEvents.test_ticket_create_emits_event,method,(app_client),834-843,false,10,1,checks ticket create emits event
+      TestTicketDomainEvents.test_ticket_update_emits_event,method,"(app_client, tickets_dir)",845-856,false,12,1,checks ticket update emits event
+      TestTicketDomainEvents.test_ticket_comment_emits_event,method,"(app_client, tickets_dir)",858-869,false,12,1,checks ticket comment emits event
+      TestTicketDomainEvents.test_ticket_close_emits_closed_event,method,"(app_client, tickets_dir)",871-882,false,12,1,checks ticket close emits closed event
+      TestCLIHelpers.test_classify_log_error,method,(),890-894,false,5,1,checks classify log error
+      TestCLIHelpers.test_classify_log_warn,method,(),896-898,false,3,1,checks classify log warn
+      TestCLIHelpers.test_classify_log_ok,method,(),900-903,false,4,1,checks classify log ok
+      TestCLIHelpers.test_classify_log_build,method,(),905-908,false,4,1,checks classify log build
+      TestCLIHelpers.test_classify_log_dim,method,(),910-912,false,3,1,checks classify log dim
+      TestCLIHelpers.test_classify_log_plain,method,(),914-916,false,3,1,checks classify log plain
+      TestCLIHelpers.test_colorize_log_no_crash,method,(),918-923,false,6,3,checks colorize log no crash
+      TestCLIHelpers.test_render_md_bold,method,(),925-928,false,4,1,checks render md bold
+      TestCLIHelpers.test_render_md_heading,method,(),930-933,false,4,1,checks render md heading
+      TestCLIHelpers.test_render_md_code,method,(),935-938,false,4,1,checks render md code
+      TestCLIHelpers.test_render_md_list,method,(),940-944,false,5,1,checks render md list
+      TestCLIHelpers.test_color_functions_no_tty,method,(),946-958,false,13,1,Color functions should return plain text when NO_COLOR is set.
+      TestWizardClient.test_client_init_default,method,(),964-967,false,4,1,checks client init default
+      TestWizardClient.test_client_strips_trailing_slash,method,(),969-972,false,4,1,checks client strips trailing slash
+      TestWizardClient.test_ping_returns_false_when_offline,method,(),974-977,false,4,1,checks ping returns false when offline
+      TestWizardClient.test_get_returns_error_when_offline,method,(),979-984,false,6,1,checks get returns error when offline
+      TestWizardClient.test_post_returns_error_when_offline,method,(),986-991,false,6,1,checks post returns error when offline
+      TestCLICommands.test_cmd_status_offline,method,(),997-1002,false,6,1,cmd_status should return 1 when wizard is offline.
+      TestCLICommands.test_cmd_logs_offline,method,(),1004-1008,false,5,1,checks cmd logs offline
+      TestCLICommands.test_cmd_tickets_offline,method,(),1010-1014,false,5,1,checks cmd tickets offline
+      TestCLICommands.test_cmd_diff_no_args,method,(),1016-1020,false,5,1,checks cmd diff no args
+      TestCLICommands.test_cmd_engines_offline,method,(),1022-1026,false,5,1,checks cmd engines offline
+      TestCLICommands.test_cmd_dev_health_offline,method,(),1028-1032,false,5,1,checks cmd dev health offline
+      TestCLICommands.test_cmd_dev_logs_offline,method,(),1034-1038,false,5,1,checks cmd dev logs offline
+      TestCLICommands.test_cmd_ask_no_args,method,(),1040-1044,false,5,1,checks cmd ask no args
+      TestCLICommands.test_cmd_action_no_args,method,(),1046-1050,false,5,1,checks cmd action no args
+      TestCLICommands.test_cmd_launch_offline,method,(),1052-1056,false,5,1,checks cmd launch offline
+      TestPipelineModule.test_step_result_ok_when_rc0_score_high,method,(),1064-1067,false,4,1,checks step result ok when rc0 score high
+      TestPipelineModule.test_step_result_not_ok_when_rc_nonzero,method,(),1069-1072,false,4,1,checks step result not ok when rc nonzero
+      TestPipelineModule.test_step_result_not_ok_when_score_low,method,(),1074-1077,false,4,1,checks step result not ok when score low
+      TestPipelineModule.test_step_result_to_dict,method,(),1079-1087,false,9,1,checks step result to dict
+      TestPipelineModule.test_evaluate_implementation_empty,method,(),1089-1091,false,3,1,checks evaluate implementation empty
+      TestPipelineModule.test_evaluate_implementation_with_code,method,(),1093-1097,false,5,1,checks evaluate implementation with code
+      TestPipelineModule.test_evaluate_implementation_llm_error,method,(),1099-1102,false,4,1,checks evaluate implementation llm error
+      TestPipelineModule.test_evaluate_test_output_rc0,method,(),1104-1106,false,3,1,checks evaluate test output rc0
+      TestPipelineModule.test_evaluate_test_output_rc_nonzero_no_output,method,(),1108-1111,false,4,1,checks evaluate test output rc nonzero no output
+      TestPipelineModule.test_evaluate_test_output_partial,method,(),1113-1116,false,4,1,checks evaluate test output partial
+      TestPipelineModule.test_run_step_success,method,(),1118-1123,false,6,1,checks run step success
+      TestPipelineModule.test_run_step_failure,method,(),1125-1129,false,5,1,checks run step failure
+      TestPipelineModule.test_run_step_soft_failure_llm_error,method,(),1131-1134,false,4,1,checks run step soft failure llm error
+      TestPipelineModule.test_run_step_nothing_to_commit,method,(),1136-1139,false,4,1,checks run step nothing to commit
+      TestPipelineModule.test_run_step_exception,method,(),1141-1147,false,7,1,checks run step exception
+      TestPipelineModule.test_pipeline_state_iteration,method,(tmp_path),1149-1156,false,8,1,checks pipeline state iteration
+      TestPipelineModule.test_pipeline_state_record_step,method,(tmp_path),1158-1167,false,10,1,checks pipeline state record step
+      TestPipelineModule.test_pipeline_state_compute_score,method,(tmp_path),1169-1179,false,11,2,checks pipeline state compute score
+      TestPipelineModule.test_build_retry_prompt,method,(tmp_path),1181-1191,false,11,1,checks build retry prompt
+      TestPersistentState._save,method,"(state_file, state)",1205-1207,false,3,3,caches
+      TestPersistentState._load,method,(state_file),1209-1215,false,7,3,retrieves
+      TestPersistentState.test_save_and_load_state,method,(tmp_path),1217-1229,false,13,1,checks save and load state
+      TestPersistentState.test_load_state_missing_file,method,(tmp_path),1231-1233,false,3,1,checks load state missing file
+      TestPersistentState.test_load_state_corrupt_file,method,(tmp_path),1235-1239,false,5,1,checks load state corrupt file
+      TestPersistentState.test_save_state_skips_all_secrets,method,(tmp_path),1241-1259,false,19,2,checks save state skips all secrets
+      TestSharedLibTicketSystem.setup_tickets_dir,method,"(tmp_path, monkeypatch)",1268-1275,false,8,1,Each test gets its own isolated tickets directory.
+      TestSharedLibTicketSystem.test_create_and_get,method,(),1277-1282,false,6,1,checks create and get
+      TestSharedLibTicketSystem.test_list_and_filter,method,(),1284-1291,false,8,1,checks list and filter
+      TestSharedLibTicketSystem.test_update_and_comment,method,(),1293-1302,false,10,1,checks update and comment
+      TestSharedLibTicketSystem.test_close,method,(),1304-1310,false,7,1,checks close
+      TestSharedLibTicketSystem.test_format_ticket_basic,method,(),1312-1318,false,7,1,checks format ticket basic
+      TestSharedLibTicketSystem.test_format_ticket_verbose,method,(),1320-1326,false,7,1,checks format ticket verbose
+      TestSharedLibTicketSystem.test_stats_structure,method,(),1328-1336,false,9,1,checks stats structure
+      TestSharedLibTicketSystem.test_sync_all_no_integrations,method,(),1338-1341,false,4,1,checks sync all no integrations
+      TestSharedLibTicketSystem.test_get_missing_returns_none,method,(),1343-1345,false,3,1,checks get missing returns none
+      TestSharedLibTicketSystem.test_update_missing_returns_none,method,(),1347-1350,false,4,1,checks update missing returns none
+      TestPostLaunchHooks._expand,method,"(text, state=None, environ=None)",1360-1371,false,12,3,Inline reimplementation of _expand_env_vars for testing without Flask.
+      TestPostLaunchHooks.test_expand_env_vars_default,method,(),1373-1375,false,3,1,checks expand env vars default
+      TestPostLaunchHooks.test_expand_env_vars_from_state,method,(),1377-1379,false,3,1,checks expand env vars from state
+      TestPostLaunchHooks.test_expand_env_vars_no_template,method,(),1381-1383,false,3,1,checks expand env vars no template
+      TestPostLaunchHooks.test_expand_env_vars_multiple,method,(),1385-1387,false,3,1,checks expand env vars multiple
+      TestPostLaunchHooks._eval,method,"(cond, running_names, stacks=None, prefix='dockfra')",1391-1408,false,18,9,Inline reimplementation of _eval_post_launch_condition for testing.
+      TestPostLaunchHooks.test_eval_condition_empty_always_true,method,(),1410-1411,false,2,1,checks eval condition empty always true
+      TestPostLaunchHooks.test_eval_condition_stack_exists_true,method,(),1413-1414,false,2,1,checks eval condition stack exists true
+      TestPostLaunchHooks.test_eval_condition_stack_exists_false,method,(),1416-1417,false,2,1,checks eval condition stack exists false
+      TestPostLaunchHooks.test_eval_condition_container_running_true,method,(),1419-1421,false,3,1,checks eval condition container running true
+      TestPostLaunchHooks.test_eval_condition_container_running_false,method,(),1423-1424,false,2,1,checks eval condition container running false
+      TestPostLaunchHooks.test_eval_condition_stack_running_true,method,(),1426-1428,false,3,1,checks eval condition stack running true
+      TestPostLaunchHooks.test_eval_condition_stack_running_false,method,(),1430-1431,false,2,1,checks eval condition stack running false
+      TestPostLaunchHooks.test_eval_condition_unknown_returns_true,method,(),1433-1434,false,2,1,checks eval condition unknown returns true
+      TestPostLaunchHooks.test_render_post_launch_no_crash,method,(app_client),1438-1441,false,4,1,_render_post_launch should not raise with empty roles and running_names.
+      TestPostLaunchHooks.test_render_post_launch_with_url_hook,method,"(app_client, monkeypatch)",1443-1457,false,15,4,URL hooks should be included when condition passes.
+      TestPostLaunchHooks.test_render_post_launch_condition_filters,method,"(app_client, monkeypatch)",1459-1474,false,16,2,Hooks with failing conditions should be excluded.
   dockfra/i18n.py:
-    functions[6]{name,kind,sig,loc,async,lines,cc,does}:
-      set_lang,function,"(lang:str)",30-32,false,3,2,Set the current language for this thread.
-      get_lang,function,() -> str,35-37,false,3,1,Get the current language for this thread.
-      get_lang_name,function,"(lang:str='') -> str",40-42,false,3,3,Human-readable language name.
-      _add,function,"(key:str)",51-53,false,3,1,Register translations for a key.
-      t,function,"(key:str) -> str",56-68,false,13,7,"Translate key to current language, with optional format kwargs."
-      llm_lang_instruction,function,() -> str,72-78,false,7,2,Return an instruction string for the LLM to respond in the current language.
+    functions[5]{name,kind,sig,loc,async,lines,cc,does}:
+      set_lang,function,"(lang:str)",22-24,false,3,1,Set the current language for this thread.
+      get_lang,function,() -> str,26-28,false,3,1,Get the current language for this thread.
+      _add,function,"(key:str)",30-32,false,3,1,Register translations for a key.
+      t,function,"(key:str) -> str",34-44,false,11,6,"Translate key to current language, with optional format kwargs."
+      llm_lang_instruction,function,() -> str,46-52,false,7,2,Return an instruction string for the LLM to respond in the current language.
   dockfra/steps.py:
     functions[22]{name,kind,sig,loc,async,lines,cc,does}:
       step_welcome,function,(),6-53,false,48,10,step welcome
@@ -124,64 +212,64 @@ function_details:
       step_pick_logs,function,(),81-89,false,9,3,step pick logs
       step_show_logs,function,(container),91-98,false,8,2,step show logs
       step_settings,function,"(group:str='')",100-145,false,46,22,Show env editor for a specific group or group selector.
-      step_save_settings,function,"(group:str, form:dict)",148-172,false,25,10,Save edited group back to _state and dockfra/.env.
-      preflight_check,function,"(stacks:list[str]) -> list[dict]",175-186,false,12,6,Return list of missing required vars for the given stacks.
-      step_preflight_fill,function,"(stacks:list[str])",189-223,false,35,10,Show inline form for all missing required vars before launching.
-      step_setup_creds,function,(),226-252,false,27,8,step setup creds
-      step_save_creds,function,(form),254-277,false,24,7,step save creds
-      step_launch_all,function,(),279-296,false,18,1,step launch all
-      step_launch_configure,function,(),298-299,false,2,1,step launch configure
-      _analyze_launch_error,function,"(name:str, output:str) -> tuple[str, list]",301-370,false,70,31,"Parse docker compose output and return (analysis_text, solution_buttons)."
-      step_do_launch,function,(form),373-588,false,216,17,step do launch
-      step_deploy_device,function,(),590-615,false,26,4,step deploy device
-      _save_device_form,function,(form),617-623,false,7,2,caches device form
-      step_test_device,function,(form),625-647,false,23,2,step test device
-      step_do_deploy,function,(form),649-688,false,40,2,step do deploy
-      _update_device_env,function,"(ip, user, port)",690-703,false,14,11,updates device env
-      step_launch_devices,function,(form=None),705-720,false,16,1,step launch devices
-      step_post_launch_creds,function,(),722-737,false,16,5,step post launch creds
-      step_run_post_creds,function,(),739-757,false,19,1,step run post creds
+      step_save_settings,function,"(group:str, form:dict)",148-173,false,26,10,Save edited group back to _state and dockfra/.env.
+      preflight_check,function,"(stacks:list[str]) -> list[dict]",176-187,false,12,6,Return list of missing required vars for the given stacks.
+      step_preflight_fill,function,"(stacks:list[str])",190-226,false,37,12,Show inline form for all missing required vars before launching.
+      step_setup_creds,function,(),229-255,false,27,8,step setup creds
+      step_save_creds,function,(form),257-280,false,24,7,step save creds
+      step_launch_all,function,(),282-299,false,18,1,step launch all
+      step_launch_configure,function,(),301-302,false,2,1,step launch configure
+      _analyze_launch_error,function,"(name:str, output:str) -> tuple[str, list]",304-371,false,68,31,"Parse docker compose output and return (analysis_text, solution_buttons)."
+      step_do_launch,function,(form),374-560,false,187,17,step do launch
+      step_deploy_device,function,(),562-587,false,26,4,step deploy device
+      _save_device_form,function,(form),589-595,false,7,2,caches device form
+      step_test_device,function,(form),597-619,false,23,2,step test device
+      step_do_deploy,function,(form),621-660,false,40,2,step do deploy
+      _update_device_env,function,"(ip, user, port)",662-675,false,14,11,updates device env
+      step_launch_devices,function,(form=None),677-692,false,16,1,step launch devices
+      step_post_launch_creds,function,(),694-709,false,16,5,step post launch creds
+      step_run_post_creds,function,(),711-729,false,19,1,step run post creds
   dockfra/cli.py:
     functions[39]{name,kind,sig,loc,async,lines,cc,does}:
-      _c,function,"(code, s)",31-31,false,1,2,c
-      green,function,(s),32-32,false,1,1,green
-      red,function,(s),33-33,false,1,1,red
-      yellow,function,(s),34-34,false,1,1,yellow
-      cyan,function,(s),35-35,false,1,1,cyan
-      purple,function,(s),36-36,false,1,1,purple
-      bold,function,(s),37-37,false,1,1,bold
-      dim,function,(s),38-38,false,1,1,dim
-      orange,function,(s),39-39,false,1,1,orange
-      _classify_log,function,(line),79-90,false,12,10,classify log
-      _colorize_log,function,(line),92-101,false,10,8,colorize log
-      _render_md,function,(text),104-110,false,7,1,formats md
-      _render_result,function,(items),112-164,false,53,27,formats result
-      cmd_status,function,"(client, args)",167-187,false,21,9,cmd status
-      cmd_logs,function,"(client, args)",189-198,false,10,4,cmd logs
-      cmd_launch,function,"(client, args)",200-207,false,8,4,cmd launch
-      cmd_ask,function,"(client, args)",209-215,false,7,3,cmd ask
-      cmd_action,function,"(client, args)",217-221,false,5,3,cmd action
-      cmd_tickets,function,"(client, args)",223-239,false,17,4,cmd tickets
-      cmd_diff,function,"(client, args)",241-272,false,32,16,cmd diff
-      cmd_engines,function,"(client, args)",274-289,false,16,6,cmd engines
-      cmd_dev_health,function,"(client, args)",291-312,false,22,10,cmd dev health
-      cmd_dev_logs,function,"(client, args)",314-323,false,10,4,cmd dev logs
-      cmd_test,function,"(client, args)",325-395,false,71,24,"Full system self-test: containers, developer health, engines, ticket API, diff A..."
-      cmd_doctor,function,"(client, args)",397-447,false,51,17,Diagnose common issues and suggest fixes.
-      cmd_pipeline,function,"(client, args)",449-455,false,7,3,cmd pipeline
-      run_repl,function,(client),475-522,false,48,15,starts repl
-      run_tui,function,(client),525-706,false,182,1,"Three-panel curses TUI: Chat (left) | Processes (centre) | Logs (right)."
-      main,function,(),709-735,false,27,8,main
-      WizardClient.__init__,method,(base=BASE_URL),43-44,false,2,1,creates
-      WizardClient._get,method,"(path, params=None, timeout=15)",46-54,false,9,4,retrieves
-      WizardClient._post,method,"(path, data, timeout=60)",56-65,false,10,2,creates
-      WizardClient.action,method,"(value, form=None)",67-68,false,2,2,action
-      WizardClient.health,method,(),69-69,false,1,1,health
-      WizardClient.containers,method,(),70-70,false,1,1,containers
-      WizardClient.logs,method,(n=40),71-71,false,1,1,logs
-      WizardClient.history,method,(),72-72,false,1,1,history
-      WizardClient.events_since,method,(since_id=0),73-73,false,1,1,events since
-      WizardClient.ping,method,(),74-76,false,3,1,ping
+      _c,function,"(code, s)",32-32,false,1,2,c
+      green,function,(s),33-33,false,1,1,green
+      red,function,(s),34-34,false,1,1,red
+      yellow,function,(s),35-35,false,1,1,yellow
+      cyan,function,(s),36-36,false,1,1,cyan
+      purple,function,(s),37-37,false,1,1,purple
+      bold,function,(s),38-38,false,1,1,bold
+      dim,function,(s),39-39,false,1,1,dim
+      orange,function,(s),40-40,false,1,1,orange
+      _classify_log,function,(line),80-91,false,12,10,classify log
+      _colorize_log,function,(line),93-102,false,10,8,colorize log
+      _render_md,function,(text),105-111,false,7,1,formats md
+      _render_result,function,(items),113-165,false,53,27,formats result
+      cmd_status,function,"(client, args)",168-188,false,21,9,cmd status
+      cmd_logs,function,"(client, args)",190-199,false,10,4,cmd logs
+      cmd_launch,function,"(client, args)",201-208,false,8,4,cmd launch
+      cmd_ask,function,"(client, args)",210-216,false,7,3,cmd ask
+      cmd_action,function,"(client, args)",218-222,false,5,3,cmd action
+      cmd_tickets,function,"(client, args)",224-240,false,17,4,cmd tickets
+      cmd_diff,function,"(client, args)",242-273,false,32,16,cmd diff
+      cmd_engines,function,"(client, args)",275-290,false,16,6,cmd engines
+      cmd_dev_health,function,"(client, args)",292-313,false,22,10,cmd dev health
+      cmd_dev_logs,function,"(client, args)",315-324,false,10,4,cmd dev logs
+      cmd_test,function,"(client, args)",326-396,false,71,24,"Full system self-test: containers, developer health, engines, ticket API, diff A..."
+      cmd_doctor,function,"(client, args)",398-448,false,51,17,Diagnose common issues and suggest fixes.
+      cmd_pipeline,function,"(client, args)",450-456,false,7,3,cmd pipeline
+      run_repl,function,(client),476-523,false,48,15,starts repl
+      run_tui,function,(client),526-707,false,182,1,"Three-panel curses TUI: Chat (left) | Processes (centre) | Logs (right)."
+      main,function,(),710-738,false,29,8,main
+      WizardClient.__init__,method,(base=BASE_URL),44-45,false,2,1,creates
+      WizardClient._get,method,"(path, params=None, timeout=15)",47-55,false,9,4,retrieves
+      WizardClient._post,method,"(path, data, timeout=60)",57-66,false,10,2,creates
+      WizardClient.action,method,"(value, form=None)",68-69,false,2,2,action
+      WizardClient.health,method,(),70-70,false,1,1,health
+      WizardClient.containers,method,(),71-71,false,1,1,containers
+      WizardClient.logs,method,(n=40),72-72,false,1,1,logs
+      WizardClient.history,method,(),73-73,false,1,1,history
+      WizardClient.events_since,method,(since_id=0),74-74,false,1,1,events since
+      WizardClient.ping,method,(),75-77,false,3,1,ping
   dockfra/engines.py:
     functions[30]{name,kind,sig,loc,async,lines,cc,does}:
       _strip_motd,function,"(text:str) -> str",57-76,false,20,10,Strip MOTD box-drawing banners from command output.
@@ -215,60 +303,64 @@ function_details:
       EngineProtocol.implement_cmd,method,"(ticket_id:str) -> str",37-37,false,1,1,implement cmd
       EngineResult.to_dict,method,() -> dict,48-49,false,2,1,converts dict
   dockfra/app.py:
-    functions[53]{name,kind,sig,loc,async,lines,cc,does}:
-      on_set_lang,function,(data),81-85,false,5,2,Handle language change from frontend.
-      on_connect,function,(),88-112,false,25,4,handles connect
-      on_disconnect,function,(),115-116,false,2,1,handles disconnect
-      on_action,function,(data),119-186,false,68,4,handles action
-      index,function,(),190-192,false,3,1,index
-      dashboard,function,(),195-196,false,2,1,dashboard
-      api_containers,function,(),199-200,false,2,1,api containers
-      api_logs,function,(container),203-210,false,8,2,api logs
-      api_events,function,(),213-220,false,8,4,api events
-      api_env,function,(),223-236,false,14,4,api env
-      api_env_post,function,(),239-248,false,10,8,api env post
-      api_history,function,(),251-256,false,6,1,api history
-      api_processes,function,(),259-300,false,42,10,api processes
-      api_detect,function,(key),303-360,false,58,19,api detect
-      api_ssh_options,function,"(kind, role='developer')",364-473,false,110,34,api ssh options
-      api_device_ips,function,(),476-591,false,116,26,api device ips
-      api_process_action,function,"(action, process_name)",594-615,false,22,8,api process action
-      _load_integration_env,function,(),617-626,false,10,4,Load integration credentials from .env into os.environ and refresh _tickets.
-      _step_ticket_create_wizard,function,(form),629-650,false,22,1,Show ticket creation form in the wizard chat.
-      _step_ticket_create_do,function,(form),652-676,false,25,3,Actually create the ticket from form data.
-      _step_integrations_setup,function,(),678-713,false,36,1,Show integrations configuration form.
-      _step_integrations_save,function,(form),715-746,false,32,12,Save integration credentials to .env.
-      _step_ticket_sync,function,(),748-773,false,26,5,Sync tickets with configured external services.
-      _step_project_stats,function,(),775-843,false,69,23,Show project statistics in the chat.
-      _step_show_ticket,function,"(tid:str)",848-887,false,40,12,Show detailed ticket view with status-aware actions.
-      _step_tickets_review,function,(),890-932,false,43,20,Show all tickets in 'review' status — manager dashboard.
-      _step_manager_approve,function,"(tid:str, form:dict)",935-959,false,25,6,"Manager approves a ticket — marks as done, pushes to GitHub, syncs."
-      _step_manager_reject,function,"(tid:str)",962-979,false,18,2,Manager rejects a ticket — sends back to in_progress for rework.
-      _step_manager_suggest_features,function,(),982-1066,false,85,14,Manager uses LLM to analyze the project and suggest new features/tickets.
-      _step_test_llm_key,function,"(form:dict, return_action:str='')",1069-1140,false,72,16,Test LLM key + model from the form in real-time.
-      _step_engine_select,function,"(form:dict)",1143-1199,false,57,17,Show engine selection UI with auto-test results.
-      _step_set_engine,function,"(engine_id:str)",1202-1214,false,13,2,Set preferred dev engine.
-      _step_engine_autotest,function,(),1217-1246,false,30,5,Auto-test all engines and auto-select first working one.
-      _step_settings_nav,function,(),1249-1262,false,14,9,Show group selector for settings navigation.
-      _dispatch,function,"(value:str, form:dict)",1265-1679,false,415,48,Shared dispatch logic for both SocketIO and REST actions.
-      _run_action_sync,function,"(value:str, form:dict, timeout:float=30.0) -> list[dict]",1681-1737,false,57,18,Run a wizard action synchronously (for REST API).
-      _events_to_rest,function,"(events:list[dict]) -> list[dict]",1739-1771,false,33,13,Convert raw collected events to a clean REST-friendly list.
-      api_action,function,(),1774-1788,false,15,3,Synchronous action endpoint for CLI/REST clients.
-      api_logs_tail,function,(),1791-1795,false,5,1,Return last N lines from the internal log buffer.
-      api_health,function,(),1798-1813,false,16,8,Return algorithmic health analysis of running containers.
-      api_tickets,function,(),1818-1824,false,7,1,List all tickets with optional filters.
-      api_tickets_create,function,(),1827-1848,false,22,4,Create a ticket directly from the wizard.
-      api_ticket_get,function,(ticket_id),1851-1856,false,6,2,Get a single ticket by ID.
-      api_ticket_update,function,(ticket_id),1859-1868,false,10,6,Update ticket fields.
-      api_ticket_comment,function,(ticket_id),1871-1882,false,12,4,Add a comment to a ticket.
-      api_stats,function,(),1885-1949,false,65,21,"Project statistics: tickets, containers, git, integrations."
-      api_ticket_diff,function,(ticket_id),1952-2001,false,50,13,Return git commits and unified diff for a given ticket ID from the app repo.
-      api_developer_health,function,(),2005-2056,false,52,10,Quick health check of the ssh-developer container.
-      api_engine_status,function,(),2060-2070,false,11,3,Test all dev engines and return status.
-      api_developer_logs,function,(),2074-2086,false,13,2,Return last N lines of ssh-developer container logs.
-      api_tickets_sync,function,(),2090-2097,false,8,2,"Sync tickets with external services (GitHub, Jira, Trello, Linear)."
-      api_events_since,function,(since_id),2102-2109,false,8,3,"CQRS Query: return new events since given cursor (for CLI TUI polling)."
-      api_stream,function,(),2113-2138,false,26,1,"CQRS Query: SSE stream — push new events to connected clients in real-time."
+    functions[57]{name,kind,sig,loc,async,lines,cc,does}:
+      on_set_lang,function,(data),82-86,false,5,2,Handle language change from frontend.
+      on_connect,function,(),89-113,false,25,4,handles connect
+      on_disconnect,function,(),116-117,false,2,1,handles disconnect
+      on_action,function,(data),120-187,false,68,4,handles action
+      index,function,(),191-193,false,3,1,index
+      dashboard,function,(),196-197,false,2,1,dashboard
+      api_containers,function,(),200-201,false,2,1,api containers
+      api_logs,function,(container),204-211,false,8,2,api logs
+      api_events,function,(),214-221,false,8,4,api events
+      api_env,function,(),224-237,false,14,4,api env
+      api_env_post,function,(),240-249,false,10,8,api env post
+      api_history,function,(),252-257,false,6,1,api history
+      api_processes,function,(),260-301,false,42,10,api processes
+      api_detect,function,(key),304-361,false,58,19,api detect
+      api_ssh_options,function,"(kind, role='developer')",365-474,false,110,34,api ssh options
+      api_device_ips,function,(),477-592,false,116,26,api device ips
+      api_process_action,function,"(action, process_name)",595-616,false,22,8,api process action
+      _load_integration_env,function,(),618-627,false,10,4,Load integration credentials from .env into os.environ and refresh _tickets.
+      _step_ticket_create_wizard,function,(form),630-655,false,26,7,Show ticket creation form in the wizard chat.
+      _step_ticket_create_do,function,(form),657-681,false,25,3,Actually create the ticket from form data.
+      _ticket_missing_required_fields,function,"(ticket_like:dict) -> list[str]",684-691,false,8,5,Return missing required fields needed for high-quality implementation.
+      _step_ticket_requirements_form,function,"(tid:str, form:Any=None)",694-743,false,50,8,Prompt user for required ticket data before running implementation pipeline.
+      _step_ticket_requirements_save,function,"(tid:str, form:dict)",746-779,false,34,6,Save required ticket fields and propose continuing the pipeline.
+      _step_integrations_setup,function,(),781-816,false,36,1,Show integrations configuration form.
+      _step_integrations_save,function,(form),818-849,false,32,12,Save integration credentials to .env.
+      _step_ticket_sync,function,(),851-876,false,26,5,Sync tickets with configured external services.
+      _step_project_stats,function,(),878-946,false,69,23,Show project statistics in the chat.
+      _step_show_ticket,function,"(tid:str)",951-992,false,42,12,Show detailed ticket view with status-aware actions.
+      _step_tickets_review,function,(),995-1037,false,43,20,Show all tickets in 'review' status — manager dashboard.
+      _step_manager_approve,function,"(tid:str, form:dict)",1040-1064,false,25,6,"Manager approves a ticket — marks as done, pushes to GitHub, syncs."
+      _step_manager_reject,function,"(tid:str)",1067-1084,false,18,2,Manager rejects a ticket — sends back to in_progress for rework.
+      _step_manager_suggest_features,function,(),1087-1171,false,85,14,Manager uses LLM to analyze the project and suggest new features/tickets.
+      _step_test_llm_key,function,"(form:dict, return_action:str='')",1174-1246,false,73,16,Test LLM key + model from the form in real-time.
+      _step_engine_select,function,"(form:dict)",1249-1305,false,57,17,Show engine selection UI with auto-test results.
+      _step_set_engine,function,"(engine_id:str)",1308-1322,false,15,2,Set preferred dev engine.
+      _step_engine_autotest,function,(),1325-1354,false,30,5,Auto-test all engines and auto-select first working one.
+      _step_pipeline_skip_implement,function,"(ticket_id:str)",1357-1424,false,68,8,"Continue pipeline from tests onward, skipping the implement step."
+      _step_settings_nav,function,(),1427-1440,false,14,9,Show group selector for settings navigation.
+      _dispatch,function,"(value:str, form:dict)",1443-2032,false,590,71,Shared dispatch logic for both SocketIO and REST actions.
+      _run_action_sync,function,"(value:str, form:dict, timeout:float=30.0) -> list[dict]",2034-2090,false,57,18,Run a wizard action synchronously (for REST API).
+      _events_to_rest,function,"(events:list[dict]) -> list[dict]",2092-2124,false,33,13,Convert raw collected events to a clean REST-friendly list.
+      api_action,function,(),2127-2141,false,15,3,Synchronous action endpoint for CLI/REST clients.
+      api_logs_tail,function,(),2144-2148,false,5,1,Return last N lines from the internal log buffer.
+      api_health,function,(),2151-2166,false,16,8,Return algorithmic health analysis of running containers.
+      api_tickets,function,(),2171-2177,false,7,1,List all tickets with optional filters.
+      api_tickets_create,function,(),2180-2201,false,22,4,Create a ticket directly from the wizard.
+      api_ticket_get,function,(ticket_id),2204-2209,false,6,2,Get a single ticket by ID.
+      api_ticket_update,function,(ticket_id),2212-2221,false,10,6,Update ticket fields.
+      api_ticket_comment,function,(ticket_id),2224-2235,false,12,4,Add a comment to a ticket.
+      api_stats,function,(),2238-2302,false,65,21,"Project statistics: tickets, containers, git, integrations."
+      api_ticket_diff,function,(ticket_id),2305-2408,false,104,20,Return git commits and unified diff for a given ticket ID.
+      api_developer_health,function,(),2412-2463,false,52,10,Quick health check of the ssh-developer container.
+      api_engine_status,function,(),2467-2477,false,11,3,Test all dev engines and return status.
+      api_developer_logs,function,(),2481-2493,false,13,2,Return last N lines of ssh-developer container logs.
+      api_tickets_sync,function,(),2497-2504,false,8,2,"Sync tickets with external services (GitHub, Jira, Trello, Linear)."
+      api_events_since,function,(since_id),2509-2516,false,8,3,"CQRS Query: return new events since given cursor (for CLI TUI polling)."
+      api_stream,function,(),2520-2545,false,26,1,"CQRS Query: SSE stream — push new events to connected clients in real-time."
   dockfra/llm_client.py:
     functions[4]{name,kind,sig,loc,async,lines,cc,does}:
       get_config,function,(),17-25,false,9,1,Load LLM config from environment.
@@ -315,7 +407,7 @@ function_details:
       _get_role,function,"(role:str)",176-195,false,20,5,"Get role data, falling back to a minimal stub."
       _step_ssh_info,function,"(value:str)",198-249,false,52,12,"Handle ssh_info::role::port button — show action grid for role commands."
       step_ssh_console,function,"(value:str)",252-257,false,6,3,Alias — redirect to action grid view.
-      run_ssh_cmd,function,"(value:str, form:dict)",260-385,false,126,12,Execute selected command via docker exec and stream output to chat.
+      run_ssh_cmd,function,"(value:str, form:dict)",260-406,false,147,12,Execute selected command via docker exec and stream output to chat.
   dockfra/__main__.py:
     functions[4]{name,kind,sig,loc,async,lines,cc,does}:
       _serve,function,"(host:str, port:int, root:Any) -> None",8-19,false,12,3,serve
@@ -363,54 +455,59 @@ function_details:
       EventBus.query_max_id,method,() -> int,177-181,false,5,2,"Query side: get latest event ID."
       EventBus.replay,method,"(since_id:int=0, handler:Any=None) -> int",183-200,false,18,6,Replay events from store through a handler (for rebuilding projections).
   dockfra/core.py:
-    functions[40]{name,kind,sig,loc,async,lines,cc,does}:
-      _docker_client,function,(),61-68,false,8,3,"Return a docker SDK client, or None if unavailable."
-      _build_wizard_prompt,function,() -> str,70-97,false,28,3,Build system prompt dynamically from discovered stacks.
-      _sid_emit,function,"(event, data)",125-146,false,22,6,"Emit to all clients, persist to SQLite, and optionally collect for REST."
-      cname,function,"(service:str) -> str",162-164,false,3,1,"Container name from service: cname('traefik') → 'dockfra-traefik"
-      short_name,function,"(container:str) -> str",166-169,false,4,2,"Strip project prefix: 'dockfra-traefik' → 'traefik"
-      _discover_stacks,function,() -> dict,174-184,false,11,7,"Auto-discover stacks: subdirs of ROOT that contain docker-compose.yml."
-      _load_project_config,function,() -> dict,195-215,false,21,10,Load optional dockfra.yaml from project root.
-      _parse_compose_env_vars,function,() -> dict,220-248,false,29,13,"Scan all docker-compose files for ${VAR:-default} patterns."
-      _build_env_schema,function,() -> list,379-444,false,66,24,Merge core schema + auto-discovered compose vars + dockfra.yaml overrides.
-      _schema_defaults,function,() -> dict,449-450,false,2,2,schema defaults
-      load_env,function,() -> dict,452-464,false,13,8,"Load dockfra/.env, create from .env.example if missing."
-      save_env,function,"(updates:dict)",466-493,false,28,13,Write updates to dockfra/.env preserving comments and unknown keys.
-      reset_state,function,(),522-529,false,8,2,reset state
-      detect_config,function,(),534-553,false,20,11,detect config
-      _emit_log_error,function,"(line:str, fired:set)",555-667,false,113,42,Check a single log line against health + config-error patterns; emit alerts/form...
-      _strip_motd_line,function,"(text:str) -> bool",669-681,false,13,6,Return True if the line is a MOTD box-drawing line that should be suppressed.
-      run_cmd,function,"(cmd, cwd=None)",684-708,false,25,11,starts cmd
-      docker_ps,function,(),710-733,false,24,9,docker ps
-      mask,function,(k),735-735,false,1,2,mask
-      msg,function,"(text, role='bot')",737-740,false,4,1,msg
-      widget,function,(w),741-741,false,1,1,widget
-      buttons,function,"(items, label='')",742-742,false,1,1,buttons
-      text_input,function,"(n, l, ph='', v='', sec=False, hint='', chips=None, modal_type='')",743-743,false,1,2,text input
-      select,function,"(n, l, opts, v='', desc='', autodetect=False)",744-744,false,1,1,retrieves
-      code_block,function,(t),745-745,false,1,1,code block
-      status_row,function,(items),746-746,false,1,1,status row
-      progress,function,"(label, done=False, error=False)",747-747,false,1,1,progress
-      action_grid,function,"(run_value, commands, label='')",748-748,false,1,1,action grid
-      clear_widgets,function,(),749-749,false,1,1,deletes widgets
-      _env_status_summary,function,() -> str,752-762,false,11,6,"One-line summary: which required vars are missing."
-      _arp_devices,function,"() -> list[dict]",765-791,false,27,13,"Return [{ip, mac, iface, state}] sorted REACHABLE first."
-      _devices_env_ip,function,() -> str,793-802,false,10,6,Read RPI3_HOST from devices/.env.local or devices/.env.
-      _docker_container_env,function,"(container:str, var:str) -> str",804-815,false,12,4,Extract an env var value from a running Docker container.
-      _local_interfaces,function,"() -> list[str]",817-826,false,10,3,Return host IPs (non-loopback).
-      _subnet_ping_sweep,function,"(max_hosts:int=254, timeout:float=0.4) -> list[str]",828-866,false,39,15,Ping-sweep the host's first non-loopback /24 subnet.
-      _detect_suggestions,function,() -> dict,868-1069,false,202,88,Auto-detect suggested values for form fields.
-      _emit_missing_fields,function,"(missing:list[dict])",1071-1093,false,23,7,"Emit input/select widgets for each missing env var, with smart suggestions."
-      _emit_config_form,function,"(title:str, desc:str, fields:list, settings_group:str, fired_key:str, fired:set)",1191-1220,false,30,7,Emit a config_prompt widget for interactive in-chat configuration.
-      _docker_logs,function,"(name:str, tail:int=40) -> str",1286-1300,false,15,5,"Get container logs — shell first, SDK fallback."
-      _analyze_container_log,function,"(name:str) -> tuple[str, list]",1303-1327,false,25,8,"Read last 40 lines of a container log and return (finding_text, buttons)."
+    functions[45]{name,kind,sig,loc,async,lines,cc,does}:
+      _docker_client,function,(),65-72,false,8,3,"Return a docker SDK client, or None if unavailable."
+      _build_wizard_prompt,function,() -> str,74-101,false,28,3,Build system prompt dynamically from discovered stacks.
+      _sid_emit,function,"(event, data)",136-162,false,27,11,"Emit to all clients, persist to SQLite, and optionally collect for REST."
+      cname,function,"(service:str) -> str",178-180,false,3,1,"Container name from service: cname('traefik') → 'dockfra-traefik"
+      short_name,function,"(container:str) -> str",182-185,false,4,2,"Strip project prefix: 'dockfra-traefik' → 'traefik"
+      _discover_stacks,function,() -> dict,190-200,false,11,7,"Auto-discover stacks: subdirs of ROOT that contain docker-compose.yml."
+      _load_project_config,function,() -> dict,211-231,false,21,10,Load optional dockfra.yaml from project root.
+      _expand_env_vars,function,"(text:str) -> str",236-244,false,9,1,"Expand ${VAR:-default} and $VAR patterns using _state and os.environ."
+      _eval_post_launch_condition,function,"(cond:str, running_names:set) -> bool",247-266,false,20,9,Evaluate a post_launch condition string.
+      _render_post_launch,function,"(running_names:set, ssh_roles:dict)",269-314,false,46,14,Build and emit post-launch buttons from SSH roles + dockfra.yaml post_launch hoo...
+      _parse_compose_env_vars,function,() -> dict,318-346,false,29,13,"Scan all docker-compose files for ${VAR:-default} patterns."
+      _build_env_schema,function,() -> list,480-545,false,66,24,Merge core schema + auto-discovered compose vars + dockfra.yaml overrides.
+      _schema_defaults,function,() -> dict,550-551,false,2,2,schema defaults
+      load_env,function,() -> dict,553-565,false,13,8,"Load dockfra/.env, create from .env.example if missing."
+      save_env,function,"(updates:dict)",567-594,false,28,13,Write updates to dockfra/.env preserving comments and unknown keys.
+      save_state,function,(),633-654,false,22,15,Persist non-sensitive _state keys to dockfra/.state.json.
+      load_state,function,() -> dict,657-664,false,8,3,Load persisted state from dockfra/.state.json.
+      reset_state,function,(),667-678,false,12,5,reset state
+      detect_config,function,(),683-702,false,20,11,detect config
+      _emit_log_error,function,"(line:str, fired:set)",704-860,false,157,64,Check a single log line against health + config-error patterns; emit alerts/form...
+      _strip_motd_line,function,"(text:str) -> bool",862-874,false,13,6,Return True if the line is a MOTD box-drawing line that should be suppressed.
+      run_cmd,function,"(cmd, cwd=None)",877-910,false,34,14,starts cmd
+      docker_ps,function,(),912-935,false,24,9,docker ps
+      mask,function,(k),937-937,false,1,2,mask
+      msg,function,"(text, role='bot')",939-942,false,4,1,msg
+      widget,function,(w),943-943,false,1,1,widget
+      buttons,function,"(items, label='')",944-944,false,1,1,buttons
+      text_input,function,"(n, l, ph='', v='', sec=False, hint='', chips=None, modal_type='')",945-945,false,1,2,text input
+      select,function,"(n, l, opts, v='', desc='', autodetect=False)",946-946,false,1,1,retrieves
+      code_block,function,(t),947-947,false,1,1,code block
+      status_row,function,(items),948-948,false,1,1,status row
+      progress,function,"(label, done=False, error=False)",949-949,false,1,1,progress
+      action_grid,function,"(run_value, commands, label='')",950-950,false,1,1,action grid
+      clear_widgets,function,(),951-951,false,1,1,deletes widgets
+      _env_status_summary,function,() -> str,954-964,false,11,6,"One-line summary: which required vars are missing."
+      _arp_devices,function,"() -> list[dict]",967-993,false,27,13,"Return [{ip, mac, iface, state}] sorted REACHABLE first."
+      _devices_env_ip,function,() -> str,995-1004,false,10,6,Read RPI3_HOST from devices/.env.local or devices/.env.
+      _docker_container_env,function,"(container:str, var:str) -> str",1006-1017,false,12,4,Extract an env var value from a running Docker container.
+      _local_interfaces,function,"() -> list[str]",1019-1028,false,10,3,Return host IPs (non-loopback).
+      _subnet_ping_sweep,function,"(max_hosts:int=254, timeout:float=0.4) -> list[str]",1030-1068,false,39,15,Ping-sweep the host's first non-loopback /24 subnet.
+      _detect_suggestions,function,() -> dict,1070-1271,false,202,88,Auto-detect suggested values for form fields.
+      _emit_missing_fields,function,"(missing:list[dict])",1273-1295,false,23,7,"Emit input/select widgets for each missing env var, with smart suggestions."
+      _emit_config_form,function,"(title:str, desc:str, fields:list, settings_group:str, fired_key:str, fired:set)",1393-1424,false,32,7,Emit a config_prompt widget for interactive in-chat configuration.
+      _docker_logs,function,"(name:str, tail:int=40) -> str",1493-1507,false,15,5,"Get container logs — shell first, SDK fallback."
+      _analyze_container_log,function,"(name:str) -> tuple[str, list]",1510-1534,false,25,8,"Read last 40 lines of a container log and return (finding_text, buttons)."
   dockfra/pipeline.py:
     functions[26]{name,kind,sig,loc,async,lines,cc,does}:
       _ensure_dir,function,(),27-28,false,2,1,ensure dir
-      run_step,function,"(exec_fn, step_name:str) -> StepResult",264-292,false,29,12,"Execute a pipeline step, measure time, capture output, score result."
-      evaluate_implementation,function,"(output:str) -> float",295-318,false,24,14,Score an LLM implementation output based on heuristics.
-      evaluate_test_output,function,"(output:str, rc:int) -> float",321-339,false,19,8,Score test output.
-      build_retry_prompt,function,"(state:PipelineState, failed_step:StepResult, ticket:dict) -> str",342-366,false,25,5,Build an LLM prompt that includes context from previous failures.
+      run_step,function,"(exec_fn, step_name:str) -> StepResult",265-294,false,30,12,"Execute a pipeline step, measure time, capture output, score result."
+      evaluate_implementation,function,"(output:str) -> float",297-320,false,24,14,Score an LLM implementation output based on heuristics.
+      evaluate_test_output,function,"(output:str, rc:int) -> float",323-341,false,19,8,Score test output.
+      build_retry_prompt,function,"(state:PipelineState, failed_step:StepResult, ticket:dict) -> str",344-368,false,25,5,Build an LLM prompt that includes context from previous failures.
       StepResult.__init__,method,"(step:str, rc:int=0, output:str='', duration:float=0, error:str='', score:float=1.0, meta:dict=None)",37-45,false,9,2,creates
       StepResult.ok,method,() -> bool,47-48,false,2,2,ok
       StepResult.to_dict,method,() -> dict,50-56,false,7,1,converts dict
@@ -431,7 +528,7 @@ function_details:
       PipelineState.compute_overall_score,method,() -> float,201-216,false,16,6,Compute weighted score from all steps in current iteration.
       PipelineState.should_retry,method,"(step:str) -> tuple[bool, str]",218-228,false,11,4,"Decide if a failed step should be retried, based on error patterns."
       PipelineState.get_strategy_adjustment,method,"(step:str) -> str",230-246,false,17,6,"Based on error patterns, suggest a strategy adjustment."
-      PipelineState.summary,method,() -> str,248-259,false,12,5,Human-readable summary of pipeline state.
+      PipelineState.summary,method,() -> str,248-260,false,13,7,Human-readable summary of pipeline state.
   dockfra/db.py:
     functions[9]{name,kind,sig,loc,async,lines,cc,does}:
       init_db,function,(path) -> None,22-40,false,19,1,Initialize SQLite database and create schema if needed.
@@ -468,42 +565,42 @@ function_details:
       tryRenderTickets,function,(text),201-272,false,72,1,try render tickets
       stripMotd,function,(text),275-297,false,23,1,strip motd
       copyMessage,function,(button),349-359,false,11,1,copy message
-      collectForm,function,(),380-385,false,6,1,collect form
-      sendAction,function,"(value, label)",387-396,false,10,1,sends action
-      buildParamWidget,function,"(cmd, onRun)",398-472,false,75,1,creates param widget
-      renderActionGrid,function,(d),474-529,false,56,1,formats action grid
-      renderButtons,function,(d),531-545,false,15,1,formats buttons
-      flushForm,function,(),551-557,false,7,1,flush form
-      getOrCreateForm,function,(),559-567,false,9,1,retrieves or create form
-      buildFieldLabel,function,"(d, targetEl)",569-640,false,72,1,creates field label
-      buildFieldInputWrap,function,"(inp, d)",643-680,false,38,1,creates field input wrap
-      buildFieldChips,function,"(chips, inp, isSecret)",682-703,false,22,1,creates field chips
-      buildFieldHint,function,(hint),705-711,false,7,1,creates field hint
-      renderInput,function,(d),713-740,false,28,1,formats input
-      renderSelect,function,(d),742-793,false,52,1,formats select
-      renderCode,function,(d),795-800,false,6,1,formats code
-      renderConfigPrompt,function,(d),803-815,false,13,1,formats config prompt
-      openConfigModal,function,(d),817-963,false,147,1,starts config modal
-      renderStatus,function,(d),965-977,false,13,1,formats status
-      renderProgress,function,(d),979-994,false,16,1,formats progress
-      setupResizeHandle,function,"(handle, leftPanel, rightPanel)",1005-1015,false,11,1,initializes resize handle
-      restorePanelWidths,function,(),1041-1050,false,10,1,restore panel widths
-      updateProcesses,function,(),1054-1101,true,48,1,updates processes
-      executeProcessAction,function,"(action, processName)",1103-1112,true,10,1,starts process action
-      updateServices,function,(),1120-1154,true,35,1,updates services
-      updateStats,function,(),1159-1335,true,177,1,updates stats
-      flashCopyBtn,function,"(btn, originalText)",1355-1360,false,6,1,flash copy btn
-      openIpPickerModal,function,(targetInput),1395-1441,false,47,1,starts ip picker modal
-      renderIpModal,function,"(body, data, targetInput, overlay)",1443-1563,false,121,1,formats ip modal
-      classifyLogLine,function,(text),1566-1589,false,24,1,classify log line
-      highlightLogText,function,(text),1591-1597,false,7,1,highlight log text
-      submitChatInput,function,(),1608-1624,false,17,1,submit chat input
-      _showDiffToast,function,"(tid, title)",1631-1639,false,9,1,show diff toast
-      openDiffModal,function,"(tid, forceModal)",1641-1723,false,83,1,starts diff modal
-      closeDiffModal,function,(),1725-1730,false,6,1,stops diff modal
-      switchDiffTab,function,(tab),1732-1739,false,8,1,switch diff tab
-      escHtml,function,(s),1743-1745,false,3,1,esc html
-      renderDiffText,function,(raw),1747-1762,false,16,1,formats diff text
+      collectForm,function,(),381-386,false,6,1,collect form
+      sendAction,function,"(value, label)",388-397,false,10,1,sends action
+      buildParamWidget,function,"(cmd, onRun)",399-473,false,75,1,creates param widget
+      renderActionGrid,function,(d),475-530,false,56,1,formats action grid
+      renderButtons,function,(d),532-546,false,15,1,formats buttons
+      flushForm,function,(),552-558,false,7,1,flush form
+      getOrCreateForm,function,(),560-568,false,9,1,retrieves or create form
+      buildFieldLabel,function,"(d, targetEl)",570-641,false,72,1,creates field label
+      buildFieldInputWrap,function,"(inp, d)",644-681,false,38,1,creates field input wrap
+      buildFieldChips,function,"(chips, inp, isSecret)",683-704,false,22,1,creates field chips
+      buildFieldHint,function,(hint),706-712,false,7,1,creates field hint
+      renderInput,function,(d),714-741,false,28,1,formats input
+      renderSelect,function,(d),743-794,false,52,1,formats select
+      renderCode,function,(d),796-801,false,6,1,formats code
+      renderConfigPrompt,function,(d),804-816,false,13,1,formats config prompt
+      openConfigModal,function,(d),818-964,false,147,1,starts config modal
+      renderStatus,function,(d),966-978,false,13,1,formats status
+      renderProgress,function,(d),980-995,false,16,1,formats progress
+      setupResizeHandle,function,"(handle, leftPanel, rightPanel)",1006-1016,false,11,1,initializes resize handle
+      restorePanelWidths,function,(),1042-1051,false,10,1,restore panel widths
+      updateProcesses,function,(),1055-1102,true,48,1,updates processes
+      executeProcessAction,function,"(action, processName)",1104-1113,true,10,1,starts process action
+      updateServices,function,(),1121-1155,true,35,1,updates services
+      updateStats,function,(),1160-1336,true,177,1,updates stats
+      flashCopyBtn,function,"(btn, originalText)",1356-1361,false,6,1,flash copy btn
+      openIpPickerModal,function,(targetInput),1396-1442,false,47,1,starts ip picker modal
+      renderIpModal,function,"(body, data, targetInput, overlay)",1444-1564,false,121,1,formats ip modal
+      classifyLogLine,function,(text),1567-1590,false,24,1,classify log line
+      highlightLogText,function,(text),1592-1598,false,7,1,highlight log text
+      submitChatInput,function,(),1609-1625,false,17,1,submit chat input
+      _showDiffToast,function,"(tid, title)",1632-1640,false,9,1,show diff toast
+      openDiffModal,function,"(tid, forceModal)",1642-1724,false,83,1,starts diff modal
+      closeDiffModal,function,(),1726-1731,false,6,1,stops diff modal
+      switchDiffTab,function,(tab),1733-1740,false,8,1,switch diff tab
+      escHtml,function,(s),1744-1746,false,3,1,esc html
+      renderDiffText,function,(raw),1748-1763,false,16,1,formats diff text
   app/backend/app.py:
     functions[8]{name,kind,sig,loc,async,lines,cc,does}:
       get_db_conn,function,(),39-45,false,7,1,Get PostgreSQL connection.
@@ -529,6 +626,9 @@ function_details:
     functions[2]{name,kind,sig,loc,async,lines,cc,does}:
       check_backend,function,(),19-27,false,9,2,Check backend connectivity.
       main,function,(),30-62,false,33,3,Main desktop application entry point.
+  app/src/components/ContactForm.js:
+    functions[1]{name,kind,sig,loc,async,lines,cc,does}:
+      ContactForm,function,(),3-57,false,55,1,contact form
   app/backend/tests/test_api.py:
     functions[11]{name,kind,sig,loc,async,lines,cc,does}:
       client,function,(),22-26,false,5,1,Flask test client.

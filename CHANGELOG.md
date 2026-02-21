@@ -1,3 +1,21 @@
+## [1.0.56] - 2026-02-21
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Docs
+
+- docs: update audyt.md
+- docs: update do.md
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update project.functions.toon
+
+
 ## [1.0.55] - 2026-02-21
 
 ### Summary

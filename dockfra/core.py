@@ -701,10 +701,87 @@ def detect_config():
             if l.startswith("RPI3_USER="): cfg["device_user"] = l.split("=",1)[1].strip()
     return cfg
 
-def _emit_log_error(line: str, fired: set):
-    """Check a single log line against health + config-error patterns; emit alerts/forms."""
+def _build_env_var_field(var: str) -> dict:
+    """Build a single input field dict for a given env var name."""
+    sk = _ENV_TO_STATE.get(var, var.lower())
+    _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+    _placeholder = ""
+    _chips = []
+    if var.endswith("_URL"):
+        _placeholder = "https://..."
+    elif var.endswith("_EMAIL"):
+        _placeholder = "you@example.com"
+    elif "PORT" in var:
+        _placeholder = "8080"
+    elif var.endswith("_ENABLED") or var.startswith("ENABLE_"):
+        _chips = [{"label": "true", "value": "true"}, {"label": "false", "value": "false"}]
+    elif var.endswith("_INTERVAL") or var.endswith("_INTERVAL_S"):
+        _chips = [{"label": "60", "value": "60"}, {"label": "120", "value": "120"}, {"label": "300", "value": "300"}]
+    return {"name": var, "label": var,
+            "type": "password" if _secret else "text",
+            "placeholder": _placeholder, "chips": _chips,
+            "value": _state.get(sk, "")}
+
+
+def _emit_health_acme_form():
+    """Emit ACME_STORAGE inline input + fix buttons."""
+    cur = _state.get("acme_storage", "letsencrypt/acme.json")
+    _sid_emit("widget", {"type": "input", "name": "ACME_STORAGE",
+                         "label": _t_i18n('acme_storage_label'),
+                         "placeholder": "letsencrypt/acme.json",
+                         "value": cur, "secret": False, "hint":
+                         _t_i18n('acme_hint'),
+                         "chips": [], "modal_type": ""})
+    _sid_emit("widget", {"type": "buttons", "items": [
+        {"label": _t_i18n('apply_fix_traefik'), "value": "fix_acme_storage"},
+        {"label": _t_i18n('settings'), "value": "settings"},
+    ]})
+
+
+def _emit_health_network_form(network: str):
+    """Emit network overlap fix buttons."""
+    _sid_emit("widget", {"type": "buttons", "items": [
+        {"label": _t_i18n('remove_network', net=network),  "value": f"fix_network_overlap::{network}"},
+        {"label": _t_i18n('clean_unused_networks'), "value": "fix_network_overlap::"},
+    ]})
+
+
+def _emit_health_unbound_var_form(line: str, btns: list):
+    """Emit inline input + buttons for unbound / missing env var."""
     import re as _re
-    # ── Config-error patterns (API keys, auth, tool login) ───────────────────
+    _mv = _re.search(r'"([A-Z_]{3,})" variable is not set', line)
+    _uv = _re.search(r':\s*([A-Z][A-Z0-9_]{2,})\s*:\s*unbound variable', line)
+    var = (_mv.group(1) if _mv else (_uv.group(1) if _uv else ""))
+    if not var:
+        if btns:
+            _sid_emit("widget", {"type": "buttons", "items": btns})
+        return
+    field = _build_env_var_field(var)
+    _sid_emit("widget", {"type": "input", "name": var,
+                         "label": var, "placeholder": field["placeholder"] or "",
+                         "value": field["value"],
+                         "secret": field["type"] == "password",
+                         "hint": _t_i18n('set_env_var_hint', var=var),
+                         "chips": field["chips"], "modal_type": ""})
+    btn_items = [
+        {"label": _t_i18n('save_env_var_button', var=var), "value": f"save_env_var::{var}"},
+        {"label": _t_i18n('settings'), "value": "settings"},
+    ]
+    group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
+    if group:
+        btn_items.append({"label": _t_i18n('settings_group_button', group=group), "value": f"settings_group::{group}"})
+    if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
+        env = _state.get("environment", "local")
+        ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
+        btn_items.append({"label": _t_i18n('rebuild_management'), "value": "rebuild_stack::management"})
+        btn_items.append({"label": _t_i18n('restart_autopilot'), "value": f"restart_container::{ap}"})
+        btn_items.append({"label": _t_i18n('check_pilot_status'), "value": "ssh_cmd::autopilot::pilot-status::"})
+    _sid_emit("widget", {"type": "buttons", "items": btn_items})
+
+
+def _match_config_error(line: str, fired: set):
+    """Check line against config-error patterns. Returns True if matched."""
+    import re as _re
     for pattern, title, desc, fields, settings_group in _CONFIG_ERROR_PATTERNS:
         key = "cfg:" + pattern[:40]
         if key in fired:
@@ -712,29 +789,13 @@ def _emit_log_error(line: str, fired: set):
         m = _re.search(pattern, line, _re.IGNORECASE)
         if not m:
             continue
-        # For generic env var catch-all: extract var name from capture group
         extra_fields = list(fields)
         if not extra_fields and m.lastindex:
             for gi in range(1, m.lastindex + 1):
                 try:
                     var = m.group(gi)
                     if var and _re.match(r'^[A-Z][A-Z0-9_]{2,}$', var):
-                        sk = _ENV_TO_STATE.get(var, var.lower())
-                        _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
-                        _placeholder = ""
-                        _chips = []
-                        if var.endswith("_URL"):
-                            _placeholder = "https://..."
-                        elif var.endswith("_EMAIL"):
-                            _placeholder = "you@example.com"
-                        elif "PORT" in var:
-                            _placeholder = "8080"
-                        elif var.endswith("_ENABLED") or var.startswith("ENABLE_"):
-                            _chips = [{"label": "true", "value": "true"}, {"label": "false", "value": "false"}]
-                        extra_fields = [{"name": var, "label": var, "type":
-                            "password" if _secret else "text",
-                            "placeholder": _placeholder, "chips": _chips, "value": _state.get(var.lower(), "")}]
-                        extra_fields[0]["value"] = _state.get(sk, "")
+                        extra_fields = [_build_env_var_field(var)]
                         break
                 except Exception:
                     pass
@@ -743,7 +804,33 @@ def _emit_log_error(line: str, fired: set):
         _resolved_fields = [{**f, "label": (_t_i18n(f["label"]) if f["label"] in _STRINGS else f["label"])} for f in extra_fields]
         _emit_config_form(_title, _t_i18n('detected_in_logs', line=line.strip()[:120], desc=_desc),
                           _resolved_fields, settings_group, key, fired)
-        return True  # one config-form per line
+        return True
+    return False
+
+
+def _emit_health_inline_form(line: str, btn_values: str, btns: list, network: str):
+    """Emit the appropriate inline form/buttons for a matched health pattern."""
+    if "fix_acme_storage" in btn_values:
+        _emit_health_acme_form()
+    elif "fix_network_overlap::" in btn_values and network:
+        _emit_health_network_form(network)
+    elif "fix_network_overlap::" in btn_values and not network:
+        _sid_emit("widget", {"type": "buttons", "items": btns})
+    elif ("variable is not set" in line
+          or "Defaulting to a blank string" in line
+          or "unbound variable" in line):
+        _emit_health_unbound_var_form(line, btns)
+    else:
+        if btns:
+            _sid_emit("widget", {"type": "buttons", "items": btns})
+
+
+def _emit_log_error(line: str, fired: set):
+    """Check a single log line against health + config-error patterns; emit alerts/forms."""
+    import re as _re
+    # ── Config-error patterns (API keys, auth, tool login) ───────────────────
+    if _match_config_error(line, fired):
+        return True
     # ── Docker health patterns ────────────────────────────────────────────────
     for pattern, sev, message, solutions in _HEALTH_PATTERNS:
         key = pattern[:40]
@@ -762,7 +849,6 @@ def _emit_log_error(line: str, fired: set):
                     port = g
             except Exception:
                 pass
-        # extract network name for pool-overlap errors
         _nm = _re.search(r"failed to create network ([\w_-]+)", line)
         if _nm:
             network = _nm.group(1)
@@ -771,91 +857,14 @@ def _emit_log_error(line: str, fired: set):
         for b in solutions:
             val = b["value"].replace("__PORT__", port).replace("__NETWORK__", network)
             if "__NAME__" in val:
-                continue  # skip container-specific buttons during build stream
+                continue
             btns.append({"label": _t_i18n(b["label"]), "value": val})
         _msg = _t_i18n(message, net=PROJECT['network']) if '{net}' in _t_i18n(message) else _t_i18n(message)
         _sid_emit("message", {"role": "bot",
                                "text": f"{icon} **{_msg}**\n`{line.strip()[:160]}`"})
-
-        # ── Inline forms for known fixable patterns ─────────────────────────
         btn_values = " ".join(b["value"] for b in btns)
-
-        if "fix_acme_storage" in btn_values:
-            # Propose ACME_STORAGE path with smart default
-            cur = _state.get("acme_storage", "letsencrypt/acme.json")
-            _sid_emit("widget", {"type": "input", "name": "ACME_STORAGE",
-                                 "label": _t_i18n('acme_storage_label'),
-                                 "placeholder": "letsencrypt/acme.json",
-                                 "value": cur, "secret": False, "hint":
-                                 _t_i18n('acme_hint'),
-                                 "chips": [], "modal_type": ""})
-            _sid_emit("widget", {"type": "buttons", "items": [
-                {"label": _t_i18n('apply_fix_traefik'), "value": "fix_acme_storage"},
-                {"label": _t_i18n('settings'), "value": "settings"},
-            ]})
-
-        elif "fix_network_overlap::" in btn_values and network:
-            # Show network removal with specific name pre-filled
-            _sid_emit("widget", {"type": "buttons", "items": [
-                {"label": _t_i18n('remove_network', net=network),  "value": f"fix_network_overlap::{network}"},
-                {"label": _t_i18n('clean_unused_networks'), "value": "fix_network_overlap::"},
-            ]})
-
-        elif "fix_network_overlap::" in btn_values and not network:
-            _sid_emit("widget", {"type": "buttons", "items": btns})
-
-        elif ("variable is not set" in line
-              or "Defaulting to a blank string" in line
-              or "unbound variable" in line):
-            # Extract var name and propose inline input
-            _mv = _re.search(r'"([A-Z_]{3,})" variable is not set', line)
-            _uv = _re.search(r':\s*([A-Z][A-Z0-9_]{2,})\s*:\s*unbound variable', line)
-            var = (_mv.group(1) if _mv else (_uv.group(1) if _uv else ""))
-            if var:
-                sk = _ENV_TO_STATE.get(var, var.lower())
-                _secret = any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
-                _placeholder = ""
-                _chips = []
-                if var.endswith("_URL"):
-                    _placeholder = "https://..."
-                elif var.endswith("_EMAIL"):
-                    _placeholder = "you@example.com"
-                elif "PORT" in var:
-                    _placeholder = "8080"
-                elif var.endswith("_ENABLED") or var.startswith("ENABLE_"):
-                    _chips = [{"label": "true", "value": "true"}, {"label": "false", "value": "false"}]
-                elif var.endswith("_INTERVAL") or var.endswith("_INTERVAL_S"):
-                    _chips = [{"label": "60", "value": "60"}, {"label": "120", "value": "120"}, {"label": "300", "value": "300"}]
-                _sid_emit("widget", {"type": "input", "name": var,
-                                     "label": var, "placeholder": _placeholder or "",
-                                     "value": _state.get(sk, ""),
-                                     "secret": _secret,
-                                     "hint": _t_i18n('set_env_var_hint', var=var),
-                                     "chips": _chips, "modal_type": ""})
-
-                btn_items = [
-                    {"label": _t_i18n('save_env_var_button', var=var), "value": f"save_env_var::{var}"},
-                    {"label": _t_i18n('settings'), "value": "settings"},
-                ]
-                group = next((e.get("group", "") for e in ENV_SCHEMA if e.get("key") == var), "")
-                if group:
-                    btn_items.append({"label": _t_i18n('settings_group_button', group=group), "value": f"settings_group::{group}"})
-                if "autopilot-daemon.sh" in line or "[autopilot]" in line or var.startswith("AUTOPILOT_"):
-                    env = _state.get("environment", "local")
-                    ap = "dockfra-ssh-autopilot-prod" if env == "production" else cname("ssh-autopilot")
-                    btn_items.append({"label": _t_i18n('rebuild_management'), "value": "rebuild_stack::management"})
-                    btn_items.append({"label": _t_i18n('restart_autopilot'), "value": f"restart_container::{ap}"})
-                    btn_items.append({"label": _t_i18n('check_pilot_status'), "value": "ssh_cmd::autopilot::pilot-status::"})
-                _sid_emit("widget", {"type": "buttons", "items": btn_items})
-            else:
-                if btns:
-                    _sid_emit("widget", {"type": "buttons", "items": btns})
-
-        else:
-            if btns:
-                _sid_emit("widget", {"type": "buttons", "items": btns})
-
-        return True  # one alert per line
+        _emit_health_inline_form(line, btn_values, btns, network)
+        return True
 
     return False
 
@@ -1067,11 +1076,8 @@ def _subnet_ping_sweep(max_hosts: int = 254, timeout: float = 0.4) -> list[str]:
             if result: responding.append(result)
     return responding
 
-def _detect_suggestions() -> dict:
-    """Auto-detect suggested values for form fields. Returns {key: {value, hint, chips}}."""
-    s: dict[str, dict] = {}
-
-    # ── Git repo info ─────────────────────────────────────────────────────────
+def _detect_git_suggestions(s: dict):
+    """Detect git repo URL, branch, user name/email."""
     try:
         url = subprocess.check_output(
             ["git", "remote", "get-url", "origin"],
@@ -1093,8 +1099,6 @@ def _detect_suggestions() -> dict:
             "chips": [{"label": b, "value": b} for b in branches],
         }
     except: pass
-
-    # ── Git config ────────────────────────────────────────────────────────────
     for key, cmd in [("GIT_NAME",  ["git","config","--global","user.name"]),
                      ("GIT_EMAIL", ["git","config","--global","user.email"])]:
         try:
@@ -1102,7 +1106,9 @@ def _detect_suggestions() -> dict:
             if v: s[key] = {"value": v, "hint": f"z ~/.gitconfig"}
         except: pass
 
-    # ── SSH keys ──────────────────────────────────────────────────────────────
+
+def _detect_ssh_keys(s: dict):
+    """Detect SSH keys in ~/.ssh."""
     ssh_dir = Path.home() / ".ssh"
     if ssh_dir.exists():
         keys = sorted(f for f in ssh_dir.iterdir()
@@ -1114,35 +1120,40 @@ def _detect_suggestions() -> dict:
                 "chips": [{"label": f.name, "value": str(f)} for f in keys[:6]],
             }
 
-    # ── OpenRouter key ────────────────────────────────────────────────────────
+
+def _detect_api_keys(s: dict):
+    """Detect API keys from environment variables."""
     or_key = os.environ.get("OPENROUTER_API_KEY", "")
     if or_key:
         s["OPENROUTER_API_KEY"] = {"value": or_key, "hint": "z zmiennej środowiskowej"}
 
-    # ── Random secrets ────────────────────────────────────────────────────────
+
+def _detect_secrets(s: dict):
+    """Generate random secret suggestions."""
     for key, n in [("POSTGRES_PASSWORD", 12), ("REDIS_PASSWORD", 12), ("SECRET_KEY", 32)]:
         gens = [_secrets.token_urlsafe(n) for _ in range(3)]
         s[key] = {"value": "", "hint": "kliknij chip aby wstawić",
                   "chips": [{"label": g, "value": g} for g in gens]}
 
-    # ── Device IP (priority chain) ────────────────────────────────────────────
-    local_ips = set(_local_interfaces())
-    def _is_docker_internal(ip: str) -> bool:
-        p = ip.split(".")
-        if len(p) != 4: return False
-        a, b = int(p[0]), int(p[1])
-        return (a == 172 and 16 <= b <= 31) or (a == 10 and b in (0, 1, 88, 89))
 
-    # L1: devices stack env files
+def _is_docker_internal(ip: str) -> bool:
+    """Check if IP belongs to Docker internal network ranges."""
+    p = ip.split(".")
+    if len(p) != 4: return False
+    a, b = int(p[0]), int(p[1])
+    return (a == 172 and 16 <= b <= 31) or (a == 10 and b in (0, 1, 88, 89))
+
+
+def _detect_device_ip(s: dict):
+    """Detect device IP from env files, Docker containers, and ARP cache."""
+    local_ips = set(_local_interfaces())
     env_ip = _devices_env_ip()
-    # L2: running devices-stack container
     docker_ip = ""
     for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
         docker_ip = _docker_container_env(cn, "RPI3_HOST")
         if docker_ip: break
     best_ip = env_ip or docker_ip or ""
 
-    # L3: ARP cache — REACHABLE first, icons by state
     arp = _arp_devices()
     state_icon = {"REACHABLE": "🟢", "DELAY": "🟡", "PROBE": "🟡",
                   "STALE": "🟠", "FAILED": "🔴", "UNKNOWN": "⚪"}
@@ -1174,14 +1185,22 @@ def _detect_suggestions() -> dict:
         "chips": chips,
     }
 
-    # ── Device SSH user (common defaults for embedded/SBC devices) ────────────
-    env_user = ""
+
+def _read_devices_env_var(pattern: str) -> str:
+    """Read a variable from devices/.env or .env.local matching the given regex pattern."""
+    val = ""
     for ef in [ROOT / "devices" / ".env", ROOT / "devices" / ".env.local"]:
         if ef.exists():
             for line in ef.read_text(errors="ignore").splitlines():
-                m = _re.match(r'^(?:RPI3_USER|DEVICE_USER)=(.+)$', line.strip())
-                if m: env_user = m.group(1).strip(); break
-        if env_user: break
+                m = _re.match(pattern, line.strip())
+                if m: val = m.group(1).strip(); break
+        if val: break
+    return val
+
+
+def _detect_device_user(s: dict):
+    """Detect device SSH user from env files, Docker, and common defaults."""
+    env_user = _read_devices_env_var(r'^(?:RPI3_USER|DEVICE_USER)=(.+)$')
     docker_user = ""
     for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
         docker_user = _docker_container_env(cn, "RPI3_USER")
@@ -1208,14 +1227,10 @@ def _detect_suggestions() -> dict:
         "chips": user_chips,
     }
 
-    # ── Device SSH port ──────────────────────────────────────────────────────
-    env_port = ""
-    for ef in [ROOT / "devices" / ".env", ROOT / "devices" / ".env.local"]:
-        if ef.exists():
-            for line in ef.read_text(errors="ignore").splitlines():
-                m = _re.match(r'^(?:RPI3_PORT|DEVICE_PORT|SSH_PORT)=(\d+)$', line.strip())
-                if m: env_port = m.group(1).strip(); break
-        if env_port: break
+
+def _detect_device_port(s: dict):
+    """Detect device SSH port from env files, Docker, and common defaults."""
+    env_port = _read_devices_env_var(r'^(?:RPI3_PORT|DEVICE_PORT|SSH_PORT)=(\d+)$')
     docker_port = ""
     for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
         docker_port = _docker_container_env(cn, "RPI3_PORT")
@@ -1241,13 +1256,13 @@ def _detect_suggestions() -> dict:
         "chips": port_chips,
     }
 
-    # ── App name from project path ────────────────────────────────────────────
+
+def _detect_app_info(s: dict):
+    """Detect app name from project path and version from git tag."""
     project_name = ROOT.name.lower().replace("-","_")
     s["APP_NAME"]     = {"value": project_name, "hint": f"z nazwy katalogu: {ROOT.name}"}
     s["POSTGRES_DB"]  = {"value": project_name, "hint": "zwykle = APP_NAME"}
     s["POSTGRES_USER"]= {"value": project_name, "hint": "zwykle = APP_NAME"}
-
-    # ── App version from git tag ──────────────────────────────────────────────
     try:
         tag = subprocess.check_output(
             ["git","describe","--tags","--abbrev=0"],
@@ -1255,7 +1270,9 @@ def _detect_suggestions() -> dict:
         if tag: s["APP_VERSION"] = {"value": tag, "hint": f"ostatni git tag: v{tag}"}
     except: pass
 
-    # ── Free port suggestions ─────────────────────────────────────────────────
+
+def _detect_free_ports(s: dict):
+    """Find free ports for services that need them."""
     def _free(port: int, stop: int = 20) -> int:
         for p in range(port, port + stop):
             try:
@@ -1268,6 +1285,20 @@ def _detect_suggestions() -> dict:
         if p != dflt:
             s[key] = {"value": str(p), "hint": f"port {dflt} zajęty → wolny: {p}",
                       "chips": [{"label": str(p), "value": str(p)}]}
+
+
+def _detect_suggestions() -> dict:
+    """Auto-detect suggested values for form fields. Returns {key: {value, hint, chips}}."""
+    s: dict[str, dict] = {}
+    _detect_git_suggestions(s)
+    _detect_ssh_keys(s)
+    _detect_api_keys(s)
+    _detect_secrets(s)
+    _detect_device_ip(s)
+    _detect_device_user(s)
+    _detect_device_port(s)
+    _detect_app_info(s)
+    _detect_free_ports(s)
     return s
 
 def _emit_missing_fields(missing: list[dict]):

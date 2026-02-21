@@ -1440,595 +1440,591 @@ def _step_settings_nav():
     buttons(btn_items)
 
 
-def _dispatch(value: str, form: dict):
-    """Shared dispatch logic for both SocketIO and REST actions."""
-    if value.startswith("logs::"):          step_show_logs(value.split("::",1)[1]); return True
-    if value.startswith("fix_container::"): step_fix_container(value.split("::",1)[1]); return True
-    if value.startswith("fix_network_overlap::"): fix_network_overlap(value.split("::",1)[1]); return True
-    if value.startswith("fix_readonly_volume::"): fix_readonly_volume(value.split("::",1)[1]); return True
-    if value == "save_env_vars":
-        env_updates: dict[str, str] = {}
-        for k, v in (form or {}).items():
-            if not isinstance(k, str):
-                continue
-            key = k.strip()
-            if not key or not _re.match(r'^[A-Z][A-Z0-9_]{2,}$', key):
-                continue
-            val = str(v).strip() if v is not None else ""
-            env_updates[key] = val
-            sk = _ENV_TO_STATE.get(key, key.lower())
-            _state[sk] = val
-        if env_updates:
-            save_env(env_updates)
-            save_state()
-            clear_widgets()
-            msg("✅ Zapisano zmienne do `dockfra/.env`:" + "\n" + "\n".join(f"- `{k}`" for k in sorted(env_updates)))
-        else:
-            msg("⚠️ Brak poprawnych zmiennych do zapisu.")
-        buttons([
-            {"label": t('settings'), "value": "settings"},
-            {"label": t('menu'),     "value": "back"},
-        ])
-        return True
-    if value.startswith("save_env_var::"):
-        var = value.split("::", 1)[1]
-        raw = form.get(var, "")
-        val = str(raw).strip() if raw is not None else ""
-        sk = _ENV_TO_STATE.get(var, var.lower())
+# ── Dispatch helpers ──────────────────────────────────────────────────────────
+
+def _dispatch_threaded(fn, *args, delay: float = 0.0):
+    """Run *fn* in a daemon thread, propagating the current SocketIO sid."""
+    _tl_sid = getattr(_tl, 'sid', None)
+    def _wrapper():
+        _tl.sid = _tl_sid
+        try:
+            if delay:
+                time.sleep(delay)
+            fn(*args)
+        finally:
+            _tl.sid = None
+    threading.Thread(target=_wrapper, daemon=True).start()
+
+
+def _handle_save_env_vars(form: dict):
+    env_updates: dict[str, str] = {}
+    for k, v in (form or {}).items():
+        if not isinstance(k, str):
+            continue
+        key = k.strip()
+        if not key or not _re.match(r'^[A-Z][A-Z0-9_]{2,}$', key):
+            continue
+        val = str(v).strip() if v is not None else ""
+        env_updates[key] = val
+        sk = _ENV_TO_STATE.get(key, key.lower())
         _state[sk] = val
-        save_env({var: val})
+    if env_updates:
+        save_env(env_updates)
         save_state()
         clear_widgets()
-        disp = mask(val) if any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD")) and val else (val or t('empty_val'))
-        msg(f"✅ Zapisano `{var}` = `{disp}` do `dockfra/.env`.")
+        msg("✅ Zapisano zmienne do `dockfra/.env`:" + "\n" + "\n".join(f"- `{k}`" for k in sorted(env_updates)))
+    else:
+        msg("⚠️ Brak poprawnych zmiennych do zapisu.")
+    buttons([
+        {"label": t('settings'), "value": "settings"},
+        {"label": t('menu'),     "value": "back"},
+    ])
+
+
+def _handle_save_env_var(value: str, form: dict):
+    var = value.split("::", 1)[1]
+    raw = form.get(var, "")
+    val = str(raw).strip() if raw is not None else ""
+    sk = _ENV_TO_STATE.get(var, var.lower())
+    _state[sk] = val
+    save_env({var: val})
+    save_state()
+    clear_widgets()
+    disp = mask(val) if any(k in var for k in ("KEY", "TOKEN", "SECRET", "PASSWORD")) and val else (val or t('empty_val'))
+    msg(f"✅ Zapisano `{var}` = `{disp}` do `dockfra/.env`.")
+    buttons([
+        {"label": t('settings'), "value": "settings"},
+        {"label": t('menu'),     "value": "back"},
+    ])
+
+
+def _handle_open_url(value: str):
+    from .core import widget
+    url = value.split("::", 1)[1]
+    msg(f"🔗 **Link:** [{url}]({url})")
+    widget({"type": "open_url", "url": url})
+    buttons([{"label": t('menu'), "value": "back"}])
+
+
+def _handle_open_github(value: str):
+    repo = value.split("::", 1)[1]
+    msg(f"🔗 **GitHub:** [https://github.com/{repo}](https://github.com/{repo})")
+    buttons([{"label": "🏠 Menu", "value": "back"}])
+
+
+def _handle_clone_and_launch():
+    repo_url = _state.get("git_repo_url", "")
+    branch   = _state.get("git_branch", "main") or "main"
+    app_dir  = ROOT / "app"
+    if not repo_url:
+        msg("❌ `GIT_REPO_URL` nie jest ustawiony.")
+        buttons([{"label": "⚙️ Ustaw GIT_REPO_URL", "value": "settings_group::Git"}])
+        return
+    if not app_dir.exists() or not any(app_dir.iterdir()):
+        progress(f"📥 Klonuję {repo_url}…")
+        rc = subprocess.run(
+            ["git", "clone", "--branch", branch, "--depth", "1", repo_url, str(app_dir)],
+            capture_output=True, text=True)
+        if rc.returncode != 0:
+            progress("clone", error=True)
+            msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
+            buttons([{"label": t('change_git_url'), "value": "settings_group::Git"},
+                     {"label": t('menu'), "value": "back"}])
+            return
+        progress("clone", done=True)
+        msg(f"✅ Sklonowano do `{app_dir}`")
+    _refresh_ssh_roles()
+    step_do_launch({"stacks": "app", "environment": _state.get("environment", "local")})
+
+
+def _handle_fix_compose(value: str):
+    stack = value.split('::', 1)[1]
+    msg(f"ℹ️ Plik `{stack}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
+    buttons([{"label": t('show_logs_btn'), "value": f"logs_stack::{stack}"},
+             {"label": t('back'), "value": "back"}])
+
+
+def _handle_preflight_save_launch(value: str, form: dict):
+    env_updates: dict[str, str] = {}
+    for k, v in form.items():
+        if k in _ENV_TO_STATE:
+            _state[_ENV_TO_STATE[k]] = str(v).strip()
+            env_updates[k] = str(v).strip()
+    if env_updates:
+        save_env(env_updates)
+        save_state()
+    stacks_str = value.split("::", 1)[1]
+    _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(",")) == 1 else "all"
+    step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment", "local")})
+
+
+def _handle_push_github(value: str):
+    ticket_id = value.split("::", 1)[1]
+    _load_integration_env()
+    import os
+    if not os.environ.get("GITHUB_TOKEN") or not os.environ.get("GITHUB_REPO"):
+        msg("❌ Brak konfiguracji GitHub.\n"
+            "[[🔗 Konfiguruj integracje|integrations_setup]]")
+        return
+    progress(f"🔗 Wysyłam {ticket_id} do GitHub Issues…")
+    result = _tickets.push_to_github(ticket_id)
+    if result and result.get("github_issue_number"):
+        repo = os.environ.get("GITHUB_REPO", "")
+        num = result["github_issue_number"]
+        msg(f"✅ **{ticket_id}** → [GitHub Issue #{num}](https://github.com/{repo}/issues/{num})")
+    else:
+        msg(f"❌ Nie udało się wypchnąć {ticket_id} do GitHub. Sprawdź `GITHUB_TOKEN` i `GITHUB_REPO`.")
+
+
+def _handle_ssh_cmd(value: str, form: dict):
+    parts = value.split("::", 3)
+    role_  = parts[1] if len(parts) > 1 else "developer"
+    cmd_   = parts[2] if len(parts) > 2 else ""
+    arg_   = parts[3] if len(parts) > 3 else ""
+    ri_    = _get_role(role_)
+    if cmd_ == "ticket-work" and arg_:
+        _handle_ticket_work_pipeline(role_, arg_, ri_)
+    else:
+        synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
+        run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
+        run_ssh_cmd(run_value_, synth_form)
+
+
+def _handle_ticket_work_pipeline(role_: str, arg_: str, ri_: dict):
+    """Full ticket-work pipeline: validate → implement → test → commit → review."""
+    tk_req = _tickets.get(arg_)
+    if not tk_req:
+        msg(t('ticket_not_found', tid=arg_))
+        buttons([{"label": t('menu'), "value": "back"}])
+        return
+    missing = _ticket_missing_required_fields(tk_req)
+    if missing:
+        _step_ticket_requirements_form(arg_, {
+            "ticket_title": tk_req.get("title", ""),
+            "ticket_desc": tk_req.get("description", ""),
+            "ticket_priority": tk_req.get("priority", "normal"),
+            "ticket_assigned": tk_req.get("assigned_to", "developer"),
+        })
+        return
+    container_ = ri_['container']
+    user_ = ri_['user']
+
+    def _chain_work():
+        def _exec(script_name, script_arg="", extra_env=None):
+            """Run a script in the developer container. Returns (rc, output)."""
+            script = f"/home/{user_}/scripts/{script_name}.sh"
+            if script_arg:
+                inner = f"'{script}' {script_arg}"
+            else:
+                inner = f"'{script}'"
+            shell = f"if [ -x '{script}' ]; then {inner}; else source ~/.bashrc 2>/dev/null; {script_name} {script_arg}; fi"
+            cmd_parts = ["docker", "exec"] + (extra_env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+            return run_cmd(cmd_parts)
+
+        pstate = PipelineState(arg_)
+        pstate.start_iteration()
+
+        try:
+            # ─── Step 1: Validate LLM key ─────────────────────────
+            llm_ok, llm_key = _ensure_llm_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
+            if not llm_ok:
+                return
+
+            llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
+            llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                       "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                       "-e", f"LLM_MODEL={llm_model}"]
+            if _state.get("anthropic_api_key"):
+                llm_env += ["-e", f"ANTHROPIC_API_KEY={_state['anthropic_api_key']}"]
+
+            engine_id, eng_name, llm_env, llm_model = _pipeline_select_engine(
+                container_, user_, llm_env, llm_model, pstate, role_, arg_)
+            if engine_id is None:
+                return
+
+            msg(f"## 🔄 Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
+                f"**Silnik:** `{eng_name}` | **Model:** `{llm_model}`")
+
+            engine_id, eng_name = _pipeline_preflight_test(
+                engine_id, eng_name, container_, user_, llm_env, pstate, role_, arg_)
+            if engine_id is None:
+                return
+
+            # ─── Mark ticket as in_progress ───────────────────────
+            msg(f"### ⏳ Krok 1/5: status → in_progress")
+            r1 = run_step(_exec, "ticket-work", "ticket-work", arg_)
+            pstate.record_step(r1)
+            if r1.ok():
+                msg(f"✅ Ticket `{arg_}` → **in_progress**")
+            else:
+                msg(f"⚠️ ticket-work (kod {r1.rc}): {r1.output[:500]}")
+
+            # ─── AI implementation ────────────────────────────────
+            engine_id, eng_name, llm_model, llm_env = _pipeline_implement(
+                engine_id, eng_name, container_, user_, llm_env, llm_model,
+                llm_key, pstate, role_, arg_, _exec)
+            if engine_id is None:
+                return
+
+            # ─── Run tests (scored) ──────────────────────────────
+            msg(f"### 🧪 Krok 3/5: testy lokalne")
+            r3 = run_step(_exec, "test-local", "test-local")
+            r3.score = evaluate_test_output(r3.output, r3.rc)
+            pstate.record_step(r3)
+            if r3.ok():
+                msg(f"✅ Testy (wynik: {r3.score:.0%})\n```\n{r3.output[:1000]}\n```" if r3.output else f"✅ Testy (wynik: {r3.score:.0%})")
+            else:
+                msg(f"⚠️ Testy (wynik: {r3.score:.0%}) — kontynuuję\n```\n{r3.output[:1000]}\n```" if r3.output else f"⚠️ Testy (wynik: {r3.score:.0%})")
+
+            # ─── Git commit & push ───────────────────────────────
+            if _pipeline_commit_push(_exec, pstate, role_, arg_):
+                return
+
+            # ─── Update ticket → review + summary ────────────────
+            _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model)
+
+        except Exception as e:
+            msg(f"❌ Pipeline błąd: {e}\n\n"
+                f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] "
+                f"[[🔧 Zmień silnik|engine_select]]")
+            pstate.record_step(StepResult("pipeline", -1, "", 0, str(e), 0.0))
+            pstate.save()
+
+    _dispatch_threaded(_chain_work)
+
+
+def _pipeline_select_engine(container_, user_, llm_env, llm_model, pstate, role_, arg_):
+    """Auto-select dev engine. Returns (engine_id, eng_name, llm_env, llm_model) or (None,...) on failure."""
+    engine_id = _engines.get_preferred_engine()
+    if not engine_id:
+        engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
+        if engine_id:
+            _engines.set_preferred_engine(engine_id)
+        else:
+            msg(f"❌ **Żaden silnik deweloperski nie działa** — {eng_msg}")
+            pstate.record_decision("abort", "no working engine")
+            buttons([
+                {"label": "🔧 Wybierz silnik", "value": "engine_select"},
+                {"label": "🏠 Menu", "value": "back"},
+            ])
+            return None, None, llm_env, llm_model
+    eng_info = _engines.get_engine_info(engine_id)
+    eng_name = eng_info["name"] if eng_info else engine_id
+    return engine_id, eng_name, llm_env, llm_model
+
+
+def _pipeline_preflight_test(engine_id, eng_name, container_, user_, llm_env, pstate, role_, arg_):
+    """Pre-flight engine test with fallback. Returns (engine_id, eng_name) or (None, None)."""
+    msg(f"### 🧪 Krok 0/5: pre-flight test silnika")
+    eng_ok, eng_test_msg = _engines.test_engine(engine_id, container_, user_, llm_env)
+    if eng_ok:
+        msg(f"✅ Silnik `{eng_name}` — {eng_test_msg[:120]}")
+        return engine_id, eng_name
+    msg(f"⚠️ Silnik `{eng_name}` nie przeszedł testu: {eng_test_msg[:200]}")
+    pstate.record_decision("engine_fallback", f"{engine_id} test failed, trying fallback")
+    engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
+    if engine_id:
+        _engines.set_preferred_engine(engine_id)
+        eng_info = _engines.get_engine_info(engine_id)
+        eng_name = eng_info["name"] if eng_info else engine_id
+        msg(f"🔄 Przełączam na: `{eng_name}` — {eng_msg[:120]}")
+        return engine_id, eng_name
+    msg("❌ **Żaden silnik nie działa.** Sprawdź API key.")
+    _prompt_api_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
+    return None, None
+
+
+def _pipeline_implement(engine_id, eng_name, container_, user_, llm_env, llm_model,
+                        llm_key, pstate, role_, arg_, _exec):
+    """AI implementation step with strategy adjustment and fallback.
+    Returns (engine_id, eng_name, llm_model, llm_env) or (None,...) on auth-error pause."""
+    strategy = pstate.get_strategy_adjustment("implement")
+
+    if strategy == "change_model":
+        msg("⚠️ **Wykryto powtarzający się błąd** — zmieniam model.")
+        pstate.record_decision("change_model", "powtarzający się błąd implement >2x")
+        fallback_models = ["google/gemini-2.0-flash-001", "anthropic/claude-3-5-haiku",
+                           "openai/gpt-4o-mini", "deepseek/deepseek-chat-v3-0324"]
+        for fm in fallback_models:
+            if fm != llm_model:
+                llm_model = fm
+                break
+        llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                   "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                   "-e", f"LLM_MODEL={llm_model}"]
+        msg(f"🔄 Model: `{llm_model}`")
+    elif strategy == "skip":
+        pstate.record_decision("skip_implement", "powtarzający się błąd — pomijam")
+        msg("⚠️ Pomijam implementację z powodu powtarzających się błędów.")
+        r2 = StepResult("implement", 0, "(pominięto)", 0, "", 0.3)
+        pstate.record_step(r2)
+        return engine_id, eng_name, llm_model, llm_env
+    elif strategy == "ask_user":
+        can_retry, reason = pstate.should_retry("implement")
+        if not can_retry:
+            msg(f"🛑 **Pipeline zatrzymany** — {reason}\n\n"
+                f"[[🔄 Wymuś ponowienie|ssh_cmd::{role_}::ticket-work::{arg_}]] "
+                f"[[🔧 Zmień silnik|engine_select]]")
+            pstate.record_decision("abort", reason)
+            buttons([
+                {"label": t('force_retry'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                {"label": t('change_engine'), "value": "engine_select"},
+                {"label": t('menu'), "value": "back"},
+            ])
+            return None, None, llm_model, llm_env
+
+    if strategy != "skip":
+        impl_cmd = _engines.get_implement_cmd(engine_id, arg_)
+        msg(f"### 🤖 Krok 2/5: AI implementacja (`{eng_name}`, model: `{llm_model}`)")
+        progress(f"🤖 {eng_name} implementuje...")
+
+        def _engine_exec(cmd=impl_cmd, env=llm_env):
+            shell = f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; then '/home/{user_}/scripts/engine-implement.sh' {engine_id} {arg_}; else {cmd}; fi"
+            cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+            return run_cmd(cmd_parts)
+
+        r2 = run_step(_engine_exec, "implement")
+        progress(f"🤖 {eng_name}", done=True)
+        r2.score = evaluate_implementation(r2.output)
+        r2.meta["engine"] = engine_id
+        pstate.record_step(r2)
+        if r2.ok():
+            msg(f"✅ Implementacja via `{eng_name}` (wynik: {r2.score:.0%})\n```\n{r2.output[:3000]}\n```")
+        else:
+            msg(f"⚠️ implement via `{eng_name}` (kod {r2.rc}, wynik: {r2.score:.0%}): {r2.output[:1500]}")
+            _fired: set = set()
+            for _line in (r2.output or "").splitlines():
+                _emit_log_error(_line, _fired)
+            _AUTH_STOP = [
+                r"Not logged in[\s·•\-]*(Please run|use)\s+/login",
+                r"not logged in.*login",
+                r"ANTHROPIC_API_KEY.*(not set|missing|invalid)",
+                r"anthropic.*authentication.*fail",
+                r"401 Unauthorized",
+                r"403 Forbidden.*API",
+                r"Invalid API key|authentication.*required",
+            ]
+            _is_auth_error = any(
+                _re.search(p, r2.output or "", _re.IGNORECASE)
+                for p in _AUTH_STOP
+            )
+            fallback_success = False
+            if engine_id == "claude_code" or _is_auth_error:
+                engine_id, eng_name, fallback_success = _pipeline_engine_fallback(
+                    engine_id, container_, user_, llm_env, pstate, arg_)
+
+            if _is_auth_error and not fallback_success:
+                pstate.record_decision("auth_error_pause", f"engine {engine_id} auth error — czekam na użytkownika")
+                msg(f"🛑 **Silnik `{eng_name}` wymaga autoryzacji.**\n\n"
+                    f"Wybierz co zrobić:")
+                buttons([
+                    {"label": f"🔧 Zmień silnik", "value": "engine_select"},
+                    {"label": f"🔄 Ponów po naprawie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                    {"label": "⏭️ Pomiń implementację", "value": f"pipeline_skip_implement::{arg_}"},
+                    {"label": "🏠 Menu", "value": "back"},
+                ])
+                return None, None, llm_model, llm_env
+
+    return engine_id, eng_name, llm_model, llm_env
+
+
+def _pipeline_engine_fallback(engine_id, container_, user_, llm_env, pstate, arg_):
+    """Try other engines when current one fails. Returns (engine_id, eng_name, success)."""
+    msg("🔁 **Silnik nie działa** — testuję i uruchamiam inne narzędzia.")
+    fallback_ids = [e["id"] for e in _engines.ENGINE_DEFS if e["id"] != engine_id]
+    eng_name = engine_id
+    for cand_id in fallback_ids:
+        cand_info = _engines.get_engine_info(cand_id)
+        cand_name = cand_info["name"] if cand_info else cand_id
+        ok, test_msg = _engines.test_engine(cand_id, container_, user_, llm_env)
+        if not ok:
+            msg(f"⚠️ `{cand_name}` — test nieudany: {test_msg[:120]}")
+            pstate.record_decision("engine_fallback_test_fail", f"{cand_id}: {test_msg[:120]}")
+            continue
+        msg(f"✅ `{cand_name}` — test OK: {test_msg[:120]}")
+        pstate.record_decision("engine_fallback_test_ok", f"{cand_id}: {test_msg[:120]}")
+
+        cand_cmd = _engines.get_implement_cmd(cand_id, arg_)
+        msg(f"### 🤖 Fallback: `{cand_name}` (test OK)")
+        progress(f"🤖 {cand_name} implementuje...")
+
+        def _engine_exec_fallback(cmd=cand_cmd, env=llm_env, _engine_id=cand_id):
+            shell = (
+                f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; "
+                f"then '/home/{user_}/scripts/engine-implement.sh' {_engine_id} {arg_}; "
+                f"else {cmd}; fi"
+            )
+            cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
+            return run_cmd(cmd_parts)
+
+        r2_alt = run_step(_engine_exec_fallback, "implement")
+        progress(f"🤖 {cand_name}", done=True)
+        r2_alt.score = evaluate_implementation(r2_alt.output)
+        r2_alt.meta["engine"] = cand_id
+        pstate.record_step(r2_alt)
+        if r2_alt.ok():
+            msg(f"✅ Implementacja via `{cand_name}` (wynik: {r2_alt.score:.0%})\n```\n{r2_alt.output[:3000]}\n```")
+            pstate.record_decision("engine_fallback_success", f"{engine_id} -> {cand_id}")
+            _engines.set_preferred_engine(cand_id)
+            _state["preferred_engine"] = cand_id
+            save_state()
+            return cand_id, cand_name, True
+        msg(f"⚠️ implement via `{cand_name}` (kod {r2_alt.rc}, wynik: {r2_alt.score:.0%}): {r2_alt.output[:1000]}")
+        _fired_alt: set = set()
+        for _line in (r2_alt.output or "").splitlines():
+            _emit_log_error(_line, _fired_alt)
+    return engine_id, eng_name, False
+
+
+def _pipeline_commit_push(_exec, pstate, role_, arg_):
+    """Git commit & push. Returns True if pipeline should stop (no changes)."""
+    ticket_data = _tickets.get(arg_)
+    commit_title = ticket_data.get("title", arg_) if ticket_data else arg_
+    commit_msg = f"feat({arg_}): {commit_title}"
+    msg(f"### 📤 Krok 4/5: commit & push")
+    r4 = run_step(_exec, "commit-push", "commit-push", f'"{commit_msg}"')
+    pstate.record_step(r4)
+    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+    no_repo_changes = "nothing to commit" in (r4.output or "").lower()
+    if no_repo_changes:
+        msg(t('nothing_to_commit'))
+        pstate.record_decision("no_repo_changes", f"{arg_}: commit-push returned no changes")
+        overall = pstate.compute_overall_score()
+        _tickets.add_comment(arg_, "developer",
+            f"Pipeline iteracja #{pstate.iteration} zatrzymana: brak zmian w repo (wynik: {overall:.0%}).")
+        msg("⚠️ Brak zmian po implementacji — ticket pozostaje **in_progress**.")
         buttons([
-            {"label": t('settings'), "value": "settings"},
-            {"label": t('menu'),     "value": "back"},
+            {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+            {"label": t('change_engine'), "value": "engine_select"},
+            {"label": t('ticket_list'), "value": "tickets_review"},
+            {"label": t('menu'), "value": "back"},
         ])
         return True
-    if value.startswith("rebuild_stack::"):
-        stack = value.split("::", 1)[1].strip() or "all"
-        step_do_launch({"stacks": stack, "environment": _state.get("environment", "local")})
-        return True
-    # ── LLM key test action ─────────────────────────────────────────────────
-    if value.startswith("test_llm_key::"):
-        return_action = value.split("::", 1)[1]
-        _step_test_llm_key(form, return_action)
-        return True
-    # ── Engine selection / auto-test ──────────────────────────────────────
-    if value == "engine_select":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _es():
-            _tl.sid = _tl_sid
-            _step_engine_select(form)
-            _tl.sid = None
-        threading.Thread(target=_es, daemon=True).start()
-        return True
-    if value == "engine_autotest":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _ea():
-            _tl.sid = _tl_sid
-            _step_engine_autotest()
-            _tl.sid = None
-        threading.Thread(target=_ea, daemon=True).start()
-        return True
-    if value.startswith("set_engine::"):
-        engine_id = value.split("::", 1)[1]
-        _step_set_engine(engine_id)
-        return True
-    if value.startswith("pipeline_skip_implement::"):
-        tid = value.split("::", 1)[1]
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _psi(t=tid):
-            _tl.sid = _tl_sid
-            _step_pipeline_skip_implement(t)
-            _tl.sid = None
-        threading.Thread(target=_psi, daemon=True).start()
-        return True
-    # ── Ticket management actions ─────────────────────────────────────────────
-    if value.startswith("show_ticket::"):
-        tid = value.split("::", 1)[1]
-        _step_show_ticket(tid)
-        return True
-    if value == "tickets_review":
-        _step_tickets_review()
-        return True
-    if value.startswith("manager_approve::"):
-        tid = value.split("::", 1)[1]
-        _step_manager_approve(tid, form)
-        return True
-    if value.startswith("manager_reject::"):
-        tid = value.split("::", 1)[1]
-        _step_manager_reject(tid)
-        return True
-    if value.startswith("ticket_requirements::"):
-        tid = value.split("::", 1)[1]
-        _step_ticket_requirements_form(tid, form)
-        return True
-    if value.startswith("ticket_requirements_save::"):
-        tid = value.split("::", 1)[1]
-        _step_ticket_requirements_save(tid, form)
-        return True
-    if value.startswith("open_url::"):
-        url = value.split("::", 1)[1]
-        msg(f"🔗 **Link:** [{url}]({url})")
-        widget({"type": "open_url", "url": url})
-        buttons([{"label": t('menu'), "value": "back"}])
-        return True
-    if value.startswith("open_github::"):
-        repo = value.split("::", 1)[1]
-        msg(f"🔗 **GitHub:** [https://github.com/{repo}](https://github.com/{repo})")
-        buttons([{"label": "🏠 Menu", "value": "back"}])
-        return True
-    if value == "manager_suggest_features":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _suggest():
-            _tl.sid = _tl_sid
-            _step_manager_suggest_features()
-            _tl.sid = None
-        threading.Thread(target=_suggest, daemon=True).start()
-        return True
-    if value == "clone_and_launch_app":
-        def _clone_and_launch():
-            repo_url = _state.get("git_repo_url", "")
-            branch   = _state.get("git_branch", "main") or "main"
-            app_dir  = ROOT / "app"
-            if not repo_url:
-                msg("❌ `GIT_REPO_URL` nie jest ustawiony.")
-                buttons([{"label": "⚙️ Ustaw GIT_REPO_URL", "value": "settings_group::Git"}])
-                return
-            if not app_dir.exists() or not any(app_dir.iterdir()):
-                progress(f"📥 Klonuję {repo_url}…")
-                rc = subprocess.run(
-                    ["git", "clone", "--branch", branch, "--depth", "1", repo_url, str(app_dir)],
-                    capture_output=True, text=True)
-                if rc.returncode != 0:
-                    progress("clone", error=True)
-                    msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
-                    buttons([{"label": t('change_git_url'), "value": "settings_group::Git"},
-                             {"label": t('menu'), "value": "back"}])
-                    return
-                progress("clone", done=True)
-                msg(f"✅ Sklonowano do `{app_dir}`")
-            _refresh_ssh_roles()
-            step_do_launch({"stacks": "app", "environment": _state.get("environment", "local")})
-        threading.Thread(target=_clone_and_launch, daemon=True).start()
-        return True
-    if value.startswith("ssh_info::"):      _step_ssh_info(value); return True
-    if value.startswith("ssh_console::"):   step_ssh_console(value); return True
-    if value.startswith("run_ssh_cmd::"):   run_ssh_cmd(value, form); return True
-    if value.startswith("ssh_cmd::"):
-        # ssh_cmd::role::cmd_name::arg — shortcut from ticket cards / inline buttons
-        parts = value.split("::", 3)
-        role_  = parts[1] if len(parts) > 1 else "developer"
-        cmd_   = parts[2] if len(parts) > 2 else ""
-        arg_   = parts[3] if len(parts) > 3 else ""
-        ri_    = _get_role(role_)
-        # ── Full Software House Pipeline: ticket-work → implement → test → commit → review ──
-        if cmd_ == "ticket-work" and arg_:
-            tk_req = _tickets.get(arg_)
-            if not tk_req:
-                msg(t('ticket_not_found', tid=arg_))
-                buttons([{"label": t('menu'), "value": "back"}])
-                return True
-            missing = _ticket_missing_required_fields(tk_req)
-            if missing:
-                _step_ticket_requirements_form(arg_, {
-                    "ticket_title": tk_req.get("title", ""),
-                    "ticket_desc": tk_req.get("description", ""),
-                    "ticket_priority": tk_req.get("priority", "normal"),
-                    "ticket_assigned": tk_req.get("assigned_to", "developer"),
-                })
-                return True
-            _tl_sid = getattr(_tl, 'sid', None)
-            container_ = ri_['container']
-            user_ = ri_['user']
-            def _chain_work():
-                _tl.sid = _tl_sid
-                def _exec(script_name, script_arg="", extra_env=None):
-                    """Run a script in the developer container. Returns (rc, output)."""
-                    script = f"/home/{user_}/scripts/{script_name}.sh"
-                    if script_arg:
-                        inner = f"'{script}' {script_arg}"
-                    else:
-                        inner = f"'{script}'"
-                    shell = f"if [ -x '{script}' ]; then {inner}; else source ~/.bashrc 2>/dev/null; {script_name} {script_arg}; fi"
-                    cmd_parts = ["docker", "exec"] + (extra_env or []) + ["-u", user_, container_, "bash", "-lc", shell]
-                    return run_cmd(cmd_parts)
+    if r4.rc == 0 and r4.output:
+        commit_line = r4.output.strip().split("\n")[-1]
+        commit_hash = commit_line.split()[0] if commit_line else ""
+        gh_link = f"https://github.com/{gh_repo}/commit/{commit_hash}" if gh_repo and commit_hash else ""
+        link_text = f"\n🔗 [Zobacz na GitHub]({gh_link})" if gh_link else ""
+        msg(f"✅ Commit: `{commit_line}`{link_text}")
+    else:
+        msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
+    return False
 
-                pstate = PipelineState(arg_)
-                pstate.start_iteration()
 
-                try:
-                    # ─── Step 1: Validate LLM key ─────────────────────────
-                    llm_ok, llm_key = _ensure_llm_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
-                    if not llm_ok:
-                        return
+def _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model):
+    """Update ticket → review, emit adaptive summary."""
+    msg(f"### 📋 Krok 5/5: status → review")
+    _tickets.update(arg_, status="review")
+    _tickets.add_comment(arg_, "developer",
+        f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
+        f"Silnik: {eng_name}. Model: {llm_model}. Gotowe do review.")
+    r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
+    pstate.record_step(r5)
+    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
+    if gh_repo:
+        try:
+            _tickets.push_to_github(arg_)
+        except Exception:
+            pass
 
-                    llm_model = _state.get("llm_model", "") or "google/gemini-2.0-flash-001"
-                    llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
-                               "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
-                               "-e", f"LLM_MODEL={llm_model}"]
-                    if _state.get("anthropic_api_key"):
-                        llm_env += ["-e", f"ANTHROPIC_API_KEY={_state['anthropic_api_key']}"]
+    overall = pstate.compute_overall_score()
+    pstate.finished_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    pstate.save()
 
-                    # ─── Step 0: Auto-select dev engine ────────────────────
-                    engine_id = _engines.get_preferred_engine()
-                    if not engine_id:
-                        # Auto-test and pick the first working engine
-                        engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
-                        if engine_id:
-                            _engines.set_preferred_engine(engine_id)
-                        else:
-                            msg(f"❌ **Żaden silnik deweloperski nie działa** — {eng_msg}")
-                            pstate.record_decision("abort", "no working engine")
-                            buttons([
-                                {"label": "🔧 Wybierz silnik", "value": "engine_select"},
-                                {"label": "🏠 Menu", "value": "back"},
-                            ])
-                            return
+    score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
+    retry_btn = f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] " if overall < 0.5 else ""
+    msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
+        f"**Wynik:** {overall:.0%} | **Silnik:** `{eng_name}` | **Model:** `{llm_model}`\n\n"
+        f"{pstate.summary()}\n\n"
+        f"{retry_btn}"
+        f"[[✅ Zatwierdź|manager_approve::{arg_}]] "
+        f"[[📋 Review|tickets_review]] "
+        f"[[👁️ Diff|show_ticket::{arg_}]]")
 
-                    eng_info = _engines.get_engine_info(engine_id)
-                    eng_name = eng_info["name"] if eng_info else engine_id
+    btn_items = [
+        {"label": f"👁️ {t('show_ticket')} {arg_}", "value": f"show_ticket::{arg_}"},
+        {"label": t('ticket_list'), "value": "tickets_review"},
+    ]
+    if overall < 0.5:
+        btn_items.insert(0, {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
+    btn_items.append({"label": t('change_engine'), "value": "engine_select"})
+    if gh_repo:
+        btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
+    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    buttons(btn_items)
 
-                    msg(f"## 🔄 Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
-                        f"**Silnik:** `{eng_name}` | **Model:** `{llm_model}`")
 
-                    # ─── Step 1: Pre-flight engine test ────────────────────
-                    msg(f"### 🧪 Krok 0/5: pre-flight test silnika")
-                    eng_ok, eng_test_msg = _engines.test_engine(engine_id, container_, user_, llm_env)
-                    if eng_ok:
-                        msg(f"✅ Silnik `{eng_name}` — {eng_test_msg[:120]}")
-                    else:
-                        msg(f"⚠️ Silnik `{eng_name}` nie przeszedł testu: {eng_test_msg[:200]}")
-                        pstate.record_decision("engine_fallback", f"{engine_id} test failed, trying fallback")
-                        # Try fallback to first working engine
-                        engine_id, eng_msg = _engines.select_first_working(container_, user_, llm_env)
-                        if engine_id:
-                            _engines.set_preferred_engine(engine_id)
-                            eng_info = _engines.get_engine_info(engine_id)
-                            eng_name = eng_info["name"] if eng_info else engine_id
-                            msg(f"🔄 Przełączam na: `{eng_name}` — {eng_msg[:120]}")
-                        else:
-                            msg("❌ **Żaden silnik nie działa.** Sprawdź API key.")
-                            _prompt_api_key(return_action=f"ssh_cmd::{role_}::ticket-work::{arg_}")
-                            return
+# ── Dispatch tables ──────────────────────────────────────────────────────────
 
-                    # ─── Step 2: Mark ticket as in_progress ───────────────
-                    msg(f"### ⏳ Krok 1/5: status → in_progress")
-                    r1 = run_step(_exec, "ticket-work", "ticket-work", arg_)
-                    pstate.record_step(r1)
-                    if r1.ok():
-                        msg(f"✅ Ticket `{arg_}` → **in_progress**")
-                    else:
-                        msg(f"⚠️ ticket-work (kod {r1.rc}): {r1.output[:500]}")
+_DISPATCH_PREFIX = [
+    ("logs::",                lambda v, f: step_show_logs(v.split("::", 1)[1])),
+    ("fix_container::",       lambda v, f: step_fix_container(v.split("::", 1)[1])),
+    ("fix_network_overlap::", lambda v, f: fix_network_overlap(v.split("::", 1)[1])),
+    ("fix_readonly_volume::", lambda v, f: fix_readonly_volume(v.split("::", 1)[1])),
+    ("save_env_var::",        lambda v, f: _handle_save_env_var(v, f)),
+    ("rebuild_stack::",       lambda v, f: step_do_launch({"stacks": v.split("::", 1)[1].strip() or "all",
+                                                           "environment": _state.get("environment", "local")})),
+    ("test_llm_key::",        lambda v, f: _step_test_llm_key(f, v.split("::", 1)[1])),
+    ("set_engine::",          lambda v, f: _step_set_engine(v.split("::", 1)[1])),
+    ("pipeline_skip_implement::", lambda v, f: _dispatch_threaded(_step_pipeline_skip_implement, v.split("::", 1)[1])),
+    ("show_ticket::",         lambda v, f: _step_show_ticket(v.split("::", 1)[1])),
+    ("manager_approve::",     lambda v, f: _step_manager_approve(v.split("::", 1)[1], f)),
+    ("manager_reject::",      lambda v, f: _step_manager_reject(v.split("::", 1)[1])),
+    ("ticket_requirements::", lambda v, f: _step_ticket_requirements_form(v.split("::", 1)[1], f)),
+    ("ticket_requirements_save::", lambda v, f: _step_ticket_requirements_save(v.split("::", 1)[1], f)),
+    ("open_url::",            lambda v, f: _handle_open_url(v)),
+    ("open_github::",         lambda v, f: _handle_open_github(v)),
+    ("ssh_info::",            lambda v, f: _step_ssh_info(v)),
+    ("ssh_console::",         lambda v, f: step_ssh_console(v)),
+    ("run_ssh_cmd::",         lambda v, f: run_ssh_cmd(v, f)),
+    ("ssh_cmd::",             lambda v, f: _handle_ssh_cmd(v, f)),
+    ("ticket_push_github::",  lambda v, f: _dispatch_threaded(_handle_push_github, v)),
+    ("suggest_commands::",    lambda v, f: step_suggest_commands(v.split("::", 1)[1])),
+    ("run_suggested_cmd::",   lambda v, f: _run_suggested_cmd(v.split("::", 1)[1])),
+    ("restart_container::",   lambda v, f: _do_restart_container(v.split("::", 1)[1])),
+    ("diag_port::",           lambda v, f: diag_port(v.split("::", 1)[1])),
+    ("show_missing_env::",    lambda v, f: show_missing_env(v.split("::", 1)[1])),
+    ("logs_stack::",          lambda v, f: step_show_logs(v.split("::", 1)[1])),
+    ("fix_compose::",         lambda v, f: _handle_fix_compose(v)),
+    ("settings_group::",      lambda v, f: step_settings(v.split("::", 1)[1])),
+    ("save_settings::",       lambda v, f: step_save_settings(v.split("::", 1)[1], f)),
+    ("preflight_save_launch::", lambda v, f: _handle_preflight_save_launch(v, f)),
+]
 
-                    # ─── Step 3: AI implementation (engine-driven, adaptive) ─
-                    strategy = pstate.get_strategy_adjustment("implement")
-                    if strategy == "change_model":
-                        msg("⚠️ **Wykryto powtarzający się błąd** — zmieniam model.")
-                        pstate.record_decision("change_model", "powtarzający się błąd implement >2x")
-                        fallback_models = ["google/gemini-2.0-flash-001", "anthropic/claude-3-5-haiku",
-                                           "openai/gpt-4o-mini", "deepseek/deepseek-chat-v3-0324"]
-                        for fm in fallback_models:
-                            if fm != llm_model:
-                                llm_model = fm
-                                break
-                        llm_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
-                                   "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
-                                   "-e", f"LLM_MODEL={llm_model}"]
-                        msg(f"🔄 Model: `{llm_model}`")
-                    elif strategy == "skip":
-                        pstate.record_decision("skip_implement", "powtarzający się błąd — pomijam")
-                        msg("⚠️ Pomijam implementację z powodu powtarzających się błędów.")
-                        r2 = StepResult("implement", 0, "(pominięto)", 0, "", 0.3)
-                        pstate.record_step(r2)
-                    elif strategy == "ask_user":
-                        can_retry, reason = pstate.should_retry("implement")
-                        if not can_retry:
-                            msg(f"🛑 **Pipeline zatrzymany** — {reason}\n\n"
-                                f"[[🔄 Wymuś ponowienie|ssh_cmd::{role_}::ticket-work::{arg_}]] "
-                                f"[[🔧 Zmień silnik|engine_select]]")
-                            pstate.record_decision("abort", reason)
-                            buttons([
-                                {"label": t('force_retry'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
-                                {"label": t('change_engine'), "value": "engine_select"},
-                                {"label": t('menu'), "value": "back"},
-                            ])
-                            return
+_DISPATCH_EXACT = {
+    "save_env_vars":            lambda f: _handle_save_env_vars(f),
+    "engine_select":            lambda f: _dispatch_threaded(_step_engine_select, f),
+    "engine_autotest":          lambda f: _dispatch_threaded(_step_engine_autotest),
+    "tickets_review":           lambda f: _step_tickets_review(),
+    "manager_suggest_features": lambda f: _dispatch_threaded(_step_manager_suggest_features),
+    "clone_and_launch_app":     lambda f: _dispatch_threaded(_handle_clone_and_launch),
+    "ticket_create_wizard":     lambda f: _dispatch_threaded(_step_ticket_create_wizard, f, delay=0.3),
+    "ticket_create_do":         lambda f: _dispatch_threaded(_step_ticket_create_do, f),
+    "integrations_setup":       lambda f: _dispatch_threaded(_step_integrations_setup, delay=0.3),
+    "integrations_save":        lambda f: _dispatch_threaded(_step_integrations_save, f),
+    "ticket_sync":              lambda f: _dispatch_threaded(_step_ticket_sync),
+    "project_stats":            lambda f: _dispatch_threaded(_step_project_stats, delay=0.3),
+    "settings_nav":             lambda f: _step_settings_nav(),
+}
 
-                    if strategy != "skip":
-                        # Use engine-specific implement command
-                        impl_cmd = _engines.get_implement_cmd(engine_id, arg_)
-                        msg(f"### 🤖 Krok 2/5: AI implementacja (`{eng_name}`, model: `{llm_model}`)")
-                        progress(f"🤖 {eng_name} implementuje...")
 
-                        def _engine_exec(cmd=impl_cmd, env=llm_env):
-                            shell = f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; then '/home/{user_}/scripts/engine-implement.sh' {engine_id} {arg_}; else {cmd}; fi"
-                            cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
-                            return run_cmd(cmd_parts)
-
-                        r2 = run_step(_engine_exec, "implement")
-                        progress(f"🤖 {eng_name}", done=True)
-                        r2.score = evaluate_implementation(r2.output)
-                        r2.meta["engine"] = engine_id
-                        pstate.record_step(r2)
-                        if r2.ok():
-                            msg(f"✅ Implementacja via `{eng_name}` (wynik: {r2.score:.0%})\n```\n{r2.output[:3000]}\n```")
-                        else:
-                            msg(f"⚠️ implement via `{eng_name}` (kod {r2.rc}, wynik: {r2.score:.0%}): {r2.output[:1500]}")
-                            # ── Detect known config/auth errors in engine output ──
-                            _fired: set = set()
-                            for _line in (r2.output or "").splitlines():
-                                _emit_log_error(_line, _fired)
-                            # ── Critical auth errors: stop pipeline, ask user ─────
-                            import re as _re
-                            _AUTH_STOP = [
-                                r"Not logged in[\s·•\-]*(Please run|use)\s+/login",
-                                r"not logged in.*login",
-                                r"ANTHROPIC_API_KEY.*(not set|missing|invalid)",
-                                r"anthropic.*authentication.*fail",
-                                r"401 Unauthorized",
-                                r"403 Forbidden.*API",
-                                r"Invalid API key|authentication.*required",
-                            ]
-                            _is_auth_error = any(
-                                _re.search(p, r2.output or "", _re.IGNORECASE)
-                                for p in _AUTH_STOP
-                            )
-                            # ── Auto-fallback: test + try other engines when Claude/auth fails ──
-                            fallback_success = False
-                            if engine_id == "claude_code" or _is_auth_error:
-                                msg("🔁 **Silnik nie działa** — testuję i uruchamiam inne narzędzia.")
-                                fallback_ids = [e["id"] for e in _engines.ENGINE_DEFS if e["id"] != engine_id]
-                                for cand_id in fallback_ids:
-                                    cand_info = _engines.get_engine_info(cand_id)
-                                    cand_name = cand_info["name"] if cand_info else cand_id
-                                    ok, test_msg = _engines.test_engine(cand_id, container_, user_, llm_env)
-                                    if not ok:
-                                        msg(f"⚠️ `{cand_name}` — test nieudany: {test_msg[:120]}")
-                                        pstate.record_decision("engine_fallback_test_fail", f"{cand_id}: {test_msg[:120]}")
-                                        continue
-                                    msg(f"✅ `{cand_name}` — test OK: {test_msg[:120]}")
-                                    pstate.record_decision("engine_fallback_test_ok", f"{cand_id}: {test_msg[:120]}")
-
-                                    cand_cmd = _engines.get_implement_cmd(cand_id, arg_)
-                                    msg(f"### 🤖 Fallback: `{cand_name}` (test OK)")
-                                    progress(f"🤖 {cand_name} implementuje...")
-
-                                    def _engine_exec_fallback(cmd=cand_cmd, env=llm_env, _engine_id=cand_id):
-                                        shell = (
-                                            f"if [ -x '/home/{user_}/scripts/engine-implement.sh' ]; "
-                                            f"then '/home/{user_}/scripts/engine-implement.sh' {_engine_id} {arg_}; "
-                                            f"else {cmd}; fi"
-                                        )
-                                        cmd_parts = ["docker", "exec"] + (env or []) + ["-u", user_, container_, "bash", "-lc", shell]
-                                        return run_cmd(cmd_parts)
-
-                                    r2_alt = run_step(_engine_exec_fallback, "implement")
-                                    progress(f"🤖 {cand_name}", done=True)
-                                    r2_alt.score = evaluate_implementation(r2_alt.output)
-                                    r2_alt.meta["engine"] = cand_id
-                                    pstate.record_step(r2_alt)
-                                    if r2_alt.ok():
-                                        msg(f"✅ Implementacja via `{cand_name}` (wynik: {r2_alt.score:.0%})\n```\n{r2_alt.output[:3000]}\n```")
-                                        pstate.record_decision("engine_fallback_success", f"{engine_id} -> {cand_id}")
-                                        _engines.set_preferred_engine(cand_id)
-                                        _state["preferred_engine"] = cand_id
-                                        save_state()
-                                        engine_id = cand_id
-                                        eng_name = cand_name
-                                        r2 = r2_alt
-                                        fallback_success = True
-                                        break
-                                    msg(f"⚠️ implement via `{cand_name}` (kod {r2_alt.rc}, wynik: {r2_alt.score:.0%}): {r2_alt.output[:1000]}")
-                                    _fired_alt: set = set()
-                                    for _line in (r2_alt.output or "").splitlines():
-                                        _emit_log_error(_line, _fired_alt)
-
-                            if _is_auth_error and not fallback_success:
-                                pstate.record_decision("auth_error_pause", f"engine {engine_id} auth error — czekam na użytkownika")
-                                msg(f"🛑 **Silnik `{eng_name}` wymaga autoryzacji.**\n\n"
-                                    f"Wybierz co zrobić:")
-                                buttons([
-                                    {"label": f"🔧 Zmień silnik", "value": "engine_select"},
-                                    {"label": f"🔄 Ponów po naprawie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
-                                    {"label": "⏭️ Pomiń implementację", "value": f"pipeline_skip_implement::{arg_}"},
-                                    {"label": "🏠 Menu", "value": "back"},
-                                ])
-                                return
-
-                    # ─── Step 4: Run tests (scored) ───────────────────────
-                    msg(f"### 🧪 Krok 3/5: testy lokalne")
-                    r3 = run_step(_exec, "test-local", "test-local")
-                    r3.score = evaluate_test_output(r3.output, r3.rc)
-                    pstate.record_step(r3)
-                    if r3.ok():
-                        msg(f"✅ Testy (wynik: {r3.score:.0%})\n```\n{r3.output[:1000]}\n```" if r3.output else f"✅ Testy (wynik: {r3.score:.0%})")
-                    else:
-                        msg(f"⚠️ Testy (wynik: {r3.score:.0%}) — kontynuuję\n```\n{r3.output[:1000]}\n```" if r3.output else f"⚠️ Testy (wynik: {r3.score:.0%})")
-
-                    # ─── Step 5: Git commit & push ────────────────────────
-                    ticket_data = _tickets.get(arg_)
-                    commit_title = ticket_data.get("title", arg_) if ticket_data else arg_
-                    commit_msg = f"feat({arg_}): {commit_title}"
-                    msg(f"### 📤 Krok 4/5: commit & push")
-                    r4 = run_step(_exec, "commit-push", "commit-push", f'"{commit_msg}"')
-                    pstate.record_step(r4)
-                    gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
-                    no_repo_changes = "nothing to commit" in (r4.output or "").lower()
-                    if no_repo_changes:
-                        msg(t('nothing_to_commit'))
-                        pstate.record_decision("no_repo_changes", f"{arg_}: commit-push returned no changes")
-                        overall = pstate.compute_overall_score()
-                        _tickets.add_comment(arg_, "developer",
-                            f"Pipeline iteracja #{pstate.iteration} zatrzymana: brak zmian w repo (wynik: {overall:.0%}).")
-                        msg("⚠️ Brak zmian po implementacji — ticket pozostaje **in_progress**.")
-                        buttons([
-                            {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
-                            {"label": t('change_engine'), "value": "engine_select"},
-                            {"label": t('ticket_list'), "value": "tickets_review"},
-                            {"label": t('menu'), "value": "back"},
-                        ])
-                        return
-                    if r4.rc == 0 and r4.output:
-                        commit_line = r4.output.strip().split("\n")[-1]
-                        commit_hash = commit_line.split()[0] if commit_line else ""
-                        gh_link = f"https://github.com/{gh_repo}/commit/{commit_hash}" if gh_repo and commit_hash else ""
-                        link_text = f"\n🔗 [Zobacz na GitHub]({gh_link})" if gh_link else ""
-                        msg(f"✅ Commit: `{commit_line}`{link_text}")
-                    else:
-                        msg(f"⚠️ commit-push (kod {r4.rc}): {r4.output[:500]}")
-
-                    # ─── Step 6: Update ticket → review ───────────────────
-                    msg(f"### 📋 Krok 5/5: status → review")
-                    _tickets.update(arg_, status="review")
-                    _tickets.add_comment(arg_, "developer",
-                        f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
-                        f"Silnik: {eng_name}. Model: {llm_model}. Gotowe do review.")
-                    r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
-                    pstate.record_step(r5)
-                    if gh_repo:
-                        try:
-                            _tickets.push_to_github(arg_)
-                        except Exception:
-                            pass
-
-                    # ─── Adaptive Summary ─────────────────────────────────
-                    overall = pstate.compute_overall_score()
-                    pstate.finished_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
-                    pstate.save()
-
-                    score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
-                    retry_btn = f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] " if overall < 0.5 else ""
-                    msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
-                        f"**Wynik:** {overall:.0%} | **Silnik:** `{eng_name}` | **Model:** `{llm_model}`\n\n"
-                        f"{pstate.summary()}\n\n"
-                        f"{retry_btn}"
-                        f"[[✅ Zatwierdź|manager_approve::{arg_}]] "
-                        f"[[📋 Review|tickets_review]] "
-                        f"[[👁️ Diff|show_ticket::{arg_}]]")
-
-                    btn_items = [
-                        {"label": f"👁️ {t('show_ticket')} {arg_}", "value": f"show_ticket::{arg_}"},
-                        {"label": t('ticket_list'), "value": "tickets_review"},
-                    ]
-                    if overall < 0.5:
-                        btn_items.insert(0, {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
-                    btn_items.append({"label": t('change_engine'), "value": "engine_select"})
-                    if gh_repo:
-                        btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
-                    btn_items.append({"label": "🏠 Menu", "value": "back"})
-                    buttons(btn_items)
-
-                except Exception as e:
-                    msg(f"❌ Pipeline błąd: {e}\n\n"
-                        f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] "
-                        f"[[🔧 Zmień silnik|engine_select]]")
-                    pstate.record_step(StepResult("pipeline", -1, "", 0, str(e), 0.0))
-                    pstate.save()
-                finally:
-                    _tl.sid = None
-            threading.Thread(target=_chain_work, daemon=True).start()
-        else:
-            synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
-            run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
-            run_ssh_cmd(run_value_, synth_form)
+def _dispatch(value: str, form: dict):
+    """Shared dispatch logic for both SocketIO and REST actions."""
+    # 1) Prefix-based dispatch
+    for prefix, handler in _DISPATCH_PREFIX:
+        if value.startswith(prefix):
+            handler(value, form)
+            return True
+    # 2) Exact-match dispatch
+    exact = _DISPATCH_EXACT.get(value)
+    if exact:
+        exact(form)
         return True
-    if value == "ticket_create_wizard":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _tcw():
-            _tl.sid = _tl_sid
-            import time; time.sleep(0.3)   # let any concurrent launch thread finish
-            _step_ticket_create_wizard(form)
-        threading.Thread(target=_tcw, daemon=True).start()
-        return True
-    if value == "ticket_create_do":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _tcd():
-            _tl.sid = _tl_sid
-            _step_ticket_create_do(form)
-        threading.Thread(target=_tcd, daemon=True).start()
-        return True
-    if value == "integrations_setup":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _is():
-            _tl.sid = _tl_sid
-            import time; time.sleep(0.3)
-            _step_integrations_setup()
-        threading.Thread(target=_is, daemon=True).start()
-        return True
-    if value == "integrations_save":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _isave():
-            _tl.sid = _tl_sid
-            _step_integrations_save(form)
-        threading.Thread(target=_isave, daemon=True).start()
-        return True
-    if value == "ticket_sync":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _tsync():
-            _tl.sid = _tl_sid
-            _step_ticket_sync()
-        threading.Thread(target=_tsync, daemon=True).start()
-        return True
-    if value == "project_stats":
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _pstats():
-            _tl.sid = _tl_sid
-            import time; time.sleep(0.3)
-            _step_project_stats()
-        threading.Thread(target=_pstats, daemon=True).start()
-        return True
-    if value.startswith("ticket_push_github::"):
-        ticket_id = value.split("::", 1)[1]
-        _tl_sid = getattr(_tl, 'sid', None)
-        def _push_gh(tid=ticket_id):
-            _tl.sid = _tl_sid
-            _load_integration_env()
-            if not os.environ.get("GITHUB_TOKEN") or not os.environ.get("GITHUB_REPO"):
-                msg("❌ Brak konfiguracji GitHub.\n"
-                    "[[🔗 Konfiguruj integracje|integrations_setup]]")
-                return
-            progress(f"🔗 Wysyłam {tid} do GitHub Issues…")
-            result = _tickets.push_to_github(tid)
-            if result and result.get("github_issue_number"):
-                repo = os.environ.get("GITHUB_REPO", "")
-                num = result["github_issue_number"]
-                msg(f"✅ **{tid}** → [GitHub Issue #{num}](https://github.com/{repo}/issues/{num})")
-            else:
-                msg(f"❌ Nie udało się wypchnąć {tid} do GitHub. Sprawdź `GITHUB_TOKEN` i `GITHUB_REPO`.")
-        threading.Thread(target=_push_gh, daemon=True).start()
-        return True
-    if value.startswith("suggest_commands::"): step_suggest_commands(value.split("::",1)[1]); return True
-    if value.startswith("run_suggested_cmd::"): _run_suggested_cmd(value.split("::",1)[1]); return True
-    if value.startswith("restart_container::"): _do_restart_container(value.split("::",1)[1]); return True
-    if value.startswith("diag_port::"):     diag_port(value.split("::",1)[1]); return True
-    if value.startswith("show_missing_env::"): show_missing_env(value.split("::",1)[1]); return True
-    if value.startswith("logs_stack::"):    step_show_logs(value.split("::",1)[1]); return True
-    if value.startswith("fix_compose::"):
-        msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
-        buttons([{"label":t('show_logs_btn'),"value":f"logs_stack::{value.split('::',1)[1]}"},{"label":t('back'),"value":"back"}])
-        return True
-    if value == "settings_nav":             _step_settings_nav(); return True
-    if value.startswith("settings_group::"): step_settings(value.split("::",1)[1]); return True
-    if value.startswith("save_settings::"):  step_save_settings(value.split("::",1)[1], form); return True
-    if value.startswith("preflight_save_launch::"):
-        env_updates: dict[str, str] = {}
-        for k, v in form.items():
-            if k in _ENV_TO_STATE:
-                _state[_ENV_TO_STATE[k]] = str(v).strip()
-                env_updates[k] = str(v).strip()
-        if env_updates:
-            save_env(env_updates)
-            save_state()
-        stacks_str = value.split("::",1)[1]
-        _state["stacks"] = stacks_str.split(",")[0] if len(stacks_str.split(","))==1 else "all"
-        step_do_launch({"stacks": _state["stacks"], "environment": _state.get("environment","local")})
-        return True
+    # 3) STEPS table fallback
     handler = STEPS.get(value)
     if handler:
-        handler(form); return True
+        handler(form)
+        return True
     return False
 
 def _run_action_sync(value: str, form: dict, timeout: float = 30.0) -> list[dict]:
