@@ -858,24 +858,27 @@ def _dispatch(value: str, form: dict):
                     else:
                         msg(f"⚠️ `ticket-work {arg_}` (kod {rc1}):\n```\n{out1[:1000]}\n```" if out1 else f"⚠️ `ticket-work {arg_}` (kod {rc1})")
 
-                    # 2) Auto-run implement via LLM
-                    msg(f"🤖 Rozpoczynam AI implementację: `implement {arg_}`\nŚledzenie postępu w panelu logów →")
-                    script2 = f"/home/{user_}/scripts/implement.sh"
-                    shell2 = f"if [ -x '{script2}' ]; then '{script2}' {arg_}; else source ~/.bashrc 2>/dev/null; implement {arg_}; fi"
+                    # 2) Auto-run implement via LLM (only if key is available)
                     llm_key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
                                or _state.get("developer_llm_api_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
-                    llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
-                    extra_env = []
-                    if llm_key:
+                    if not llm_key:
+                        msg("⚠️ **Brak klucza OPENROUTER_API_KEY** — AI implementacja pominięta.\n"
+                            "Skonfiguruj klucz API, aby włączyć `implement`:")
+                        _prompt_api_key(return_action=f"ssh_cmd::developer::ticket-work::{arg_}")
+                    else:
+                        llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
                         extra_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
                                      "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
                                      "-e", f"LLM_MODEL={llm_model}"]
-                    rc2, out2 = run_cmd(["docker", "exec"] + extra_env + ["-u", user_, container_, "bash", "-lc", shell2])
-                    out2 = (out2 or "").strip()
-                    if rc2 == 0:
-                        msg(f"✅ Implementacja `{arg_}` zakończona\n```\n{out2[:3000]}\n```" if out2 else f"✅ Implementacja `{arg_}` zakończona")
-                    else:
-                        msg(f"⚠️ `implement {arg_}` (kod {rc2}):\n```\n{out2[:2000]}\n```" if out2 else f"⚠️ `implement {arg_}` (kod {rc2})")
+                        msg(f"🤖 Rozpoczynam AI implementację: `implement {arg_}`\nŚledzenie postępu w panelu logów →")
+                        script2 = f"/home/{user_}/scripts/implement.sh"
+                        shell2 = f"if [ -x '{script2}' ]; then '{script2}' {arg_}; else source ~/.bashrc 2>/dev/null; implement {arg_}; fi"
+                        rc2, out2 = run_cmd(["docker", "exec"] + extra_env + ["-u", user_, container_, "bash", "-lc", shell2])
+                        out2 = (out2 or "").strip()
+                        if rc2 == 0:
+                            msg(f"✅ Implementacja `{arg_}` zakończona\n```\n{out2[:3000]}\n```" if out2 else f"✅ Implementacja `{arg_}` zakończona")
+                        else:
+                            msg(f"⚠️ `implement {arg_}` (kod {rc2}):\n```\n{out2[:2000]}\n```" if out2 else f"⚠️ `implement {arg_}` (kod {rc2})")
                 except Exception as e:
                     msg(f"❌ Błąd: {e}")
                 finally:
