@@ -1,5 +1,6 @@
 """Dynamic SSH role & command discovery from Makefiles, motd, scripts."""
 from .core import *
+from .i18n import t
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Dynamic SSH role / command discovery — parses Makefiles, motd, scripts dirs
@@ -377,8 +378,8 @@ def run_ssh_cmd(value: str, form: dict):
                 ])
             except Exception:
                 buttons([
-                    {"label": "🔧 Wróć do akcji", "value": f"ssh_info::{role}::2200"},
-                    {"label": "🏠 Menu",            "value": "back"},
+                    {"label": t('back_to_actions'), "value": f"ssh_info::{role}::2200"},
+                    {"label": t('menu'),            "value": "back"},
                 ])
             _tl.sid = None
     threading.Thread(target=_run, daemon=True).start()

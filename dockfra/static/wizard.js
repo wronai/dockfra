@@ -8,25 +8,85 @@ const processesList = document.getElementById('processes-list');
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const TRANSLATIONS = {
   pl:{ chat:'💬 Chat', processes:'⚙️ Procesy', logs:'📋 Logi', copy:'📋 Kopiuj',
-       connecting:'Łączenie...', connected:'Połączono', disconnected:'Rozłączono', sub:'Kreator konfiguracji' },
+       connecting:'Łączenie...', connected:'Połączono', disconnected:'Rozłączono', sub:'Kreator konfiguracji',
+       stop:'Stop', restart:'Restart', changePort:'Zmień port', fix:'Napraw to',
+       enterPort:'Podaj nowy port dla {name}:', noProcesses:'Brak procesów',
+       errProcesses:'Błąd ładowania procesów', failAction:'Nie udało się {action} {name}: {msg}',
+       errAction:'Błąd {action} na {name}: {msg}', services:'🌐 Usługi', noServices:'Brak usług',
+       errServices:'Błąd ładowania usług', stats:'📊 Statystyki', noStats:'Brak danych',
+       save:'💾 Zapisz', cancel:'Anuluj', apply:'Zastosuj' },
   en:{ chat:'💬 Chat', processes:'⚙️ Processes', logs:'📋 Logs', copy:'📋 Copy',
-       connecting:'Connecting...', connected:'Connected', disconnected:'Disconnected', sub:'Setup Wizard' },
+       connecting:'Connecting...', connected:'Connected', disconnected:'Disconnected', sub:'Setup Wizard',
+       stop:'Stop', restart:'Restart', changePort:'Change Port', fix:'Fix it',
+       enterPort:'Enter new port for {name}:', noProcesses:'No processes found',
+       errProcesses:'Error loading processes', failAction:'Failed to {action} {name}: {msg}',
+       errAction:'Error executing {action} on {name}: {msg}', services:'🌐 Services', noServices:'No services',
+       errServices:'Error loading services', stats:'📊 Statistics', noStats:'No data',
+       save:'💾 Save', cancel:'Cancel', apply:'Apply' },
   de:{ chat:'💬 Chat', processes:'⚙️ Prozesse', logs:'📋 Protokolle', copy:'📋 Kopieren',
-       connecting:'Verbinde...', connected:'Verbunden', disconnected:'Getrennt', sub:'Einrichtungsassistent' },
+       connecting:'Verbinde...', connected:'Verbunden', disconnected:'Getrennt', sub:'Einrichtungsassistent',
+       stop:'Stoppen', restart:'Neustart', changePort:'Port ändern', fix:'Reparieren',
+       enterPort:'Neuen Port für {name} eingeben:', noProcesses:'Keine Prozesse gefunden',
+       errProcesses:'Fehler beim Laden der Prozesse', failAction:'{action} für {name} fehlgeschlagen: {msg}',
+       errAction:'Fehler bei {action} für {name}: {msg}', services:'🌐 Dienste', noServices:'Keine Dienste',
+       errServices:'Fehler beim Laden der Dienste', stats:'📊 Statistiken', noStats:'Keine Daten',
+       save:'💾 Speichern', cancel:'Abbrechen', apply:'Anwenden' },
   fr:{ chat:'💬 Chat', processes:'⚙️ Processus', logs:'📋 Journaux', copy:'📋 Copier',
-       connecting:'Connexion...', connected:'Connecté', disconnected:'Déconnecté', sub:'Assistant de configuration' },
+       connecting:'Connexion...', connected:'Connecté', disconnected:'Déconnecté', sub:'Assistant de configuration',
+       stop:'Arrêter', restart:'Redémarrer', changePort:'Changer le port', fix:'Réparer',
+       enterPort:'Nouveau port pour {name} :', noProcesses:'Aucun processus trouvé',
+       errProcesses:'Erreur de chargement des processus', failAction:'Échec de {action} {name} : {msg}',
+       errAction:'Erreur {action} sur {name} : {msg}', services:'🌐 Services', noServices:'Aucun service',
+       errServices:'Erreur de chargement des services', stats:'📊 Statistiques', noStats:'Pas de données',
+       save:'💾 Enregistrer', cancel:'Annuler', apply:'Appliquer' },
   es:{ chat:'💬 Chat', processes:'⚙️ Procesos', logs:'📋 Registros', copy:'📋 Copiar',
-       connecting:'Conectando...', connected:'Conectado', disconnected:'Desconectado', sub:'Asistente de configuración' },
+       connecting:'Conectando...', connected:'Conectado', disconnected:'Desconectado', sub:'Asistente de configuración',
+       stop:'Detener', restart:'Reiniciar', changePort:'Cambiar puerto', fix:'Reparar',
+       enterPort:'Nuevo puerto para {name}:', noProcesses:'Sin procesos',
+       errProcesses:'Error al cargar procesos', failAction:'Error al {action} {name}: {msg}',
+       errAction:'Error {action} en {name}: {msg}', services:'🌐 Servicios', noServices:'Sin servicios',
+       errServices:'Error al cargar servicios', stats:'📊 Estadísticas', noStats:'Sin datos',
+       save:'💾 Guardar', cancel:'Cancelar', apply:'Aplicar' },
   it:{ chat:'💬 Chat', processes:'⚙️ Processi', logs:'📋 Log', copy:'📋 Copia',
-       connecting:'Connessione...', connected:'Connesso', disconnected:'Disconnesso', sub:'Procedura guidata' },
+       connecting:'Connessione...', connected:'Connesso', disconnected:'Disconnesso', sub:'Procedura guidata',
+       stop:'Ferma', restart:'Riavvia', changePort:'Cambia porta', fix:'Ripara',
+       enterPort:'Nuova porta per {name}:', noProcesses:'Nessun processo',
+       errProcesses:'Errore caricamento processi', failAction:'Errore {action} {name}: {msg}',
+       errAction:'Errore {action} su {name}: {msg}', services:'🌐 Servizi', noServices:'Nessun servizio',
+       errServices:'Errore caricamento servizi', stats:'📊 Statistiche', noStats:'Nessun dato',
+       save:'💾 Salva', cancel:'Annulla', apply:'Applica' },
   pt:{ chat:'💬 Chat', processes:'⚙️ Processos', logs:'📋 Registos', copy:'📋 Copiar',
-       connecting:'A ligar...', connected:'Ligado', disconnected:'Desligado', sub:'Assistente de configuração' },
+       connecting:'A ligar...', connected:'Ligado', disconnected:'Desligado', sub:'Assistente de configuração',
+       stop:'Parar', restart:'Reiniciar', changePort:'Mudar porta', fix:'Corrigir',
+       enterPort:'Nova porta para {name}:', noProcesses:'Sem processos',
+       errProcesses:'Erro ao carregar processos', failAction:'Erro ao {action} {name}: {msg}',
+       errAction:'Erro {action} em {name}: {msg}', services:'🌐 Serviços', noServices:'Sem serviços',
+       errServices:'Erro ao carregar serviços', stats:'📊 Estatísticas', noStats:'Sem dados',
+       save:'💾 Guardar', cancel:'Cancelar', apply:'Aplicar' },
   cs:{ chat:'💬 Chat', processes:'⚙️ Procesy', logs:'📋 Logy', copy:'📋 Kopírovat',
-       connecting:'Připojování...', connected:'Připojeno', disconnected:'Odpojeno', sub:'Průvodce nastavením' },
+       connecting:'Připojování...', connected:'Připojeno', disconnected:'Odpojeno', sub:'Průvodce nastavením',
+       stop:'Zastavit', restart:'Restartovat', changePort:'Změnit port', fix:'Opravit',
+       enterPort:'Nový port pro {name}:', noProcesses:'Žádné procesy',
+       errProcesses:'Chyba načítání procesů', failAction:'Chyba {action} {name}: {msg}',
+       errAction:'Chyba {action} na {name}: {msg}', services:'🌐 Služby', noServices:'Žádné služby',
+       errServices:'Chyba načítání služeb', stats:'📊 Statistiky', noStats:'Žádná data',
+       save:'💾 Uložit', cancel:'Zrušit', apply:'Použít' },
   ro:{ chat:'💬 Chat', processes:'⚙️ Procese', logs:'📋 Jurnale', copy:'📋 Copiați',
-       connecting:'Se conectează...', connected:'Conectat', disconnected:'Deconectat', sub:'Expert configurare' },
+       connecting:'Se conectează...', connected:'Conectat', disconnected:'Deconectat', sub:'Expert configurare',
+       stop:'Oprire', restart:'Repornire', changePort:'Schimbă portul', fix:'Repară',
+       enterPort:'Port nou pentru {name}:', noProcesses:'Niciun proces',
+       errProcesses:'Eroare la încărcarea proceselor', failAction:'Eroare {action} {name}: {msg}',
+       errAction:'Eroare {action} pe {name}: {msg}', services:'🌐 Servicii', noServices:'Fără servicii',
+       errServices:'Eroare la încărcarea serviciilor', stats:'📊 Statistici', noStats:'Fără date',
+       save:'💾 Salvează', cancel:'Anulează', apply:'Aplică' },
   nl:{ chat:'💬 Chat', processes:'⚙️ Processen', logs:'📋 Logboek', copy:'📋 Kopiëren',
-       connecting:'Verbinden...', connected:'Verbonden', disconnected:'Verbroken', sub:'Installatiewizard' },
+       connecting:'Verbinden...', connected:'Verbonden', disconnected:'Verbroken', sub:'Installatiewizard',
+       stop:'Stoppen', restart:'Herstarten', changePort:'Poort wijzigen', fix:'Repareren',
+       enterPort:'Nieuwe poort voor {name}:', noProcesses:'Geen processen gevonden',
+       errProcesses:'Fout bij laden processen', failAction:'Fout bij {action} {name}: {msg}',
+       errAction:'Fout {action} op {name}: {msg}', services:'🌐 Services', noServices:'Geen services',
+       errServices:'Fout bij laden services', stats:'📊 Statistieken', noStats:'Geen gegevens',
+       save:'💾 Opslaan', cancel:'Annuleren', apply:'Toepassen' },
 };
 let _lang = localStorage.getItem('wizard_lang') || 'pl';
 function t(k){ return (TRANSLATIONS[_lang]||TRANSLATIONS.pl)[k]||k; }
@@ -1003,26 +1063,26 @@ async function updateProcesses() {
       actionsContainer.className = 'process-actions';
       const stopBtn = document.createElement('button');
       stopBtn.className = 'process-icon-btn';
-      stopBtn.innerHTML = '⏹<span class="tooltip">Stop</span>';
+      stopBtn.innerHTML = `⏹<span class="tooltip">${t('stop')}</span>`;
       stopBtn.onclick = async () => { await executeProcessAction('stop', process.name); setTimeout(updateProcesses, 2000); };
       const restartBtn = document.createElement('button');
       restartBtn.className = 'process-icon-btn';
-      restartBtn.innerHTML = '🔄<span class="tooltip">Restart</span>';
+      restartBtn.innerHTML = `🔄<span class="tooltip">${t('restart')}</span>`;
       restartBtn.onclick = async () => { await executeProcessAction('restart', process.name); setTimeout(updateProcesses, 2000); };
       const portBtn = document.createElement('button');
       portBtn.className = 'process-icon-btn';
-      portBtn.innerHTML = '🔧<span class="tooltip">Change Port</span>';
+      portBtn.innerHTML = `🔧<span class="tooltip">${t('changePort')}</span>`;
       portBtn.onclick = async () => {
-        const newPort = prompt(`Enter new port for ${process.name}:`);
+        const newPort = prompt(t('enterPort').replace('{name}', process.name));
         if (newPort) { await executeProcessAction('change_port', process.name, { port: newPort }); setTimeout(updateProcesses, 2000); }
       };
       actionsContainer.append(stopBtn, restartBtn, portBtn);
       if (process.status === 'stopped') {
         const fixBtn = document.createElement('button');
         fixBtn.className = 'process-icon-btn fix-btn';
-        fixBtn.innerHTML = '🔧<span class="tooltip">Napraw to</span>';
+        fixBtn.innerHTML = `🔧<span class="tooltip">${t('fix')}</span>`;
         fixBtn.onclick = () => {
-          sendAction('fix_container::' + process.name, '🔧 Napraw: ' + process.name);
+          sendAction('fix_container::' + process.name, '🔧 ' + process.name);
         };
         actionsContainer.appendChild(fixBtn);
       }
@@ -1034,9 +1094,9 @@ async function updateProcesses() {
       processesList.appendChild(item);
     });
     if (processes.length === 0)
-      processesList.innerHTML = '<div style="color:var(--muted);font-size:.7rem;">No processes found</div>';
+      processesList.innerHTML = `<div style="color:var(--muted);font-size:.7rem;">${t('noProcesses')}</div>`;
   } catch {
-    processesList.innerHTML = '<div style="color:var(--red);font-size:.7rem;">Error loading processes</div>';
+    processesList.innerHTML = `<div style="color:var(--red);font-size:.7rem;">${t('errProcesses')}</div>`;
   }
 }
 
@@ -1045,9 +1105,9 @@ async function executeProcessAction(action, processName, data = {}) {
     const result = await fetch(`/api/process/${action}/${processName}`, {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
     }).then(r => r.json());
-    if (!result.success) alert(`Failed to ${action} ${processName}: ${result.message}`);
+    if (!result.success) alert(t('failAction').replace('{action}',action).replace('{name}',processName).replace('{msg}',result.message));
   } catch (error) {
-    alert(`Error executing ${action} on ${processName}: ${error.message}`);
+    alert(t('errAction').replace('{action}',action).replace('{name}',processName).replace('{msg}',error.message));
   }
 }
 
@@ -1069,7 +1129,7 @@ async function updateServices() {
       return !mgmtNames.some(m => n.includes(m)) && !n.includes('wizard');
     });
     if (appContainers.length === 0) {
-      servicesList.innerHTML = '<div style="color:var(--muted);font-size:.7rem;padding:8px 0">Brak uruchomionych serwisów app.<br>Kliknij 🔧 SSH Developer → Sklonuj i uruchom app.</div>';
+      servicesList.innerHTML = `<div style="color:var(--muted);font-size:.7rem;padding:8px 0">${t('noServices')}</div>`;
       return;
     }
     appContainers.forEach(c => {
@@ -1083,13 +1143,13 @@ async function updateServices() {
         <span class="service-name" title="${c.name}">${c.name.replace(/^dockfra-/,'')}</span>
         <span class="service-ports">${ports.slice(0,20)}</span>
         <div class="service-actions">
-          <button class="process-icon-btn" title="Logi" onclick="sendAction('logs::${c.name}','📋 Logi: ${c.name}')">📋</button>
-          ${!up ? `<button class="process-icon-btn fix-btn" title="Napraw" onclick="sendAction('fix_container::${c.name}','🔧 Napraw: ${c.name}')">🔧</button>` : ''}
+          <button class="process-icon-btn" title="${t('logs')}" onclick="sendAction('logs::${c.name}','📋 ${c.name}')">📋</button>
+          ${!up ? `<button class="process-icon-btn fix-btn" title="${t('fix')}" onclick="sendAction('fix_container::${c.name}','🔧 ${c.name}')">🔧</button>` : ''}
         </div>`;
       servicesList.appendChild(item);
     });
   } catch {
-    servicesList.innerHTML = '<div style="color:var(--red);font-size:.7rem;">Błąd ładowania serwisów</div>';
+    servicesList.innerHTML = `<div style="color:var(--red);font-size:.7rem;">${t('errServices')}</div>`;
   }
 }
 
@@ -1107,10 +1167,10 @@ async function updateStats() {
 
     // ── Ticket list as cards ──────────────────────────────────────────────────
     html += '<div class="stats-section">';
-    html += '<div class="stats-title-row"><span class="stats-title">🎫 Tickety</span>';
-    html += `<button class="stats-action" onclick="sendAction('ticket_create_wizard','📝 Utwórz ticket')">+ Nowy</button></div>`;
+    html += '<div class="stats-title-row"><span class="stats-title">🎫 Tickets</span>';
+    html += `<button class="stats-action" onclick="sendAction('ticket_create_wizard','📝')">+ New</button></div>`;
     if (tickets.length === 0) {
-      html += '<div class="stats-empty" style="padding:12px 0">Brak ticketów.<br>Kliknij <strong>+ Nowy</strong> aby dodać.</div>';
+      html += `<div class="stats-empty" style="padding:12px 0">${t('noStats')}</div>`;
     } else {
       const statusIcon = {open:'○',in_progress:'◐',review:'◑',done:'●',closed:'●'};
       const statusCls  = {open:'badge-accent',in_progress:'badge-yellow',review:'badge-cyan',done:'badge-muted',closed:'badge-muted'};

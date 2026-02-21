@@ -28,5 +28,11 @@
     "error": "=== Engine: claude_code | Ticket: T-0003 ===\nTitle: Stw\u00f3rz 3 nowe tickety\nDescription:\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
     "ticket_id": "T-0003",
     "ts": "2026-02-21T08:20:44.657460+00:00"
+  },
+  {
+    "step": "implement",
+    "error": "=== Engine: claude_code | Ticket: T-0002 ===\nTitle: E2E test ticket\nDescription: Created via API test\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+    "ticket_id": "T-0002",
+    "ts": "2026-02-21T09:05:04.619802+00:00"
   }
 ]

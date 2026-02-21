@@ -736,19 +736,19 @@ def _step_integrations_save(form):
             configured.append("Trello")
         if updates.get("LINEAR_TOKEN"):
             configured.append("Linear")
-        msg(f"## ✅ Integracje zapisane\n\nSkonfigurowano: **{', '.join(configured) if configured else 'brak'}**")
+        msg(t('integrations_saved') + f"\n\n**{', '.join(configured) if configured else '-'}**")
     else:
-        msg("⚠️ Brak danych do zapisania.")
+        msg(t('no_data_to_save'))
     buttons([
-        {"label": "🔄 Synchronizuj teraz", "value": "ticket_sync"},
-        {"label": "🔗 Edytuj integracje", "value": "integrations_setup"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('sync_now'), "value": "ticket_sync"},
+        {"label": t('edit_integrations'), "value": "integrations_setup"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 def _step_ticket_sync():
     """Sync tickets with configured external services."""
     clear_widgets()
-    progress("🔄 Synchronizuję tickety z zewnętrznymi usługami...")
+    progress(t('syncing_tickets'))
     _load_integration_env()
     try:
         results = _tickets.sync_all()
@@ -756,26 +756,26 @@ def _step_ticket_sync():
         lines = []
         for svc, info in results.items():
             if info.get("ok"):
-                lines.append(f"✅ **{svc.capitalize()}** — pobrano {info.get('pulled', 0)} nowych ticketów")
+                lines.append(t('sync_pulled', svc=svc.capitalize(), n=info.get('pulled', 0)))
             else:
                 lines.append(f"❌ **{svc.capitalize()}** — {info.get('error', 'błąd')}")
         if not results:
-            lines.append("⚠️ Brak skonfigurowanych integracji. Kliknij **🔗 Konfiguruj integracje** aby dodać.")
-        msg("## 🔄 Wyniki synchronizacji\n\n" + "\n".join(lines))
+            lines.append(t('no_integrations_configured'))
+        msg(t('sync_results') + "\n\n" + "\n".join(lines))
     except Exception as e:
         progress("🔄 Synchronizacja", error=True)
         msg(f"❌ Błąd synchronizacji: {e}")
     buttons([
-        {"label": "📝 Utwórz ticket", "value": "ticket_create_wizard"},
-        {"label": "🔗 Konfiguruj integracje", "value": "integrations_setup"},
-        {"label": "📊 Statystyki", "value": "project_stats"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('create_ticket'), "value": "ticket_create_wizard"},
+        {"label": t('configure_integrations'), "value": "integrations_setup"},
+        {"label": t('project_stats'), "value": "project_stats"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 def _step_project_stats():
     """Show project statistics in the chat."""
     clear_widgets()
-    msg("## 📊 Statystyki projektu")
+    msg(t('project_stats_title'))
     # Tickets (via dockfra.tickets)
     ts = _tickets.stats()
     by_status = ts["by_status"]
@@ -784,7 +784,7 @@ def _step_project_stats():
     status_icons = {"open": "○", "in_progress": "◐", "closed": "●"}
     prio_icons = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}
 
-    ticket_lines = f"**Razem:** {ts['total']} ticketów\n"
+    ticket_lines = t('total_tickets', n=ts['total']) + "\n"
     if by_status:
         ticket_lines += " | ".join(f"{status_icons.get(s,'?')} {s}: **{c}**" for s, c in by_status.items()) + "\n"
     if by_prio:
@@ -797,8 +797,8 @@ def _step_project_stats():
     containers = docker_ps()
     running = [c for c in containers if "Up" in c["status"] and "Restarting" not in c["status"]]
     failing = [c for c in containers if "Restarting" in c["status"] or "Exit" in c["status"]]
-    msg(f"### 🐳 Kontenery\n"
-        f"**Razem:** {len(containers)} | ✅ Działające: **{len(running)}** | 🔴 Problemy: **{len(failing)}**")
+    msg(t('containers_section') + f"\n"
+        f"**Total:** {len(containers)} | ✅ OK: **{len(running)}** | 🔴: **{len(failing)}**")
 
     # Git
     try:
@@ -813,11 +813,11 @@ def _step_project_stats():
         commits_today = subprocess.check_output(
             ["git", "-C", str(git_dir), "rev-list", "--count", "--since=midnight", "HEAD"],
             text=True, stderr=subprocess.DEVNULL).strip()
-        msg(f"### 📂 Git\n"
-            f"**Gałąź:** `{branch}` | **Commity dziś:** {commits_today}\n"
+        msg(t('git_section') + "\n" +
+            t('branch_label', branch=branch, n=commits_today) + f"\n"
             f"```\n{log_out}\n```")
     except Exception:
-        msg("### 📂 Git\n⚠️ Brak repozytorium git lub błąd odczytu.")
+        msg(t('no_git'))
 
     # Integrations
     env = load_env()
@@ -831,15 +831,15 @@ def _step_project_stats():
     if env.get("LINEAR_TOKEN"):
         int_status.append("✅ Linear")
     if not int_status:
-        int_status.append("⚠️ Brak skonfigurowanych integracji")
+        int_status.append(t('no_integrations_configured'))
     msg(f"### 🔗 Integracje\n{' | '.join(int_status)}")
 
     buttons([
-        {"label": "📝 Utwórz ticket", "value": "ticket_create_wizard"},
-        {"label": "🔧 Silniki deweloperskie", "value": "engine_select"},
-        {"label": "🔗 Konfiguruj integracje", "value": "integrations_setup"},
-        {"label": "🔄 Synchronizuj tickety", "value": "ticket_sync"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('create_ticket'), "value": "ticket_create_wizard"},
+        {"label": t('engines_title').replace('## ',''), "value": "engine_select"},
+        {"label": t('configure_integrations'), "value": "integrations_setup"},
+        {"label": t('sync_now'), "value": "ticket_sync"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 
@@ -848,42 +848,42 @@ def _step_project_stats():
 def _step_show_ticket(tid: str):
     """Show detailed ticket view with status-aware actions."""
     clear_widgets()
-    t = _tickets.get(tid)
-    if not t:
-        msg(f"❌ Ticket `{tid}` nie znaleziony.")
-        buttons([{"label": "🏠 Menu", "value": "back"}])
+    tk = _tickets.get(tid)
+    if not tk:
+        msg(t('ticket_not_found', tid=tid))
+        buttons([{"label": t('menu'), "value": "back"}])
         return
-    si = {"open": "○", "in_progress": "◐", "review": "◑", "closed": "●", "done": "●"}.get(t["status"], "?")
-    pi = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}.get(t.get("priority", "normal"), "⚪")
-    gh_num = t.get("github_issue_number")
+    si = {"open": "○", "in_progress": "◐", "review": "◑", "closed": "●", "done": "●"}.get(tk["status"], "?")
+    pi = {"critical": "🔴", "high": "🟠", "normal": "🟡", "low": "🟢"}.get(tk.get("priority", "normal"), "⚪")
+    gh_num = tk.get("github_issue_number")
     gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
     gh_link = f" | [GH#{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})" if gh_num and gh_repo else ""
-    msg(f"## {si} {tid} — {t['title']}\n"
-        f"**Status:** {t['status']} | **Priorytet:** {pi} {t.get('priority','normal')} | **Przypisany:** {t.get('assigned_to','?')}{gh_link}\n\n"
-        f"**Opis:** {t.get('description','(brak)')}")
+    msg(f"## {si} {tid} — {tk['title']}\n"
+        f"**Status:** {tk['status']} | **Priority:** {pi} {tk.get('priority','normal')} | **Assigned:** {tk.get('assigned_to','?')}{gh_link}\n\n"
+        f"**Description:** {tk.get('description','—')}")
     # Show comments
-    comments = t.get("comments", [])
+    comments = tk.get("comments", [])
     if comments:
-        msg("### 💬 Komentarze")
+        msg(t('comments_title'))
         for c in comments[-10:]:
-            ts = c.get("timestamp", "")[:16].replace("T", " ")
-            msg(f"**{c.get('author','?')}** ({ts}): {c.get('text','')}")
+            ts_str = c.get("timestamp", "")[:16].replace("T", " ")
+            msg(f"**{c.get('author','?')}** ({ts_str}): {c.get('text','')}")
     # Status-aware buttons
     btn_items = []
-    if t["status"] == "open":
-        btn_items.append({"label": "▶ Pracuj (pełny pipeline)", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
-    elif t["status"] == "in_progress":
-        btn_items.append({"label": "▶ Kontynuuj pipeline", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+    if tk["status"] == "open":
+        btn_items.append({"label": "▶ Work (full pipeline)", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+    elif tk["status"] == "in_progress":
+        btn_items.append({"label": "▶ Continue pipeline", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
         btn_items.append({"label": "🤖 Implement", "value": f"ssh_cmd::developer::implement::{tid}"})
-    elif t["status"] == "review":
-        btn_items.append({"label": "✅ Zatwierdź (manager)", "value": f"manager_approve::{tid}"})
-        btn_items.append({"label": "🔄 Odrzuć → ponów", "value": f"manager_reject::{tid}"})
+    elif tk["status"] == "review":
+        btn_items.append({"label": "✅ Approve (manager)", "value": f"manager_approve::{tid}"})
+        btn_items.append({"label": "🔄 Reject → rework", "value": f"manager_reject::{tid}"})
         if gh_repo:
-            btn_items.append({"label": "🔗 Zobacz na GitHub", "value": f"open_github::{gh_repo}"})
-    elif t["status"] in ("closed", "done"):
-        btn_items.append({"label": "🔄 Otwórz ponownie", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
-    btn_items.append({"label": "📋 Wszystkie tickety do review", "value": "tickets_review"})
-    btn_items.append({"label": "🏠 Menu", "value": "back"})
+            btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
+    elif tk["status"] in ("closed", "done"):
+        btn_items.append({"label": "🔄 Reopen", "value": f"ssh_cmd::developer::ticket-work::{tid}"})
+    btn_items.append({"label": t('review_panel'), "value": "tickets_review"})
+    btn_items.append({"label": t('menu'), "value": "back"})
     buttons(btn_items)
 
 
@@ -891,60 +891,59 @@ def _step_tickets_review():
     """Show all tickets in 'review' status — manager dashboard."""
     clear_widgets()
     all_tickets = _tickets.list_tickets()
-    review_tickets = [t for t in all_tickets if t.get("status") == "review"]
-    in_progress = [t for t in all_tickets if t.get("status") == "in_progress"]
-    open_tickets = [t for t in all_tickets if t.get("status") == "open"]
-    done_tickets = [t for t in all_tickets if t.get("status") in ("closed", "done")]
+    review_tickets = [tk for tk in all_tickets if tk.get("status") == "review"]
+    in_progress = [tk for tk in all_tickets if tk.get("status") == "in_progress"]
+    open_tickets = [tk for tk in all_tickets if tk.get("status") == "open"]
+    done_tickets = [tk for tk in all_tickets if tk.get("status") in ("closed", "done")]
 
-    msg(f"## 📋 Panel Managera — Przegląd Ticketów\n"
-        f"**Do review:** {len(review_tickets)} | **W trakcie:** {len(in_progress)} | "
-        f"**Otwarte:** {len(open_tickets)} | **Zakończone:** {len(done_tickets)}")
+    msg(t('manager_panel') + "\n" +
+        t('for_review', review=len(review_tickets), progress=len(in_progress),
+          open=len(open_tickets), done=len(done_tickets)))
 
     gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
 
     if review_tickets:
-        msg("### 👁️ Czekają na review")
-        for t in review_tickets:
-            gh_num = t.get("github_issue_number")
+        msg(t('waiting_review'))
+        for tk in review_tickets:
+            gh_num = tk.get("github_issue_number")
             gh_link = f" [GH#{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})" if gh_num and gh_repo else ""
-            msg(f"- **◑ {t['id']}** — {t['title']}{gh_link}")
+            msg(f"- **◑ {tk['id']}** — {tk['title']}{gh_link}")
 
     if in_progress:
-        msg("### 🔄 W trakcie pracy")
-        for t in in_progress:
-            msg(f"- **◐ {t['id']}** — {t['title']} → {t.get('assigned_to','?')}")
+        msg(t('in_progress_title'))
+        for tk in in_progress:
+            msg(f"- **◐ {tk['id']}** — {tk['title']} → {tk.get('assigned_to','?')}")
 
     if open_tickets:
-        msg("### ○ Otwarte (gotowe do przydzielenia)")
-        for t in open_tickets:
-            msg(f"- **○ {t['id']}** — {t['title']}")
+        msg(t('open_ready'))
+        for tk in open_tickets:
+            msg(f"- **○ {tk['id']}** — {tk['title']}")
 
     # Action buttons
     btn_items = []
-    for t in review_tickets:
-        btn_items.append({"label": f"✅ Zatwierdź {t['id']}", "value": f"manager_approve::{t['id']}"})
-        btn_items.append({"label": f"🔄 Odrzuć {t['id']}", "value": f"manager_reject::{t['id']}"})
-    btn_items.append({"label": "📝 Utwórz nowy ticket", "value": "ticket_create_wizard"})
-    btn_items.append({"label": "🤖 AI: zaproponuj features", "value": "manager_suggest_features"})
+    for tk in review_tickets:
+        btn_items.append({"label": f"✅ Approve {tk['id']}", "value": f"manager_approve::{tk['id']}"})
+        btn_items.append({"label": f"🔄 Reject {tk['id']}", "value": f"manager_reject::{tk['id']}"})
+    btn_items.append({"label": t('create_ticket'), "value": "ticket_create_wizard"})
+    btn_items.append({"label": t('suggest_features'), "value": "manager_suggest_features"})
     if gh_repo:
         btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
-    btn_items.append({"label": "🏠 Menu", "value": "back"})
+    btn_items.append({"label": t('menu'), "value": "back"})
     buttons(btn_items)
 
 
 def _step_manager_approve(tid: str, form: dict):
     """Manager approves a ticket — marks as done, pushes to GitHub, syncs."""
     clear_widgets()
-    t = _tickets.get(tid)
-    if not t:
-        msg(f"❌ Ticket `{tid}` nie znaleziony.")
-        buttons([{"label": "🏠 Menu", "value": "back"}])
+    tk = _tickets.get(tid)
+    if not tk:
+        msg(t('ticket_not_found', tid=tid))
+        buttons([{"label": t('menu'), "value": "back"}])
         return
     _tickets.update(tid, status="done")
-    _tickets.add_comment(tid, "manager", "✅ Review zatwierdzony przez managera. Ticket zamknięty.")
-    # Push status to GitHub Issues
+    _tickets.add_comment(tid, "manager", "✅ Approved by manager.")
     gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
-    gh_num = t.get("github_issue_number")
+    gh_num = tk.get("github_issue_number")
     gh_link = ""
     if gh_repo and gh_num:
         try:
@@ -952,32 +951,31 @@ def _step_manager_approve(tid: str, form: dict):
             gh_link = f"\n🔗 [GitHub Issue #{gh_num}](https://github.com/{gh_repo}/issues/{gh_num})"
         except Exception:
             pass
-    msg(f"## ✅ Ticket `{tid}` zatwierdzony\n"
-        f"**{t['title']}** — status: **done**{gh_link}\n\n"
-        f"Implementacja zatwierdzona przez managera. Ticket zamknięty.")
+    msg(t('ticket_approved', tid=tid) + f"\n"
+        f"**{tk['title']}** — status: **done**{gh_link}")
     buttons([
-        {"label": "📋 Panel review", "value": "tickets_review"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('review_panel'), "value": "tickets_review"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 
 def _step_manager_reject(tid: str):
     """Manager rejects a ticket — sends back to in_progress for rework."""
     clear_widgets()
-    t = _tickets.get(tid)
-    if not t:
-        msg(f"❌ Ticket `{tid}` nie znaleziony.")
-        buttons([{"label": "🏠 Menu", "value": "back"}])
+    tk = _tickets.get(tid)
+    if not tk:
+        msg(t('ticket_not_found', tid=tid))
+        buttons([{"label": t('menu'), "value": "back"}])
         return
     _tickets.update(tid, status="in_progress")
-    _tickets.add_comment(tid, "manager", "🔄 Review odrzucony. Wymaga poprawek.")
-    msg(f"## 🔄 Ticket `{tid}` odrzucony → in_progress\n"
-        f"**{t['title']}** wraca do developera.\n\n"
-        f"[[▶ Pracuj {tid}|ssh_cmd::developer::ticket-work::{tid}]] [[👁️ Diff|show_ticket::{tid}]]")
+    _tickets.add_comment(tid, "manager", "🔄 Rejected. Needs rework.")
+    msg(t('ticket_rejected', tid=tid) + f"\n"
+        f"**{tk['title']}**\n\n"
+        f"[[▶ Work {tid}|ssh_cmd::developer::ticket-work::{tid}]] [[👁️ Diff|show_ticket::{tid}]]")
     buttons([
-        {"label": f"▶ Pracuj ponownie {tid}", "value": f"ssh_cmd::developer::ticket-work::{tid}"},
-        {"label": "📋 Panel review", "value": "tickets_review"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": f"▶ Rework {tid}", "value": f"ssh_cmd::developer::ticket-work::{tid}"},
+        {"label": t('review_panel'), "value": "tickets_review"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 
@@ -1039,8 +1037,8 @@ def _step_manager_suggest_features():
                 created.append(t)
     except Exception as e:
         msg(f"⚠️ Nie udało się sparsować propozycji AI: {e}\n\nSurowa odpowiedź:\n```\n{reply[:2000]}\n```")
-        buttons([{"label": "🔄 Spróbuj ponownie", "value": "manager_suggest_features"},
-                 {"label": "🏠 Menu", "value": "back"}])
+        buttons([{"label": t('retry'), "value": "manager_suggest_features"},
+                 {"label": t('menu'), "value": "back"}])
         return
 
     if created:
@@ -1062,7 +1060,7 @@ def _step_manager_suggest_features():
 
     btn_items = [
         {"label": "📋 Panel review", "value": "tickets_review"},
-        {"label": "🤖 Zaproponuj więcej", "value": "manager_suggest_features"},
+        {"label": t('suggest_more'), "value": "manager_suggest_features"},
         {"label": "🏠 Menu", "value": "back"},
     ]
     buttons(btn_items)
@@ -1210,9 +1208,9 @@ def _step_set_engine(engine_id: str):
     msg(f"✅ **Silnik ustawiony:** `{name}`\n\n"
         f"Pipeline będzie używał tego silnika do implementacji.")
     buttons([
-        {"label": "🔧 Zmień silnik", "value": "engine_select"},
-        {"label": "📋 Tickety", "value": "tickets_review"},
-        {"label": "🏠 Menu", "value": "back"},
+        {"label": t('change_engine'), "value": "engine_select"},
+        {"label": t('ticket_list'), "value": "tickets_review"},
+        {"label": t('menu'), "value": "back"},
     ])
 
 
@@ -1238,9 +1236,9 @@ def _step_engine_autotest():
         msg(f"✅ **Silnik gotowy:** `{info['name'] if info else engine_id}`\n"
             f"- {message}")
         buttons([
-            {"label": "🔧 Zmień silnik", "value": "engine_select"},
-            {"label": "📋 Tickety", "value": "tickets_review"},
-            {"label": "🏠 Menu", "value": "back"},
+            {"label": t('change_engine'), "value": "engine_select"},
+            {"label": t('ticket_list'), "value": "tickets_review"},
+            {"label": t('menu'), "value": "back"},
         ])
     else:
         msg(f"❌ **Żaden silnik nie działa.**\n{message}\n\n"
@@ -1252,7 +1250,7 @@ def _step_settings_nav():
     """Show group selector for settings navigation."""
     clear_widgets()
     groups = list(dict.fromkeys(e["group"] for e in ENV_SCHEMA))
-    msg("## ⚙️ Ustawienia — wybierz sekcję")
+    msg(t('settings_title'))
     btn_items = []
     for g in groups:
         g_entries = [e for e in ENV_SCHEMA if e["group"] == g]
@@ -1342,8 +1340,8 @@ def _dispatch(value: str, form: dict):
                 if rc.returncode != 0:
                     progress("clone", error=True)
                     msg(f"❌ Błąd klonowania:\n```\n{rc.stderr[:1000]}\n```")
-                    buttons([{"label": "⚙️ Zmień GIT_REPO_URL", "value": "settings_group::Git"},
-                             {"label": "🏠 Menu", "value": "back"}])
+                    buttons([{"label": t('change_git_url'), "value": "settings_group::Git"},
+                             {"label": t('menu'), "value": "back"}])
                     return
                 progress("clone", done=True)
                 msg(f"✅ Sklonowano do `{app_dir}`")
@@ -1474,9 +1472,9 @@ def _dispatch(value: str, form: dict):
                                 f"[[🔧 Zmień silnik|engine_select]]")
                             pstate.record_decision("abort", reason)
                             buttons([
-                                {"label": "🔄 Wymuś ponowienie", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
-                                {"label": "🔧 Zmień silnik", "value": "engine_select"},
-                                {"label": "🏠 Menu", "value": "back"},
+                                {"label": t('force_retry'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+                                {"label": t('change_engine'), "value": "engine_select"},
+                                {"label": t('menu'), "value": "back"},
                             ])
                             return
 
@@ -1564,8 +1562,8 @@ def _dispatch(value: str, form: dict):
                         {"label": "📋 Tickety do review", "value": "tickets_review"},
                     ]
                     if overall < 0.5:
-                        btn_items.insert(0, {"label": "🔄 Ponów pipeline (adaptacyjnie)", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
-                    btn_items.append({"label": "🔧 Zmień silnik", "value": "engine_select"})
+                        btn_items.insert(0, {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
+                    btn_items.append({"label": t('change_engine'), "value": "engine_select"})
                     if gh_repo:
                         btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
                     btn_items.append({"label": "🏠 Menu", "value": "back"})
@@ -1658,7 +1656,7 @@ def _dispatch(value: str, form: dict):
     if value.startswith("logs_stack::"):    step_show_logs(value.split("::",1)[1]); return True
     if value.startswith("fix_compose::"):
         msg(f"ℹ️ Plik `{value.split('::',1)[1]}/docker-compose.yml` ma błąd — sprawdź sieć lub usługi.")
-        buttons([{"label":"📋 Pokaż logi","value":f"logs_stack::{value.split('::',1)[1]}"},{"label":"← Wróć","value":"back"}])
+        buttons([{"label":t('show_logs_btn'),"value":f"logs_stack::{value.split('::',1)[1]}"},{"label":t('back'),"value":"back"}])
         return True
     if value == "settings_nav":             _step_settings_nav(); return True
     if value.startswith("settings_group::"): step_settings(value.split("::",1)[1]); return True

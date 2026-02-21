@@ -1,0 +1,67 @@
+{
+  "ticket_id": "T-0002",
+  "iteration": 1,
+  "steps": [
+    {
+      "step": "ticket-work",
+      "rc": 0,
+      "output": "Updated: T-0002\nComment added to T-0002\n\u2713 T-0002 marked as in_progress",
+      "duration": 0.13,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:05:01.826999+00:00"
+    },
+    {
+      "step": "implement",
+      "rc": 1,
+      "output": "=== Engine: claude_code | Ticket: T-0002 ===\nTitle: E2E test ticket\nDescription: Created via API test\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "duration": 2.6,
+      "error": "=== Engine: claude_code | Ticket: T-0002 ===\nTitle: E2E test ticket\nDescription: Created via API test\n\n[claude_code] Using Claude Code CLI...\nNot logged in \u00b7 Please run /login",
+      "score": 0.55,
+      "meta": {
+        "engine": "claude_code"
+      },
+      "ok": false,
+      "ts": "2026-02-21T09:05:04.619777+00:00"
+    },
+    {
+      "step": "test-local",
+      "rc": 0,
+      "output": "\u2500\u2500\u2500 Local Tests \u2500\u2500\u2500\n  HTTP backend... \u2713\n  HTTP mobile-backend... \u2713\n\n  Passed: 2 | Failed: 0",
+      "duration": 0.1,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:05:04.811808+00:00"
+    },
+    {
+      "step": "commit-push",
+      "rc": 0,
+      "output": "Nothing to commit.",
+      "duration": 0.08,
+      "error": "",
+      "score": 0.7,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:05:04.985838+00:00"
+    },
+    {
+      "step": "status-review",
+      "rc": 0,
+      "output": "review",
+      "duration": 0,
+      "error": "",
+      "score": 1.0,
+      "meta": {},
+      "ok": true,
+      "ts": "2026-02-21T09:05:05.078664+00:00"
+    }
+  ],
+  "decisions": [],
+  "overall_score": 0.775,
+  "started_at": "2026-02-21T09:04:59.629064+00:00",
+  "finished_at": "2026-02-21T09:05:05.078887+00:00"
+}

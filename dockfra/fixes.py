@@ -149,7 +149,7 @@ def step_suggest_commands(name: str):
             msg(f"**Diagnoza:** {diagnosis}")
         if not commands:
             msg(t('no_commands'))
-            buttons([{"label": "🧠 Pełna analiza AI", "value": f"ai_analyze::{name}"}])
+            buttons([{"label": t('full_ai_analysis'), "value": f"ai_analyze::{name}"}])
             return
         msg(f"### Proponowane komendy ({len(commands)}):")
         btn_items = []
@@ -273,8 +273,8 @@ def diag_port(port_num: str):
             msg(f"❌ {e}")
         msg(f"Możesz zmienić port w `devices/docker-compose.yml` lub zatrzymać konfliktujący proces.")
         buttons([
-            {"label":"🔄 Spróbuj ponownie","value":"retry_launch"},
-            {"label":"🏠 Menu","value":"back"},
+            {"label":t('retry'),"value":"retry_launch"},
+            {"label":t('menu'),"value":"back"},
         ])
     threading.Thread(target=run,daemon=True).start()
 
@@ -306,8 +306,8 @@ def show_missing_env(stack_name: str):
                            modal_type="ip_picker" if e["key"] == "DEVICE_IP" else "",
                            desc=e.get("desc", ""), autodetect=e.get("autodetect", False))
         buttons([
-            {"label": "✅ Zapisz i uruchom",  "value": f"preflight_save_launch::{stack_name}"},
-            {"label": "⚙️ Pełne ustawienia",   "value": "settings"},
+            {"label": t('save_and_run'),  "value": f"preflight_save_launch::{stack_name}"},
+            {"label": t('full_settings'),   "value": "settings"},
         ])
     else:
         env_file = STACKS.get(stack_name, ROOT / stack_name) / ".env"
@@ -317,8 +317,8 @@ def show_missing_env(stack_name: str):
         else:
             msg(f"Brak pliku `.env` w `{stack_name}/`")
         buttons([
-            {"label": "🔑 Skonfiguruj credentials", "value": "setup_creds"},
-            {"label": "🔄 Spróbuj ponownie",         "value": "retry_launch"},
+            {"label": t('configure_creds'), "value": "setup_creds"},
+            {"label": t('retry'),         "value": "retry_launch"},
         ])
 
 
@@ -442,11 +442,11 @@ def fix_network_overlap(net_name: str = ""):
                         msg(f"✅ Sieć `{net_name}` usunięta przez SDK.")
                     except Exception as sdk_err:
                         msg(f"❌ Nie można usunąć sieci: {sdk_err}")
-                        buttons([{"label": "🔄 Spróbuj ponownie", "value": "retry_launch"}])
+                        buttons([{"label": t('retry'), "value": "retry_launch"}])
                         return
                 else:
                     msg(f"❌ {err}")
-                    buttons([{"label": "🔄 Spróbuj ponownie", "value": "retry_launch"}])
+                    buttons([{"label": t('retry'), "value": "retry_launch"}])
                     return
         else:
             msg("🔧 Czyszczę nieużywane sieci Docker (`docker network prune`)...")
@@ -617,5 +617,5 @@ def fix_docker_perms():
     code_block("sudo usermod -aG docker $USER\nnewgrp docker")
     msg("Lub jeśli jesteś rootem, ustaw socket:")
     code_block("sudo chmod 666 /var/run/docker.sock")
-    buttons([{"label":"🔄 Spróbuj ponownie","value":"retry_launch"},{"label":"🏠 Menu","value":"back"}])
+    buttons([{"label":t('retry'),"value":"retry_launch"},{"label":t('menu'),"value":"back"}])
 

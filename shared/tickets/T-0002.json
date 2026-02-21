@@ -2,13 +2,13 @@
   "id": "T-0002",
   "title": "E2E test ticket",
   "description": "Created via API test",
-  "status": "in_progress",
+  "status": "review",
   "priority": "high",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:32:24.342190+00:00",
-  "updated_at": "2026-02-21T08:16:44.581823+00:00",
+  "updated_at": "2026-02-21T09:05:05.078492+00:00",
   "comments": [
     {
       "author": "unknown",
@@ -79,6 +79,16 @@
       "author": "unknown",
       "text": "Started working on this ticket",
       "timestamp": "2026-02-21T08:16:44.581800+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T09:05:01.814067+00:00"
+    },
+    {
+      "author": "developer",
+      "text": "Pipeline iteracja #1 zako\u0144czona (wynik: 75%). Silnik: Claude Code CLI. Model: google/gemini-3-flash-preview. Gotowe do review.",
+      "timestamp": "2026-02-21T09:05:05.078484+00:00"
     }
   ],
   "github_issue_number": null
