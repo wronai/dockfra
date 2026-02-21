@@ -76,6 +76,39 @@ def _chmod_world_rw(path):
         pass
 
 
+def _safe_write(path, data: dict):
+    """Write ticket JSON, fixing permissions if the file is root-owned."""
+    import stat as _stat, subprocess as _sp, tempfile as _tmp
+    p = str(path)
+    # Try direct write first
+    try:
+        with open(p, "w") as f:
+            json.dump(data, f, indent=2)
+        _chmod_world_rw(p)
+        return
+    except PermissionError:
+        pass
+    # File is root-owned — try chmod via subprocess (works if user has sudo or ACL)
+    try:
+        _sp.run(["chmod", "666", p], check=True, capture_output=True, timeout=5)
+        with open(p, "w") as f:
+            json.dump(data, f, indent=2)
+        return
+    except Exception:
+        pass
+    # Last resort: write to a temp file next to the original and move it
+    # (only works if the directory is writable)
+    try:
+        dir_ = os.path.dirname(p)
+        fd, tmp = _tmp.mkstemp(dir=dir_, suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, p)
+        _chmod_world_rw(p)
+    except Exception as e:
+        raise PermissionError(f"Cannot write {p}: {e}") from e
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -145,9 +178,7 @@ def update(ticket_id, **fields):
             ticket[k] = v
     ticket["updated_at"] = _now()
     p = _ticket_path(ticket_id)
-    with open(p, "w") as f:
-        json.dump(ticket, f, indent=2)
-    _chmod_world_rw(p)
+    _safe_write(p, ticket)
     return ticket
 
 
@@ -163,9 +194,7 @@ def add_comment(ticket_id, author, text):
     })
     ticket["updated_at"] = _now()
     p = _ticket_path(ticket_id)
-    with open(p, "w") as f:
-        json.dump(ticket, f, indent=2)
-    _chmod_world_rw(p)
+    _safe_write(p, ticket)
     return ticket
 
 

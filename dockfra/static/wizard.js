@@ -194,23 +194,27 @@ function tryRenderTickets(text) {
 
 // ── Strip MOTD / box-drawing banners from command output ──────────────────────
 function stripMotd(text) {
+  const BOX_CHARS = /[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]/g;
   const lines = text.split('\n');
   const keep = [];
   let inBox = false;
   for (const l of lines) {
     const t = l.trim();
-    // Detect box start (╔═══...═══╗)
+    // Detect box start (╔═══...═══╗ or ┌───...───┐)
     if (!inBox && /^[╔┌]/.test(t)) { inBox = true; continue; }
-    // Detect box end (╚═══...═══╝)
+    // Detect box end (╚═══...═══╝ or └───...───┘)
     if (inBox && /^[╚└]/.test(t)) { inBox = false; continue; }
-    // Skip lines inside box (║...║ or ╠...╣) and border-only lines
+    // Skip all lines inside a detected box
     if (inBox) continue;
-    if (/^[║│╠╣]/.test(t) && /[║│╠╣]$/.test(t)) continue;
-    // Skip purely decorative lines outside a box
-    if (t.length > 0 && t.replace(/[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]/g, '').length === 0) continue;
+    // Skip orphaned box-side lines (║ ... ║ or ╠ ... ╣) regardless of box state
+    if (/^[║╠╣│]/.test(t)) continue;
+    // Skip purely decorative lines (only box-drawing chars)
+    if (t.length > 0 && t.replace(BOX_CHARS, '').length === 0) continue;
     keep.push(l);
   }
-  return keep.join('\n').trim();
+  // Collapse runs of 3+ blank lines into 2
+  const result = keep.join('\n').replace(/\n{3,}/g, '\n\n');
+  return result.trim();
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
