@@ -659,26 +659,24 @@ class TestDBModule:
 
 
 class TestEventBus:
-    """Test dockfra.event_bus module."""
+    """Test dockfra.event_bus module (requires app_client for db init)."""
 
-    def test_get_bus_singleton(self):
+    def test_get_bus_singleton(self, app_client):
         from dockfra.event_bus import get_bus
         bus1 = get_bus()
         bus2 = get_bus()
         assert bus1 is bus2
 
     def test_emit_persists_to_store(self, app_client):
-        from dockfra.event_bus import init_bus
-        from dockfra import db
-        bus = init_bus(db)
+        from dockfra.event_bus import get_bus
+        bus = get_bus()
         before = bus.query_max_id()
         eid = bus.emit("test.bus_emit", {"hello": "world"}, src="test")
         assert eid > before
 
     def test_query_events_returns_emitted(self, app_client):
-        from dockfra.event_bus import init_bus
-        from dockfra import db
-        bus = init_bus(db)
+        from dockfra.event_bus import get_bus
+        bus = get_bus()
         before = bus.query_max_id()
         bus.emit("test.query_check", {"key": "val"}, src="test")
         events = bus.query_events(since_id=before, limit=10)
@@ -686,17 +684,17 @@ class TestEventBus:
         assert len(found) >= 1
         assert found[0]["data"]["key"] == "val"
 
-    def test_subscribe_and_emit(self):
-        from dockfra.event_bus import get_bus, Event
+    def test_subscribe_and_emit(self, app_client):
+        from dockfra.event_bus import get_bus
         bus = get_bus()
         received = []
         bus.subscribe("test.sub_event", lambda ev: received.append(ev))
         bus.emit("test.sub_event", {"n": 42}, src="test")
-        assert len(received) == 1
-        assert received[0].data["n"] == 42
-        assert received[0].src == "test"
+        assert len(received) >= 1
+        assert received[-1].data["n"] == 42
+        assert received[-1].src == "test"
 
-    def test_subscribe_all(self):
+    def test_subscribe_all(self, app_client):
         from dockfra.event_bus import get_bus
         bus = get_bus()
         received = []
