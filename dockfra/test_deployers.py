@@ -273,3 +273,172 @@ def test_docker_compose_health_check_mock(monkeypatch):
     monkeypatch.setattr(mod, "HTTPHealthChecker", _DummyChecker)
     checks = plugin.health_check(target)
     assert checks and checks[0]["ok"] is True
+
+
+def test_cli_targets(monkeypatch, capsys):
+    from dockfra import cli as _cli
+
+    class _Client:
+        def deploy_targets(self):
+            return {
+                "targets": [
+                    {
+                        "id": "edge-rpi3",
+                        "platform": "docker_compose",
+                        "user": "pi",
+                        "host": "192.168.1.100",
+                        "port": 22,
+                        "os": "linux",
+                        "labels": {"env": "edge"},
+                    }
+                ]
+            }, None
+
+    rc = _cli.cmd_targets(_Client(), [])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "edge-rpi3" in out
+    assert "docker_compose" in out
+
+
+def test_cli_deploy(monkeypatch, capsys):
+    from dockfra import cli as _cli
+
+    class _Client:
+        def deploy(self, target_id, data=None):
+            assert target_id == "edge-rpi3"
+            assert isinstance(data, dict)
+            return {"ok": True, "result": {"status": "running", "message": "Deployment completed"}}, None
+
+    rc = _cli.cmd_deploy(_Client(), ["edge-rpi3"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Deploy finished" in out
+
+
+def test_step_deploy_with_plugin(monkeypatch, tmp_path):
+    pytest.importorskip("flask_socketio")
+    from dockfra import steps as steps_mod
+
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text("services:\n  web:\n    image: nginx:latest\n")
+
+    emitted: list[tuple[str, dict]] = []
+    deployed = {"ok": False}
+
+    class _Plugin:
+        id = "docker_compose"
+
+        def detect(self, _target):
+            return True
+
+        def deploy(self, _manifest, _target):
+            deployed["ok"] = True
+            return DeployResult(status=DeployStatus.RUNNING, message="ok")
+
+    class _SyncThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            if self._target:
+                self._target()
+
+    monkeypatch.setattr(steps_mod.threading, "Thread", _SyncThread)
+    monkeypatch.setattr(steps_mod, "_get_deployer_plugin", lambda _platform: _Plugin())
+    monkeypatch.setattr(
+        steps_mod,
+        "_operation_target_from_state",
+        lambda *_a, **_kw: (
+            "edge-rpi3",
+            DeployTarget(host="10.0.0.2", port=22, user="pi", platform="docker_compose"),
+        ),
+    )
+    monkeypatch.setattr(steps_mod, "_resolve_target_compose_file", lambda _target: compose)
+    monkeypatch.setattr(steps_mod, "_update_device_env", lambda *_a, **_kw: None)
+    monkeypatch.setattr(steps_mod, "load_env", lambda: {})
+    monkeypatch.setattr(steps_mod, "clear_widgets", lambda: None)
+    monkeypatch.setattr(steps_mod, "msg", lambda *_a, **_kw: None)
+    monkeypatch.setattr(steps_mod, "progress", lambda *_a, **_kw: None)
+    monkeypatch.setattr(steps_mod, "code_block", lambda *_a, **_kw: None)
+
+    class _Socket:
+        @staticmethod
+        def emit(event, data):
+            emitted.append((event, data))
+
+    monkeypatch.setattr(steps_mod, "socketio", _Socket)
+
+    form = {
+        "deploy_target_id": "edge-rpi3",
+        "device_ip": "10.0.0.2",
+        "device_user": "pi",
+        "device_port": "22",
+    }
+    steps_mod.step_do_deploy(form)
+
+    assert deployed["ok"] is True
+    assert any(
+        ev == "widget" and any(i.get("value") == "launch_devices" for i in data.get("items", []))
+        for ev, data in emitted
+    )
+
+
+def test_pipeline_with_deploy_step(monkeypatch, tmp_path):
+    pytest.importorskip("flask_socketio")
+    from dockfra import app as app_mod
+
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text("services:\n  web:\n    image: nginx:latest\n")
+
+    class _Plugin:
+        id = "docker_compose"
+
+        def validate(self, _manifest, _target):
+            return []
+
+        def deploy(self, _manifest, _target):
+            return DeployResult(
+                status=DeployStatus.RUNNING,
+                message="deploy ok",
+                logs="ok",
+                health_checks=[{"kind": "http", "ok": True}],
+            )
+
+        def health_check(self, _target):
+            return [{"kind": "http", "ok": True}]
+
+    class _PState:
+        def __init__(self):
+            self.steps = []
+            self.decisions = []
+
+        def record_step(self, result):
+            self.steps.append(result)
+
+        def record_decision(self, decision, reason):
+            self.decisions.append((decision, reason))
+
+    target = DeployTarget(
+        host="10.0.0.2",
+        port=22,
+        user="pi",
+        platform="docker_compose",
+        config={"compose_path_local": str(compose)},
+    )
+
+    monkeypatch.setattr(app_mod, "load_deploy_targets", lambda: {"edge-rpi3": target})
+    monkeypatch.setattr(app_mod, "_discover_deployers", lambda: None)
+    monkeypatch.setattr(app_mod, "_get_deployer", lambda _platform: _Plugin())
+    monkeypatch.setattr(app_mod, "load_env", lambda: {})
+    monkeypatch.setattr(app_mod, "msg", lambda *_a, **_kw: None)
+    monkeypatch.setattr(app_mod, "buttons", lambda *_a, **_kw: None)
+
+    ps = _PState()
+    ok = app_mod._pipeline_deploy_and_verify(ps, "developer", "T-0001", "edge-rpi3")
+
+    assert ok is True
+    assert any(getattr(s, "step", "") == "deploy" for s in ps.steps)
+    assert any(getattr(s, "step", "") == "verify-deploy" for s in ps.steps)

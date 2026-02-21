@@ -1685,8 +1685,23 @@ def _handle_ticket_work_pipeline(role_: str, arg_: str, ri_: dict):
             if _pipeline_commit_push(_exec, pstate, role_, arg_):
                 return
 
-            # ─── Update ticket → review + summary ────────────────
-            _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model)
+            # ─── Optional deploy + verify (ticket.deploy_target) ──
+            tk_after = _tickets.get(arg_) or {}
+            deploy_target_id = str(tk_after.get("deploy_target", "")).strip()
+            deploy_ok = False
+            if deploy_target_id:
+                deploy_ok = _pipeline_deploy_and_verify(pstate, role_, arg_, deploy_target_id)
+
+            # ─── Update ticket status + summary ───────────────────
+            _pipeline_finalize(
+                pstate,
+                role_,
+                arg_,
+                eng_name,
+                llm_model,
+                final_status="done" if deploy_ok else "review",
+                deploy_target_id=deploy_target_id if deploy_ok else "",
+            )
 
         except Exception as e:
             msg(f"❌ Pipeline błąd: {e}\n\n"
@@ -1916,14 +1931,129 @@ def _pipeline_commit_push(_exec, pstate, role_, arg_):
     return False
 
 
-def _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model):
-    """Update ticket → review, emit adaptive summary."""
-    msg(f"### 📋 Krok 5/5: status → review")
-    _tickets.update(arg_, status="review")
-    _tickets.add_comment(arg_, "developer",
-        f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
-        f"Silnik: {eng_name}. Model: {llm_model}. Gotowe do review.")
-    r5 = StepResult("status-review", 0, "review", 0, "", 1.0)
+def _pipeline_deploy_and_verify(pstate, role_, arg_, deploy_target_id: str) -> bool:
+    """Optional deploy stage for ticket pipeline.
+
+    Returns True only when deploy + verify succeeded.
+    """
+    targets = load_deploy_targets()
+    target = targets.get(deploy_target_id)
+    if not target:
+        msg(f"⚠️ Deploy target `{deploy_target_id}` not found — pomijam deploy.")
+        pstate.record_decision("deploy_skip", f"missing target: {deploy_target_id}")
+        return False
+
+    _discover_deployers()
+    plugin = _get_deployer(target.platform)
+    if not plugin:
+        msg(f"⚠️ Deploy plugin `{target.platform}` not found — pomijam deploy.")
+        pstate.record_decision("deploy_skip", f"missing plugin: {target.platform}")
+        return False
+
+    compose_path = _resolve_compose_path({}, target)
+    if compose_path is None or not compose_path.exists():
+        msg(f"⚠️ Compose file not found for target `{deploy_target_id}` — pomijam deploy.")
+        pstate.record_decision("deploy_skip", f"missing compose for {deploy_target_id}")
+        return False
+
+    try:
+        manifest = _build_manifest(compose_path, env=load_env())
+    except Exception as e:
+        msg(f"⚠️ Nie mogę zbudować manifestu deploy: {e}")
+        pstate.record_decision("deploy_skip", f"manifest error: {e}")
+        return False
+
+    errors = plugin.validate(manifest, target)
+    if errors:
+        msg("⚠️ Walidacja deploy nie powiodła się — pomijam deploy.")
+        msg("```\n" + "\n".join(errors)[:1200] + "\n```")
+        pstate.record_decision("deploy_skip", "validation failed")
+        return False
+
+    msg(f"### 🚀 Krok 6/7: deploy ({deploy_target_id})")
+    _t0 = time.time()
+    try:
+        result = plugin.deploy(manifest, target)
+        _deploy_rc = 0 if result.status != DeployStatus.FAILED else 1
+        _deploy_out = (result.logs or result.message or "")[:3000]
+        _deploy_err = "" if _deploy_rc == 0 else (result.message or "deploy failed")
+        _deploy_score = 1.0 if _deploy_rc == 0 else 0.0
+    except Exception as e:
+        _deploy_rc = 1
+        _deploy_out = ""
+        _deploy_err = str(e)
+        _deploy_score = 0.0
+
+    pstate.record_step(StepResult(
+        "deploy",
+        _deploy_rc,
+        _deploy_out,
+        time.time() - _t0,
+        _deploy_err,
+        _deploy_score,
+        {"target": deploy_target_id, "plugin": plugin.id},
+    ))
+
+    if _deploy_rc != 0:
+        msg(f"⚠️ Deploy nieudany dla `{deploy_target_id}`: {_deploy_err[:300]}")
+        buttons([
+            {"label": "🔄 Ponów pipeline", "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"},
+            {"label": "📋 Review", "value": "tickets_review"},
+            {"label": "🏠 Menu", "value": "back"},
+        ])
+        pstate.record_decision("deploy_failed", f"target={deploy_target_id}")
+        return False
+
+    msg(f"### ✅ Krok 7/7: verify deploy ({deploy_target_id})")
+    checks = []
+    if getattr(result, "health_checks", None):
+        checks = list(result.health_checks)
+    else:
+        try:
+            checks = plugin.health_check(target)
+        except Exception as e:
+            checks = [{"kind": "plugin", "ok": False, "details": str(e)}]
+
+    verify_ok = all(c.get("ok", False) for c in checks if isinstance(c, dict)) if checks else True
+    pstate.record_step(StepResult(
+        "verify-deploy",
+        0 if verify_ok else 1,
+        str(checks)[:3000],
+        0,
+        "" if verify_ok else "health checks failed",
+        1.0 if verify_ok else 0.4,
+        {"target": deploy_target_id},
+    ))
+
+    if not verify_ok:
+        msg("⚠️ Deploy wykonany, ale verify/health check zgłosił problemy.")
+        pstate.record_decision("deploy_verify_failed", f"target={deploy_target_id}")
+        return False
+
+    msg(f"✅ Deploy + verify zakończone dla `{deploy_target_id}`")
+    pstate.record_decision("deploy_ok", f"target={deploy_target_id}")
+    return True
+
+
+def _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model,
+                       final_status: str = "review", deploy_target_id: str = ""):
+    """Finalize ticket pipeline and emit adaptive summary."""
+    status_step = "status-done" if final_status == "done" else "status-review"
+    status_label = "done" if final_status == "done" else "review"
+    step_no = "8/8" if final_status == "done" else "5/5"
+    msg(f"### 📋 Krok {step_no}: status → {status_label}")
+    _tickets.update(arg_, status=final_status)
+
+    if final_status == "done" and deploy_target_id:
+        _tickets.add_comment(arg_, "developer",
+            f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
+            f"Silnik: {eng_name}. Model: {llm_model}. Deploy OK: {deploy_target_id}. Ticket zamknięty.")
+    else:
+        _tickets.add_comment(arg_, "developer",
+            f"Pipeline iteracja #{pstate.iteration} zakończona (wynik: {pstate.compute_overall_score():.0%}). "
+            f"Silnik: {eng_name}. Model: {llm_model}. Gotowe do review.")
+
+    r5 = StepResult(status_step, 0, final_status, 0, "", 1.0)
     pstate.record_step(r5)
     gh_repo = _state.get("github_repo", "") or _os.environ.get("GITHUB_REPO", "")
     if gh_repo:
@@ -1938,12 +2068,16 @@ def _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model):
 
     score_icon = "🟢" if overall >= 0.7 else "🟡" if overall >= 0.4 else "🔴"
     retry_btn = f"[[🔄 Ponów|ssh_cmd::{role_}::ticket-work::{arg_}]] " if overall < 0.5 else ""
+    action_links = (
+        f"[[✅ Zatwierdź|manager_approve::{arg_}]] [[📋 Review|tickets_review]]"
+        if final_status != "done"
+        else "[[📋 Tickets|tickets_review]]"
+    )
     msg(f"---\n## {score_icon} Pipeline `{arg_}` — iteracja #{pstate.iteration}\n"
         f"**Wynik:** {overall:.0%} | **Silnik:** `{eng_name}` | **Model:** `{llm_model}`\n\n"
         f"{pstate.summary()}\n\n"
         f"{retry_btn}"
-        f"[[✅ Zatwierdź|manager_approve::{arg_}]] "
-        f"[[📋 Review|tickets_review]] "
+        f"{action_links} "
         f"[[👁️ Diff|show_ticket::{arg_}]]")
 
     btn_items = [
@@ -1952,6 +2086,8 @@ def _pipeline_finalize(pstate, role_, arg_, eng_name, llm_model):
     ]
     if overall < 0.5:
         btn_items.insert(0, {"label": t('retry_pipeline_adaptive'), "value": f"ssh_cmd::{role_}::ticket-work::{arg_}"})
+    if final_status != "done":
+        btn_items.insert(0, {"label": "✅ Zatwierdź", "value": f"manager_approve::{arg_}"})
     btn_items.append({"label": t('change_engine'), "value": "engine_select"})
     if gh_repo:
         btn_items.append({"label": "🔗 GitHub", "value": f"open_github::{gh_repo}"})
