@@ -6,6 +6,10 @@ Usage:
   dockfra cli                       # interactive REPL
   dockfra cli --tui                 # three-panel curses TUI
   dockfra cli status                # container health
+  dockfra cli targets               # list deploy targets
+  dockfra cli deploy <target>       # deploy to target
+  dockfra cli rollback <target>     # rollback target
+  dockfra cli deploy-test <target>  # test target connectivity
   dockfra cli tickets               # list all tickets
   dockfra cli diff <T-XXXX>         # show ticket diff & commits
   dockfra cli pipeline <T-XXXX>     # run full pipeline for ticket
@@ -72,6 +76,13 @@ class WizardClient:
     def logs(self, n=40):               return self._get("/api/logs/tail", {"n": n})
     def history(self):                  return self._get("/api/history")
     def events_since(self, since_id=0): return self._get(f"/api/events/since/{since_id}")
+    def deploy_targets(self):           return self._get("/api/deploy-targets")
+    def deploy_plugins(self):           return self._get("/api/deploy-plugins")
+    def deploy_test(self, target_id):   return self._post(f"/api/deploy-test/{target_id}", {})
+    def deploy(self, target_id, data=None):
+        return self._post(f"/api/deploy/{target_id}", data or {}, timeout=900)
+    def rollback(self, target_id, rollback_id="latest"):
+        return self._post(f"/api/rollback/{target_id}", {"rollback_id": rollback_id})
     def ping(self):
         _, err = self._get("/api/containers", timeout=3)
         return err is None
@@ -455,9 +466,92 @@ def cmd_pipeline(client, args):
     if err: print(red(f"❌ {err}")); return 1
     _render_result(data.get("result", [])); return 0
 
+
+def cmd_targets(client, args):
+    data, err = client.deploy_targets()
+    if err: print(red(f"❌ {err}")); return 1
+    targets = (data or {}).get("targets", [])
+    if not targets:
+        print(dim("No deploy targets configured."))
+        return 0
+    print(bold(f"\n🎯 Deploy targets ({len(targets)})\n"))
+    for t in targets:
+        host = f"{t.get('user','?')}@{t.get('host','?')}:{t.get('port','?')}"
+        print(f"  {purple(t.get('id','?')):<18} {bold(t.get('platform','?')):<16} {host}")
+        print(f"     os={dim(str(t.get('os','?')))} labels={dim(str(t.get('labels', {})))}")
+    print()
+    return 0
+
+
+def cmd_deploy(client, args):
+    if not args:
+        print(red("Usage: deploy <target_id> [compose_path]"))
+        return 1
+    target_id = args[0]
+    payload = {}
+    if len(args) > 1:
+        payload["compose_path"] = args[1]
+    print(yellow(f"🚀 Deploying to {target_id}..."))
+    data, err = client.deploy(target_id, payload)
+    if err: print(red(f"❌ {err}")); return 1
+    if not data or not data.get("ok"):
+        msg = (data or {}).get("error", "Deploy failed")
+        print(red(f"❌ {msg}"))
+        result = (data or {}).get("result", {})
+        if isinstance(result, dict) and result.get("message"):
+            print(dim(result.get("message", "")))
+        return 1
+    result = data.get("result", {})
+    print(green(f"✅ Deploy finished: {result.get('status','unknown')}"))
+    if result.get("message"):
+        print(dim(result.get("message", "")))
+    return 0
+
+
+def cmd_rollback(client, args):
+    if not args:
+        print(red("Usage: rollback <target_id> [rollback_id]"))
+        return 1
+    target_id = args[0]
+    rollback_id = args[1] if len(args) > 1 else "latest"
+    print(yellow(f"↩️  Rolling back {target_id} ({rollback_id})..."))
+    data, err = client.rollback(target_id, rollback_id)
+    if err: print(red(f"❌ {err}")); return 1
+    if not data or not data.get("ok"):
+        print(red(f"❌ {(data or {}).get('error', 'Rollback failed')}"))
+        return 1
+    result = data.get("result", {})
+    print(green(f"✅ Rollback finished: {result.get('status', 'unknown')}"))
+    if result.get("message"):
+        print(dim(result.get("message", "")))
+    return 0
+
+
+def cmd_deploy_test(client, args):
+    if not args:
+        print(red("Usage: deploy-test <target_id>"))
+        return 1
+    target_id = args[0]
+    print(yellow(f"🔌 Testing deploy connectivity for {target_id}..."))
+    data, err = client.deploy_test(target_id)
+    if err: print(red(f"❌ {err}")); return 1
+    ok = bool((data or {}).get("ok"))
+    if ok:
+        print(green("✅ Connectivity OK"))
+    else:
+        print(red("❌ Connectivity failed"))
+    details = (data or {}).get("details", "")
+    if details:
+        print(dim(str(details)))
+    return 0 if ok else 1
+
 COMMANDS = {
     "status":     (cmd_status,     "📊 Container health overview"),
     "health":     (cmd_status,     "🔍 Algorithmic analysis (same as status)"),
+    "targets":    (cmd_targets,    "🎯 List deploy targets"),
+    "deploy":     (cmd_deploy,     "🚀 deploy <target> [compose_path]"),
+    "rollback":   (cmd_rollback,   "↩️  rollback <target> [rollback_id]"),
+    "deploy-test":(cmd_deploy_test,"🔌 deploy-test <target> — test connectivity"),
     "logs":       (cmd_logs,       "📋 logs [N]     — last N log lines (default 40)"),
     "launch":     (cmd_launch,     "🚀 launch [stack] — launch stacks (default: all)"),
     "ask":        (cmd_ask,        "🧠 ask <text>   — free-text LLM query"),
@@ -709,7 +803,7 @@ def run_tui(client):
 # ── Entry point ───────────────────────────────────────────────────────────────
 def main():
     p = argparse.ArgumentParser(description="Dockfra CLI shell")
-    p.add_argument("command", nargs="?", help="Command: status|health|logs|launch|ask|action")
+    p.add_argument("command", nargs="?", help="Command: status|health|targets|deploy|rollback|deploy-test|logs|launch|ask|action")
     p.add_argument("args",    nargs="*", help="Command arguments")
     p.add_argument("--url",   default=BASE_URL,  help="Wizard base URL")
     p.add_argument("--tui",   action="store_true", help="Launch three-panel TUI (curses)")
