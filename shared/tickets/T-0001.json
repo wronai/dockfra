@@ -8,12 +8,32 @@
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:20:33.434519+00:00",
-  "updated_at": "2026-02-20T23:32:49.034674+00:00",
+  "updated_at": "2026-02-20T23:54:12.591598+00:00",
   "comments": [
     {
       "author": "tester",
       "text": "Testy E2E przechodz\u0105 36/36!",
       "timestamp": "2026-02-20T23:32:49.034662+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:47:54.853036+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:49:17.735154+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:49:35.250815+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:54:12.591578+00:00"
     }
   ],
   "github_issue_number": null

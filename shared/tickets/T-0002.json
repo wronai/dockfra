@@ -2,13 +2,34 @@
   "id": "T-0002",
   "title": "E2E test ticket",
   "description": "Created via API test",
-  "status": "open",
+  "status": "in_progress",
   "priority": "high",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:32:24.342190+00:00",
-  "updated_at": "2026-02-20T23:32:24.342202+00:00",
-  "comments": [],
+  "updated_at": "2026-02-21T00:03:53.601984+00:00",
+  "comments": [
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:45:24.562843+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-20T23:54:42.242846+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T00:00:00.942213+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T00:03:53.601958+00:00"
+    }
+  ],
   "github_issue_number": null
 }

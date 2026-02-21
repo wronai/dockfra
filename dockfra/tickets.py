@@ -68,6 +68,14 @@ def _ensure_dir():
         pass
 
 
+def _chmod_world_rw(path):
+    """Make a ticket file world-readable/writable so any container UID can edit it."""
+    try:
+        os.chmod(path, 0o666)
+    except OSError:
+        pass
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -110,8 +118,10 @@ def create(title, description="", priority="normal", assigned_to="developer",
         "comments": [],
         "github_issue_number": None,
     }
-    with open(_ticket_path(ticket_id), "w") as f:
+    p = _ticket_path(ticket_id)
+    with open(p, "w") as f:
         json.dump(ticket, f, indent=2)
+    _chmod_world_rw(p)
     logger.info(f"Created ticket {ticket_id}: {title}")
     return ticket
 
@@ -134,8 +144,10 @@ def update(ticket_id, **fields):
         if k not in ("id", "created_at", "created_by"):
             ticket[k] = v
     ticket["updated_at"] = _now()
-    with open(_ticket_path(ticket_id), "w") as f:
+    p = _ticket_path(ticket_id)
+    with open(p, "w") as f:
         json.dump(ticket, f, indent=2)
+    _chmod_world_rw(p)
     return ticket
 
 
@@ -150,8 +162,10 @@ def add_comment(ticket_id, author, text):
         "timestamp": _now(),
     })
     ticket["updated_at"] = _now()
-    with open(_ticket_path(ticket_id), "w") as f:
+    p = _ticket_path(ticket_id)
+    with open(p, "w") as f:
         json.dump(ticket, f, indent=2)
+    _chmod_world_rw(p)
     return ticket
 
 

@@ -45,6 +45,12 @@ except ImportError:
         except OSError:
             pass
 
+    def _chmod_world_rw(path):
+        try:
+            os.chmod(path, 0o666)
+        except OSError:
+            pass
+
     def _now():
         return datetime.now(timezone.utc).isoformat()
 
@@ -69,7 +75,9 @@ except ImportError:
                   "priority":priority,"assigned_to":assigned_to,"labels":labels or [],
                   "created_by":created_by,"created_at":_now(),"updated_at":_now(),
                   "comments":[],"github_issue_number":None}
-        with open(_ticket_path(tid),"w") as f: json.dump(ticket,f,indent=2)
+        p = _ticket_path(tid)
+        with open(p,"w") as f: json.dump(ticket,f,indent=2)
+        _chmod_world_rw(p)
         return ticket
 
     def get(tid):
@@ -83,7 +91,9 @@ except ImportError:
         for k,v in fields.items():
             if k not in ("id","created_at","created_by"): t[k]=v
         t["updated_at"]=_now()
-        with open(_ticket_path(tid),"w") as f: json.dump(t,f,indent=2)
+        p = _ticket_path(tid)
+        with open(p,"w") as f: json.dump(t,f,indent=2)
+        _chmod_world_rw(p)
         return t
 
     def add_comment(tid, author, text):
@@ -91,7 +101,9 @@ except ImportError:
         if not t: return None
         t.setdefault("comments",[]).append({"author":author,"text":text,"timestamp":_now()})
         t["updated_at"]=_now()
-        with open(_ticket_path(tid),"w") as f: json.dump(t,f,indent=2)
+        p = _ticket_path(tid)
+        with open(p,"w") as f: json.dump(t,f,indent=2)
+        _chmod_world_rw(p)
         return t
 
     def list_tickets(status=None, assigned_to=None, priority=None):

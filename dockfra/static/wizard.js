@@ -78,21 +78,45 @@ chat.addEventListener('click', e => {
 });
 
 // ── Load logs from history ────────────────────────────────────────────────────
-async function loadLogs() {
-  try {
-    const r = await fetch('/api/history');
-    const d = await r.json();
-    d.logs.forEach(log => {
-      if(log.id && document.querySelector(`[data-log-id="${log.id}"]`)) return;
-      const l = document.createElement('div');
-      l.className = 'log-line' + (/error|Error/.test(log.text)||log.text.startsWith('E ')?' err':'');
-      l.setAttribute('data-log-id', log.id);
-      l.textContent = log.text;
-      logOut.appendChild(l);
-    });
-    logOut.scrollTop = logOut.scrollHeight;
-  } catch(e) { console.warn('loadLogs:', e); }
+let _logTotal = 0;
+function _appendLogLine(text) {
+  if (!logOut || !text) return;
+  const cls = typeof classifyLogLine === 'function' ? classifyLogLine(text) : '';
+  const l = document.createElement('div');
+  l.className = 'log-line' + (cls ? ' ' + cls : '');
+  if (cls !== 'log-dim' && typeof highlightLogText === 'function') {
+    l.innerHTML = highlightLogText(text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  } else {
+    l.textContent = text;
+  }
+  logOut.appendChild(l);
+  while(logOut.children.length > 800) logOut.removeChild(logOut.firstChild);
+  logOut.scrollTop = logOut.scrollHeight;
 }
+async function loadLogs() {
+  if (!logOut) return;
+  try {
+    // Ask server how many new lines since our last fetch
+    const want = _logTotal === 0 ? 200 : 50;
+    const r = await fetch(`/api/logs/tail?n=${want}`);
+    const d = await r.json();
+    const total = d.total || 0;
+    const lines = d.lines || [];
+    if (total > _logTotal) {
+      // How many new lines arrived since last poll
+      const newCount = total - _logTotal;
+      // Take last newCount lines from the returned batch
+      const newLines = lines.slice(Math.max(0, lines.length - newCount));
+      newLines.forEach(entry => {
+        const text = typeof entry === 'string' ? entry : (entry.text || '');
+        _appendLogLine(text);
+      });
+    }
+    _logTotal = total;
+  } catch(e) { /* ignore */ }
+}
+// Poll logs every 2s — reliable fallback for missed SocketIO events
+setInterval(loadLogs, 2000);
 
 // ── Ticket card renderer ──────────────────────────────────────────────────────
 function tryRenderTickets(text) {
@@ -139,18 +163,23 @@ function tryRenderTickets(text) {
 
 // ── Strip MOTD / box-drawing banners from command output ──────────────────────
 function stripMotd(text) {
-  // Remove lines that are purely box-drawing chars (╔═╗║╚╝╠╣─ etc.) or blank
   const lines = text.split('\n');
-  const filtered = lines.filter(l => {
-    const stripped = l.replace(/[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]/g, '');
-    return stripped.length > 0;
-  });
-  // If we removed more than half the lines it was a MOTD — return filtered
-  // Otherwise return original (don't strip normal output)
-  if (lines.length - filtered.length > lines.length / 3) {
-    return filtered.join('\n').trim();
+  const keep = [];
+  let inBox = false;
+  for (const l of lines) {
+    const t = l.trim();
+    // Detect box start (╔═══...═══╗)
+    if (!inBox && /^[╔┌]/.test(t)) { inBox = true; continue; }
+    // Detect box end (╚═══...═══╝)
+    if (inBox && /^[╚└]/.test(t)) { inBox = false; continue; }
+    // Skip lines inside box (║...║ or ╠...╣) and border-only lines
+    if (inBox) continue;
+    if (/^[║│╠╣]/.test(t) && /[║│╠╣]$/.test(t)) continue;
+    // Skip purely decorative lines outside a box
+    if (t.length > 0 && t.replace(/[\s╔╗╚╝╠╣║═─━│┌┐└┘├┤┬┴┼▀▄█▌▐░▒▓]/g, '').length === 0) continue;
+    keep.push(l);
   }
-  return text;
+  return keep.join('\n').trim();
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
@@ -425,6 +454,16 @@ function buildFieldLabel(d, targetEl){
     });
     row.appendChild(btn);
     row._descEl = descEl;
+  }
+  if(d.help_url){
+    const link = document.createElement('a');
+    link.href = d.help_url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'field-help-link';
+    link.innerHTML = '🔑';
+    link.title = 'Pobierz API key →';
+    row.appendChild(link);
   }
   if(d.autodetect){
     const ab = document.createElement('button');
@@ -1147,20 +1186,8 @@ function highlightLogText(text) {
 
 // ── Log panel (streaming) ─────────────────────────────────────────────────────
 socket.on('log_line', d => {
-  if (d.id && document.querySelector(`[data-log-id="${d.id}"]`)) return;
-  const cls = classifyLogLine(d.text);
-  const l = document.createElement('div');
-  l.className = 'log-line' + (cls ? ' ' + cls : '');
-  if (d.id) l.setAttribute('data-log-id', d.id);
-  // Use innerHTML with highlights only for non-dim lines to avoid XSS-noise tradeoff
-  if (cls !== 'log-dim') {
-    l.innerHTML = highlightLogText(d.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
-  } else {
-    l.textContent = d.text;
-  }
-  logOut.appendChild(l);
-  logOut.scrollTop = logOut.scrollHeight;
-  while(logOut.children.length > 800) logOut.removeChild(logOut.firstChild);
+  _appendLogLine(d.text);
+  _logTotal++;  // keep in sync so polling doesn't duplicate
 });
 
 // ── Chat input bar ────────────────────────────────────────────────────────────

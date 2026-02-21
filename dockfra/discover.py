@@ -355,11 +355,19 @@ def run_ssh_cmd(value: str, form: dict):
                         msg(f"⚠️ `{cmd_str}` zakończyło się z kodem {rc}.")
         except Exception as e:
             msg(f"❌ Błąd: {e}")
-        port = _state.get(f"SSH_{role.upper()}_PORT", _get_role(role)["port"])
-        buttons([
-            {"label": f"{_get_role(role)['icon']} Wróć do akcji", "value": f"ssh_info::{role}::{port}"},
-            {"label": "🏠 Menu",                                   "value": "back"},
-        ])
-        _tl.sid = None
+        finally:
+            try:
+                ri_ = _get_role(role)
+                port = _state.get(f"SSH_{role.upper()}_PORT", ri_["port"])
+                buttons([
+                    {"label": f"{ri_['icon']} Wróć do akcji", "value": f"ssh_info::{role}::{port}"},
+                    {"label": "🏠 Menu",                       "value": "back"},
+                ])
+            except Exception:
+                buttons([
+                    {"label": "🔧 Wróć do akcji", "value": f"ssh_info::{role}::2200"},
+                    {"label": "🏠 Menu",            "value": "back"},
+                ])
+            _tl.sid = None
     threading.Thread(target=_run, daemon=True).start()
 

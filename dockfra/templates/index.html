@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dockfra Wizard</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='wizard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='wizard.css') }}?v={{ cache_bust }}">
 </head>
 <body>
 
@@ -60,6 +60,6 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='wizard.js') }}"></script>
+<script src="{{ url_for('static', filename='wizard.js') }}?v={{ cache_bust }}"></script>
 </body>
 </html>

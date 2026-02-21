@@ -165,7 +165,8 @@ def on_action(data):
 # ── routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    return render_template("index.html")
+    import time as _t
+    return render_template("index.html", cache_bust=int(_t.time()))
 
 @app.route("/dashboard")
 def dashboard():
@@ -637,23 +638,28 @@ def _step_integrations_setup():
     from .core import text_input
     # GitHub
     msg("### GitHub Issues")
-    text_input("GITHUB_TOKEN", "GitHub Personal Access Token", "ghp_xxx...", env.get("GITHUB_TOKEN", ""), sec=True)
+    text_input("GITHUB_TOKEN", "GitHub Personal Access Token", "ghp_xxx...", env.get("GITHUB_TOKEN", ""), sec=True,
+               help_url="https://github.com/settings/tokens/new?scopes=repo&description=dockfra")
     text_input("GITHUB_REPO", "Repozytorium (owner/repo)", "myorg/myapp", env.get("GITHUB_REPO", ""))
     # Jira
     msg("### Jira Cloud")
     text_input("JIRA_URL", "Jira URL", "https://your-org.atlassian.net", env.get("JIRA_URL", ""))
     text_input("JIRA_EMAIL", "Jira Email", "user@company.com", env.get("JIRA_EMAIL", ""))
-    text_input("JIRA_TOKEN", "Jira API Token", "xxx...", env.get("JIRA_TOKEN", ""), sec=True)
+    text_input("JIRA_TOKEN", "Jira API Token", "xxx...", env.get("JIRA_TOKEN", ""), sec=True,
+               help_url="https://id.atlassian.com/manage-profile/security/api-tokens")
     text_input("JIRA_PROJECT", "Jira Project Key", "PROJ", env.get("JIRA_PROJECT", ""))
     # Trello
     msg("### Trello")
-    text_input("TRELLO_KEY", "Trello API Key", "xxx...", env.get("TRELLO_KEY", ""), sec=True)
-    text_input("TRELLO_TOKEN", "Trello Token", "xxx...", env.get("TRELLO_TOKEN", ""), sec=True)
+    text_input("TRELLO_KEY", "Trello API Key", "xxx...", env.get("TRELLO_KEY", ""), sec=True,
+               help_url="https://trello.com/power-ups/admin")
+    text_input("TRELLO_TOKEN", "Trello Token", "xxx...", env.get("TRELLO_TOKEN", ""), sec=True,
+               help_url="https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=YOUR_KEY&name=dockfra")
     text_input("TRELLO_BOARD", "Trello Board ID", "board_id", env.get("TRELLO_BOARD", ""))
     text_input("TRELLO_LIST", "Trello List ID (for new cards)", "list_id", env.get("TRELLO_LIST", ""))
     # Linear
     msg("### Linear")
-    text_input("LINEAR_TOKEN", "Linear API Token", "lin_api_xxx...", env.get("LINEAR_TOKEN", ""), sec=True)
+    text_input("LINEAR_TOKEN", "Linear API Token", "lin_api_xxx...", env.get("LINEAR_TOKEN", ""), sec=True,
+               help_url="https://linear.app/settings/api")
     text_input("LINEAR_TEAM", "Linear Team ID", "team_id", env.get("LINEAR_TEAM", ""))
     buttons([
         {"label": "💾 Zapisz integracje", "value": "integrations_save"},

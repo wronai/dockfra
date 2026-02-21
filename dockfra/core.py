@@ -108,7 +108,7 @@ _tl = threading.local()
 _log_buffer: deque = deque(maxlen=2000)
 
 def _sid_emit(event, data):
-    """Emit to SID, or to collector (REST mode), or broadcast."""
+    """Emit to all clients (single-user wizard) or to collector (REST mode)."""
     # REST API collector mode: capture all emitted events
     collector = getattr(_tl, 'collector', None)
     if collector is not None:
@@ -116,11 +116,9 @@ def _sid_emit(event, data):
     # Capture log lines to global buffer
     if event == "log_line":
         _log_buffer.append({"text": data.get("text",""), "ts": time.time()})
-    # Emit via SocketIO unless in pure REST mode (no sid AND collector set)
-    sid = getattr(_tl, 'sid', None)
-    if sid:
-        socketio.emit(event, data, room=sid)
-    elif collector is None:
+    # Always broadcast — SID-targeted emits from background threads silently
+    # fail with gevent async mode.  This is a single-user wizard so broadcast is fine.
+    if collector is None:
         socketio.emit(event, data)
 
 _PKG_DIR   = Path(__file__).parent.resolve()
@@ -658,7 +656,7 @@ def msg(text, role="bot"):
     _sid_emit("message", {"id": msg_id, "role": role, "text": text}); time.sleep(0.04)
 def widget(w):                      _sid_emit("widget",    w);                          time.sleep(0.04)
 def buttons(items, label=""):       widget({"type":"buttons",  "label":label, "items":items})
-def text_input(n,l,ph="",v="",sec=False,hint="",chips=None,modal_type="",desc="",autodetect=False): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or [],"modal_type":modal_type,"desc":desc,"autodetect":autodetect})
+def text_input(n,l,ph="",v="",sec=False,hint="",chips=None,modal_type="",desc="",autodetect=False,help_url=""): widget({"type":"input","name":n,"label":l,"placeholder":ph,"value":v,"secret":sec,"hint":hint,"chips":chips or [],"modal_type":modal_type,"desc":desc,"autodetect":autodetect,"help_url":help_url})
 def select(n,l,opts,v="",desc="",autodetect=False):                                               widget({"type":"select",  "name":n,"label":l,"options":opts,"value":v,"desc":desc,"autodetect":autodetect})
 def code_block(t):                  widget({"type":"code",     "text":t})
 def status_row(items):              widget({"type":"status_row","items":items})

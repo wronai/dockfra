@@ -1,3 +1,23 @@
+## [1.0.34] - 2026-02-21
+
+### Summary
+
+feat(docs): configuration management system
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/discover.py
+- update dockfra/static/wizard.css
+- update dockfra/static/wizard.js
+- update dockfra/templates/index.html
+- update dockfra/tickets.py
+- update shared/lib/ticket_system.py
+- update shared/tickets/T-0001.json
+- update shared/tickets/T-0002.json
+
+
 ## [1.0.33] - 2026-02-21
 
 ### Summary
