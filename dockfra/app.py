@@ -794,6 +794,7 @@ def _step_project_stats():
 
     buttons([
         {"label": "📝 Utwórz ticket", "value": "ticket_create_wizard"},
+        {"label": "🔧 Silniki deweloperskie", "value": "engine_select"},
         {"label": "🔗 Konfiguruj integracje", "value": "integrations_setup"},
         {"label": "🔄 Synchronizuj tickety", "value": "ticket_sync"},
         {"label": "🏠 Menu", "value": "back"},
