@@ -294,15 +294,19 @@ def run_ssh_cmd(value: str, form: dict):
                 # TTY command (docker exec -it / SSH): run docker exec directly from host
                 # Parse the container name from the Makefile body pattern exec-<svc>
                 svc_map = {
-                    "exec-backend":  (cname("backend"),        ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && echo '=== processes ===' && ps aux 2>/dev/null | head -6"]),
-                    "exec-frontend": (cname("frontend"),       ["sh", "-c", "echo '=== /usr/share/nginx/html ===' && ls /usr/share/nginx/html 2>/dev/null | head -20"]),
-                    "exec-mobile":   (cname("mobile-backend"), ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && ps aux 2>/dev/null | head -6"]),
-                    "exec-db":       (cname("db"),             ["psql", "-U", "postgres", "-c", "\\l"]),
-                    "exec-redis":    (cname("redis"),          ["redis-cli", "ping"]),
+                    "exec-backend":  (cname("backend"),        None,         ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && echo '=== processes ===' && ps aux 2>/dev/null | head -6"]),
+                    "exec-frontend": (cname("frontend"),       None,         ["sh",   "-c", "echo '=== /usr/share/nginx/html ===' && ls /usr/share/nginx/html 2>/dev/null | head -20"]),
+                    "exec-mobile":   (cname("mobile-backend"), None,         ["bash", "-c", "echo '=== /app ===' && ls /app 2>/dev/null && echo && ps aux 2>/dev/null | head -6"]),
+                    "exec-db":       (cname("db"),             "postgres",   ["psql", "-U", "postgres", "-c", "\\l"]),
+                    "exec-redis":    (cname("redis"),          None,         ["redis-cli", "ping"]),
                 }
                 if cmd_name in svc_map:
-                    tgt_container, tgt_cmd = svc_map[cmd_name]
-                    rc, out = run_cmd(["docker", "exec", tgt_container] + tgt_cmd)
+                    tgt_container, tgt_user, tgt_cmd = svc_map[cmd_name]
+                    exec_cmd = ["docker", "exec"]
+                    if tgt_user:
+                        exec_cmd += ["-u", tgt_user]
+                    exec_cmd.append(tgt_container)
+                    rc, out = run_cmd(exec_cmd + tgt_cmd)
                     if rc == 0:
                         msg(f"✅ `{cmd_name}` — wynik:\n```\n{out[:2000]}\n```")
                     else:

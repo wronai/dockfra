@@ -312,11 +312,61 @@ def show_missing_env(stack_name: str):
         ])
 
 
+def validate_llm_connection() -> tuple[bool, str]:
+    """Test LLM key by making a minimal API call. Returns (ok, message)."""
+    key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
+           or os.environ.get("OPENROUTER_API_KEY", ""))
+    if not key:
+        return False, "brak klucza"
+    if key: os.environ["OPENROUTER_API_KEY"] = key
+    if not _LLM_AVAILABLE:
+        return False, "moduł LLM niedostępny"
+    try:
+        import urllib.request, urllib.error
+        payload = json.dumps({
+            "model": _state.get("llm_model", "") or "google/gemini-flash-1.5",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        }).encode()
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=payload,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return True, "połączenie OK"
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return False, "nieprawidłowy klucz API (401 Unauthorized)"
+        if e.code == 402:
+            return False, "brak środków na koncie OpenRouter (402)"
+        return False, f"błąd HTTP {e.code}"
+    except Exception as e:
+        return False, f"błąd połączenia: {e}"
+
+
+def validate_docker() -> tuple[bool, str]:
+    """Check if Docker daemon is running. Returns (ok, message)."""
+    try:
+        out = subprocess.check_output(["docker", "info", "--format", "{{.ServerVersion}}"],
+                                      text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
+        return True, f"Docker {out}"
+    except FileNotFoundError:
+        return False, "Docker nie jest zainstalowany"
+    except subprocess.CalledProcessError:
+        return False, "Docker daemon nie działa — uruchom Docker Desktop lub `sudo systemctl start docker`"
+    except subprocess.TimeoutExpired:
+        return False, "Docker nie odpowiada (timeout)"
+    except Exception as e:
+        return False, f"błąd: {e}"
+
+
 def _prompt_api_key(return_action: str = ""):
     """Show inline form to enter OPENROUTER_API_KEY when LLM is unavailable."""
     msg("⚠️ **Brakuje klucza API** — skonfiguruj `OPENROUTER_API_KEY` poniżej:")
     text_input("OPENROUTER_API_KEY", "OpenRouter API Key",
-               "sk-or-v1-...", _state.get("openrouter_key", ""), sec=True)
+               "sk-or-v1-...", _state.get("openrouter_key", ""), sec=True,
+               help_url="https://openrouter.ai/keys")
     opts = [{"label": lbl, "value": val}
             for val, lbl in next(e["options"] for e in ENV_SCHEMA if e["key"] == "LLM_MODEL")]
     select("LLM_MODEL", "Model LLM", opts, _state.get("llm_model", _schema_defaults().get("LLM_MODEL", "")))

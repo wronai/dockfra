@@ -8,9 +8,35 @@ def step_welcome():
     _state.update({k:v for k,v in cfg.items() if v})
     _refresh_ssh_roles()  # re-scan now that _state has git_repo_url
     msg("# 👋 Dockfra Setup Wizard")
+
+    # ── Pre-flight connectivity checks ────────────────────────────────────────
+    from .fixes import validate_docker, validate_llm_connection
+    docker_ok, docker_msg = validate_docker()
+    llm_ok, llm_msg = validate_llm_connection()
+    checks = []
+    checks.append({"label": f"🐳 Docker: {docker_msg}", "done": docker_ok, "error": not docker_ok})
+    checks.append({"label": f"🤖 LLM: {llm_msg}", "done": llm_ok, "error": not llm_ok})
+    for c in checks:
+        status_row([c])
+
+    if not docker_ok:
+        msg(f"❌ **Docker niedostępny** — {docker_msg}\n\nUruchom Docker i odśwież.")
+        buttons([{"label": "🔄 Sprawdź ponownie", "value": "back"}])
+        return
+
     all_missing = [e for e in ENV_SCHEMA
                    if e.get("required_for")
                    and not _state.get(_ENV_TO_STATE.get(e["key"], e["key"].lower()))]
+
+    # LLM key missing or invalid → show prompt inline alongside other missing fields
+    if not llm_ok:
+        from .fixes import _prompt_api_key
+        if all_missing:
+            msg(f"Uzupełnij **{len(all_missing)}** brakujące ustawienia:")
+            _emit_missing_fields(all_missing)
+        _prompt_api_key(return_action="back")
+        return
+
     if all_missing:
         msg(f"Uzupełnij **{len(all_missing)}** brakujące ustawienia:")
         _emit_missing_fields(all_missing)
