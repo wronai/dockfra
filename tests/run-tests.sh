@@ -65,7 +65,7 @@ t "app compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP
 t "app compose: 8 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$APP/docker-compose.yml')); assert len(d['services'])==8, len(d['services'])\""
 t "app prod compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$APP/docker-compose-production.yml'))\""
 t "devices compose: valid YAML" "python3 -c \"import yaml; yaml.safe_load(open('$PROJECT/devices/docker-compose.yml'))\""
-t "devices compose: 2 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$PROJECT/devices/docker-compose.yml')); assert len(d['services'])==2, len(d['services'])\""
+t "devices compose: 2 services" "python3 -c \"import yaml; d=yaml.safe_load(open('$PROJECT/devices/docker-compose.yml')); assert len(d["services"])==3, len(d['services'])\""
 
 # ═══ 5. NETWORK ISOLATION ═══
 echo ""; echo "  5. NETWORK ISOLATION"
