@@ -51,7 +51,9 @@ def _run_in_container(container: str, user: str, cmd: str,
     parts = ["docker", "exec"]
     if extra_env:
         parts += extra_env
-    parts += ["-u", user, container, "bash", "-lc", cmd]
+    # Ensure user-local bin dirs are on PATH (pip installs go to ~/.local/bin)
+    path_cmd = f"export PATH=/home/{user}/.local/bin:/usr/local/bin:$PATH; {cmd}"
+    parts += ["-u", user, container, "bash", "-lc", path_cmd]
     try:
         r = subprocess.run(parts, capture_output=True, text=True, timeout=timeout)
         return r.returncode, _strip_motd((r.stdout + r.stderr).strip())
@@ -80,9 +82,9 @@ def _builtin_detect(container: str, user: str) -> bool:
 def _builtin_test(container: str, user: str, env: list[str]) -> tuple[bool, str]:
     """Test built-in LLM by making a tiny API call."""
     rc, out = _run_in_container(container, user,
-        "python3 -c \""
+        "LLM_MAX_TOKENS=16 python3 -c \""
         "import sys; sys.path.insert(0,'/shared/lib'); import llm_client; "
-        "r = llm_client.chat('Say OK', max_tokens=5); "
+        "r = llm_client.chat('Say OK'); "
         "print(r); "
         "exit(0 if '[LLM] Error' not in r else 1)\"",
         extra_env=env, timeout=20)
@@ -158,6 +160,65 @@ def _claude_implement_cmd(ticket_id: str) -> str:
     )
 
 
+# ── Engine: OpenCode (Go CLI agent) ──────────────────────────────────────────
+
+def _opencode_detect(container: str, user: str) -> bool:
+    return _detect_in_container(container, user, "opencode")
+
+
+def _opencode_test(container: str, user: str, env: list[str]) -> tuple[bool, str]:
+    """Test opencode CLI by checking version."""
+    rc, out = _run_in_container(container, user, "opencode version 2>&1", extra_env=env, timeout=10)
+    if rc != 0:
+        # Try --version variant
+        rc, out = _run_in_container(container, user, "opencode --version 2>&1", extra_env=env, timeout=10)
+    if rc != 0:
+        return False, f"opencode not working: {out[:100]}"
+    return True, f"opencode {out.strip()}"
+
+
+def _opencode_implement_cmd(ticket_id: str) -> str:
+    return (
+        f"cd /repo && python3 -c \""
+        f"import sys; sys.path.insert(0,'/shared/lib'); import ticket_system; "
+        f"t = ticket_system.get('{ticket_id}'); "
+        f"msg = f'Implement ticket {ticket_id}: ' + (t['title'] if t else 'unknown') + '. ' + (t.get('description','') if t else ''); "
+        f"print(msg)\" "
+        f"| xargs -I{{}} opencode chat \"{{}}\" 2>&1"
+    )
+
+
+# ── Engine: MCP SSH Manager ─────────────────────────────────────────────────
+
+def _mcp_ssh_detect(container: str, user: str) -> bool:
+    rc, _ = _run_in_container(container, user,
+        "npm list -g @anthropic-ai/mcp-ssh-manager 2>/dev/null | grep mcp-ssh-manager",
+        timeout=10)
+    return rc == 0
+
+
+def _mcp_ssh_test(container: str, user: str, env: list[str]) -> tuple[bool, str]:
+    """Test MCP SSH Manager by checking if it's importable."""
+    rc, out = _run_in_container(container, user,
+        "node -e 'try{require(\"@anthropic-ai/mcp-ssh-manager\");console.log(\"ok\")}catch(e){console.log(\"fail:\"+e.message)}' 2>&1",
+        extra_env=env, timeout=10)
+    if rc == 0 and "ok" in out:
+        return True, "MCP SSH Manager ready"
+    # Fallback: check if npx can resolve it
+    rc2, out2 = _run_in_container(container, user,
+        "npx --yes @anthropic-ai/mcp-ssh-manager --help 2>&1 | head -3",
+        extra_env=env, timeout=15)
+    if rc2 == 0:
+        return True, f"MCP SSH Manager (npx): {out2[:80]}"
+    return False, f"MCP SSH Manager not available: {out[:100]}"
+
+
+def _mcp_ssh_implement_cmd(ticket_id: str) -> str:
+    # MCP SSH Manager is not a code generator — it manages SSH connections for AI agents
+    # Used as orchestration layer, not direct implementation
+    return f"echo 'MCP SSH Manager: orchestration tool, not direct implementation engine'"
+
+
 # ── Engine Registry ───────────────────────────────────────────────────────────
 
 ENGINE_DEFS = [
@@ -190,6 +251,26 @@ ENGINE_DEFS = [
         "implement_cmd": _claude_implement_cmd,
         "needs_key": "ANTHROPIC_API_KEY",
         "install_hint": "npm install -g @anthropic-ai/claude-code",
+    },
+    {
+        "id": "opencode",
+        "name": "OpenCode (CLI agent)",
+        "desc": "Open-source CLI agent — chat-style coding/debug, kontekst z plików",
+        "detect": _opencode_detect,
+        "test": _opencode_test,
+        "implement_cmd": _opencode_implement_cmd,
+        "needs_key": "OPENROUTER_API_KEY",
+        "install_hint": "curl -fsSL https://github.com/opencode-ai/opencode/releases/latest/download/opencode_linux_amd64 -o /usr/local/bin/opencode",
+    },
+    {
+        "id": "mcp_ssh",
+        "name": "MCP SSH Manager",
+        "desc": "37 narzędzi SSH do zarządzania serwerami z AI — orkiestracja agentów",
+        "detect": _mcp_ssh_detect,
+        "test": _mcp_ssh_test,
+        "implement_cmd": _mcp_ssh_implement_cmd,
+        "needs_key": "",
+        "install_hint": "npm install -g @anthropic-ai/mcp-ssh-manager",
     },
 ]
 
