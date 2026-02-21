@@ -927,6 +927,73 @@ def _detect_suggestions() -> dict:
         "chips": chips,
     }
 
+    # ── Device SSH user (common defaults for embedded/SBC devices) ────────────
+    env_user = ""
+    for ef in [ROOT / "devices" / ".env", ROOT / "devices" / ".env.local"]:
+        if ef.exists():
+            for line in ef.read_text(errors="ignore").splitlines():
+                m = _re.match(r'^(?:RPI3_USER|DEVICE_USER)=(.+)$', line.strip())
+                if m: env_user = m.group(1).strip(); break
+        if env_user: break
+    docker_user = ""
+    for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
+        docker_user = _docker_container_env(cn, "RPI3_USER")
+        if docker_user: break
+    best_user = env_user or docker_user or "pi"
+    user_chips = []
+    _seen_users = set()
+    for u, src in [(env_user, "devices/.env"), (docker_user, "docker ssh-rpi3")]:
+        if u and u not in _seen_users:
+            user_chips.append({"label": f"📌 {u}  ({src})", "value": u})
+            _seen_users.add(u)
+    for u, lbl in [("pi","Raspberry Pi"), ("root","Root"), ("ubuntu","Ubuntu"),
+                   ("debian","Debian"), ("dietpi","DietPi"), ("alarm","Arch ARM"),
+                   ("odroid","ODROID"), ("rock","Rock/Radxa")]:
+        if u not in _seen_users:
+            user_chips.append({"label": f"👤 {u}  ({lbl})", "value": u})
+            _seen_users.add(u)
+    user_hint_parts = []
+    if env_user:    user_hint_parts.append(f"devices/.env: {env_user}")
+    elif docker_user: user_hint_parts.append(f"z kontenera: {docker_user}")
+    s["DEVICE_USER"] = {
+        "value": best_user,
+        "hint": " · ".join(user_hint_parts) if user_hint_parts else "użytkownik SSH na urządzeniu docelowym",
+        "chips": user_chips,
+    }
+
+    # ── Device SSH port ──────────────────────────────────────────────────────
+    env_port = ""
+    for ef in [ROOT / "devices" / ".env", ROOT / "devices" / ".env.local"]:
+        if ef.exists():
+            for line in ef.read_text(errors="ignore").splitlines():
+                m = _re.match(r'^(?:RPI3_PORT|DEVICE_PORT|SSH_PORT)=(\d+)$', line.strip())
+                if m: env_port = m.group(1).strip(); break
+        if env_port: break
+    docker_port = ""
+    for cn in [cname("ssh-rpi3"), "ssh-rpi3"]:
+        docker_port = _docker_container_env(cn, "RPI3_PORT")
+        if docker_port: break
+    best_port = env_port or docker_port or "22"
+    port_chips = []
+    _seen_ports = set()
+    for p, src in [(env_port, "devices/.env"), (docker_port, "docker ssh-rpi3")]:
+        if p and p not in _seen_ports:
+            port_chips.append({"label": f"📌 {p}  ({src})", "value": p})
+            _seen_ports.add(p)
+    for p, lbl in [("22","SSH standard"), ("2222","SSH alternatywny"),
+                   ("2200","SSH developer"), ("8022","Termux/Android")]:
+        if p not in _seen_ports:
+            port_chips.append({"label": f"🔌 {p}  ({lbl})", "value": p})
+            _seen_ports.add(p)
+    port_hint_parts = []
+    if env_port:      port_hint_parts.append(f"devices/.env: {env_port}")
+    elif docker_port: port_hint_parts.append(f"z kontenera: {docker_port}")
+    s["DEVICE_PORT"] = {
+        "value": best_port,
+        "hint": " · ".join(port_hint_parts) if port_hint_parts else "port SSH na urządzeniu docelowym",
+        "chips": port_chips,
+    }
+
     # ── App name from project path ────────────────────────────────────────────
     project_name = ROOT.name.lower().replace("-","_")
     s["APP_NAME"]     = {"value": project_name, "hint": f"z nazwy katalogu: {ROOT.name}"}

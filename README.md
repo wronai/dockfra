@@ -1,13 +1,17 @@
+![img.png](img.png)
+
+![img_1.png](img_1.png)
+
 # Dockfra: Generic Docker Infrastructure Manager with AI Agents
 
 **Manage any Docker Compose project** with an interactive web wizard, auto-discovery,
 SSH-isolated AI agents, ticket-driven workflows, and autonomous orchestration.
 
-[![Version](https://img.shields.io/badge/version-1.0.43-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.44-blue.svg)](CHANGELOG.md)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/compose/)
-[![Tests](https://img.shields.io/badge/tests-36%2F36-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-57%2F57-brightgreen.svg)](tests/)
 [![Engines](https://img.shields.io/badge/engines-5%20(3%20active)-orange.svg)](docs/ARCHITECTURE.md#dev-engines)
 [![CLI](https://img.shields.io/badge/CLI-14%20commands-purple.svg)](#cli)
 [![Containers](https://img.shields.io/badge/containers-15-informational.svg)](#architecture)
@@ -70,11 +74,11 @@ dockfra cli --tui              # Three-panel curses TUI
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ LOCAL HOST — dockfra-shared network bridge                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  management/                        app/ (auto-cloned)              │
+┌────────────────────────────────────────────────────────────────────┐
+│ LOCAL HOST — dockfra-shared network bridge                         │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  management/                        app/ (auto-cloned)             │
 │  ┌──────────────────────────┐      ┌────────────────────────────┐  │
 │  │ • ssh-manager   :2202    │      │ • ssh-developer :2200      │  │
 │  │   └ 12 scripts (tickets, │      │   └ Aider, Claude Code,    │  │
@@ -87,17 +91,17 @@ dockfra cli --tui              # Three-panel curses TUI
 │  │ • desktop (VNC :6081)    │      ┌────────────────────────────┐  │
 │  └──────────────────────────┘      │ • ssh-rpi3  :2224 (SSH)    │  │
 │                                    │ • web-rpi3  :8090 (HTTP)   │  │
-│  dockfra/ (Python package)         │ • vnc-rpi3  :6082 (VNC)   │  │
-│  ┌──────────────────────────┐      │   /health, /api/status     │  │
-│  │ core.py  — foundation    │      └────────────────────────────┘  │
-│  │ app.py   — web + 20 APIs │                                      │
-│  │ steps.py — wizard flow   │      shared/                         │
+│  dockfra/ (Python package)         │ • vnc-rpi3  :6082 (VNC)    │  │
+│  ┌───────────────────────────┐     │   /health, /api/status     │  │
+│  │ core.py  — foundation     │     └────────────────────────────┘  │
+│  │ app.py   — web + 20 APIs  │                                     │
+│  │ steps.py — wizard flow    │      shared/                        │
 │  │ engines.py — 5 dev engines│     ┌────────────────────────────┐  │
 │  │ pipeline.py — ticket chain│     │ Dockerfile.ssh-base        │  │
-│  │ cli.py  — 14 CLI commands│      │ lib/ (llm, tickets, logger)│  │
-│  │ fixes.py — auto-repair   │      └────────────────────────────┘  │
-│  └──────────────────────────┘                                      │
-└─────────────────────────────────────────────────────────────────────┘
+│  │ cli.py  — 14 CLI commands │     │ lib/ (llm, tickets, logger)│  │
+│  │ fixes.py — auto-repair    │     └────────────────────────────┘  │
+│  └───────────────────────────┘                                     │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Dev Engines

@@ -367,3 +367,241 @@ class TestEnvAPI:
         assert r.status_code == 200
         data = json.loads(r.data)
         assert isinstance(data, dict)
+
+
+# ── Events & CLI↔Web sync tests ─────────────────────────────────────────────
+
+class TestEventsAPI:
+    """Test /api/events/since/<id> endpoint (SQLite event store)."""
+
+    def test_events_since_zero(self, app_client):
+        """Events from id=0 should return a list with max_id."""
+        r = app_client.get("/api/events/since/0?limit=5")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert "events" in data
+        assert "max_id" in data
+        assert isinstance(data["events"], list)
+        assert isinstance(data["max_id"], int)
+
+    def test_events_since_future_id(self, app_client):
+        """Events beyond max_id should return empty list."""
+        r = app_client.get("/api/events/since/999999999")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert data["events"] == []
+
+    def test_events_limit_respected(self, app_client):
+        """Limit parameter should cap returned events."""
+        r = app_client.get("/api/events/since/0?limit=2")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert len(data["events"]) <= 2
+
+    def test_events_have_required_fields(self, app_client):
+        """Each event should have id, ts, src, event, data fields."""
+        r = app_client.get("/api/events/since/0?limit=3")
+        data = json.loads(r.data)
+        for ev in data["events"]:
+            assert "id" in ev
+            assert "ts" in ev
+            assert "src" in ev
+            assert "event" in ev
+            assert "data" in ev
+            assert isinstance(ev["id"], int)
+            assert isinstance(ev["ts"], float)
+
+    def test_events_ordered_by_id(self, app_client):
+        """Events should be returned in ascending id order."""
+        r = app_client.get("/api/events/since/0?limit=20")
+        data = json.loads(r.data)
+        ids = [e["id"] for e in data["events"]]
+        assert ids == sorted(ids)
+
+
+class TestCLIWebSync:
+    """Test that CLI actions are recorded in events DB and visible to web."""
+
+    def test_cli_action_creates_events(self, app_client):
+        """POST /api/action should create events in SQLite."""
+        # Get current max_id
+        r1 = app_client.get("/api/events/since/999999999")
+        before_max = json.loads(r1.data)["max_id"]
+
+        # Send a CLI action
+        r2 = app_client.post("/api/action",
+            data=json.dumps({"action": "status"}),
+            content_type="application/json")
+        assert r2.status_code == 200
+        resp = json.loads(r2.data)
+        assert resp["ok"] is True
+
+        # Check new events were created
+        r3 = app_client.get(f"/api/events/since/{before_max}")
+        after = json.loads(r3.data)
+        assert len(after["events"]) > 0
+
+    def test_cli_user_message_recorded(self, app_client):
+        """CLI user message should appear in events with src=cli."""
+        r1 = app_client.get("/api/events/since/999999999")
+        before_max = json.loads(r1.data)["max_id"]
+
+        app_client.post("/api/action",
+            data=json.dumps({"action": "status"}),
+            content_type="application/json")
+
+        r2 = app_client.get(f"/api/events/since/{before_max}?limit=10")
+        events = json.loads(r2.data)["events"]
+
+        # First event should be the CLI user message
+        cli_msgs = [e for e in events if e["src"] == "cli" and e["event"] == "message"
+                     and e["data"].get("role") == "user"]
+        assert len(cli_msgs) >= 1
+        assert cli_msgs[0]["data"]["text"] == "status"
+
+    def test_cli_bot_response_recorded(self, app_client):
+        """Bot response to CLI action should also be in events."""
+        r1 = app_client.get("/api/events/since/999999999")
+        before_max = json.loads(r1.data)["max_id"]
+
+        app_client.post("/api/action",
+            data=json.dumps({"action": "status"}),
+            content_type="application/json")
+
+        r2 = app_client.get(f"/api/events/since/{before_max}?limit=20")
+        events = json.loads(r2.data)["events"]
+
+        # Should contain at least one bot message
+        bot_msgs = [e for e in events if e["event"] == "message"
+                     and e["data"].get("role") == "bot"]
+        assert len(bot_msgs) >= 1
+
+    def test_cli_action_missing_value_returns_400(self, app_client):
+        """POST /api/action with empty action should return 400."""
+        r = app_client.post("/api/action",
+            data=json.dumps({"action": ""}),
+            content_type="application/json")
+        assert r.status_code == 400
+
+    def test_history_includes_cli_messages(self, app_client):
+        """/api/history conversation should include CLI-sourced messages."""
+        app_client.post("/api/action",
+            data=json.dumps({"action": "status"}),
+            content_type="application/json")
+
+        r = app_client.get("/api/history")
+        data = json.loads(r.data)
+        # Conversation should have messages
+        assert len(data["conversation"]) > 0
+
+
+class TestSSEStream:
+    """Test /api/stream SSE endpoint."""
+
+    def test_stream_endpoint_exists(self, app_client):
+        """SSE stream should return text/event-stream content type."""
+        r = app_client.get("/api/stream?since=999999999")
+        assert r.status_code == 200
+        assert "text/event-stream" in r.content_type
+
+
+class TestDeveloperHealthAPI:
+    """Test /api/developer-health endpoint."""
+
+    def test_developer_health_returns_json(self, app_client):
+        r = app_client.get("/api/developer-health")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert "container" in data
+        assert isinstance(data, dict)
+
+
+class TestEngineStatusAPI:
+    """Test /api/engine-status endpoint."""
+
+    def test_engine_status_returns_dict_with_engines(self, app_client):
+        r = app_client.get("/api/engine-status")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert isinstance(data, dict)
+        assert "engines" in data
+        assert "preferred" in data
+        assert isinstance(data["engines"], list)
+
+    def test_engine_status_has_required_fields(self, app_client):
+        r = app_client.get("/api/engine-status")
+        data = json.loads(r.data)
+        for engine in data["engines"]:
+            assert "id" in engine
+            assert "name" in engine
+            assert "ok" in engine
+
+
+class TestDeveloperLogsAPI:
+    """Test /api/developer-logs endpoint."""
+
+    def test_developer_logs_returns_json(self, app_client):
+        r = app_client.get("/api/developer-logs")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert isinstance(data, dict)
+        assert "container" in data
+        assert "logs" in data
+
+
+class TestTicketDiffAPI:
+    """Test /api/ticket-diff/<id> endpoint."""
+
+    def test_ticket_diff_nonexistent_returns_404(self, app_client):
+        """Non-existent ticket should return 404."""
+        r = app_client.get("/api/ticket-diff/T-9999")
+        assert r.status_code == 404
+
+    def test_ticket_diff_returns_json(self, app_client, tickets_dir):
+        from dockfra import tickets
+        tickets.create("Diff structure test", description="test")
+        r = app_client.get("/api/ticket-diff/T-0001")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert isinstance(data, dict)
+        assert "commits" in data
+        assert "diff" in data
+
+    def test_ticket_diff_with_existing_ticket(self, app_client, tickets_dir):
+        from dockfra import tickets
+        tickets.create("Diff test", description="test diff")
+        r = app_client.get("/api/ticket-diff/T-0001")
+        assert r.status_code == 200
+        data = json.loads(r.data)
+        assert "commits" in data
+
+
+class TestDBModule:
+    """Test dockfra.db module directly."""
+
+    def test_append_and_get_events(self):
+        from dockfra import db
+        eid = db.append_event("test_event", {"foo": "bar"}, src="test")
+        assert eid > 0
+        events = db.get_events(since_id=eid - 1, limit=5)
+        found = [e for e in events if e["id"] == eid]
+        assert len(found) == 1
+        assert found[0]["event"] == "test_event"
+        assert found[0]["data"]["foo"] == "bar"
+        assert found[0]["src"] == "test"
+
+    def test_get_max_id(self):
+        from dockfra import db
+        mid1 = db.get_max_id()
+        db.append_event("test_max", {}, src="test")
+        mid2 = db.get_max_id()
+        assert mid2 > mid1
+
+    def test_events_since_filters_correctly(self):
+        from dockfra import db
+        eid1 = db.append_event("a", {}, src="test")
+        eid2 = db.append_event("b", {}, src="test")
+        events = db.get_events(since_id=eid1, limit=10)
+        ids = [e["id"] for e in events]
+        assert eid1 not in ids
+        assert eid2 in ids

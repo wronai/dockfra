@@ -1,3 +1,28 @@
+## [1.0.44] - 2026-02-21
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update README
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- update dockfra/app.py
+- update dockfra/core.py
+- update dockfra/static/wizard.js
+- update dockfra/steps.py
+- update img.png
+- update img_1.png
+- update shared/tickets/T-0002.json
+
+
 ## [1.0.43] - 2026-02-21
 
 ### Summary

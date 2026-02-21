@@ -566,20 +566,10 @@ function buildFieldLabel(d, targetEl){
   return row;
 }
 
-function renderInput(d){
-  const form = getOrCreateForm();
-  const field = document.createElement('div');
-  field.className = 'field';
-  const inp = document.createElement('input');
-  inp.type = d.secret ? 'password' : 'text';
-  inp.placeholder = d.placeholder || '';
-  inp.value = d.value || '';
-  inp.dataset.name = d.name;
-  inp.id = 'field_'+d.name;
-  const _lrow = buildFieldLabel(d, inp);
-  field.appendChild(_lrow);
-  if(_lrow._descEl) field.appendChild(_lrow._descEl);
-  // ── IP Picker modal button ────────────────────────────────────────────────
+// ── Reusable smart field helpers ─────────────────────────────────────────────
+function buildFieldInputWrap(inp, d){
+  // Wraps input in a field-input-wrap with appropriate action button
+  // Returns {element, added:true} or {element:inp, added:false}
   if(d.modal_type === 'ip_picker'){
     const wrap = document.createElement('div');
     wrap.className = 'field-input-wrap';
@@ -592,10 +582,8 @@ function renderInput(d){
     pickBtn.addEventListener('click', () => openIpPickerModal(inp));
     pickBtn.addEventListener('mousedown', e => e.preventDefault());
     wrap.appendChild(pickBtn);
-    field.appendChild(wrap);
+    return {element: wrap, added: true};
   }
-
-  // ── Eye toggle for password fields ───────────────────────────────────────
   if(d.secret){
     const wrap = document.createElement('div');
     wrap.className = 'field-input-wrap';
@@ -611,42 +599,69 @@ function renderInput(d){
       inp.type = visible ? 'text' : 'password';
       eye.classList.toggle('active', visible);
     });
-    eye.addEventListener('mousedown', e => e.preventDefault()); // no focus steal
+    eye.addEventListener('mousedown', e => e.preventDefault());
     wrap.appendChild(eye);
-    field.appendChild(wrap);
-  } else {
-    field.appendChild(inp);
+    return {element: wrap, added: true};
   }
+  return {element: inp, added: false};
+}
+
+function buildFieldChips(chips, inp, isSecret){
+  // Builds clickable chip suggestion row for any field
+  if(!chips || !chips.length) return null;
+  const row = document.createElement('div');
+  row.className = 'field-chips';
+  chips.forEach(chip => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.textContent = chip.label;
+    btn.title = chip.value !== chip.label ? chip.value : '';
+    btn.addEventListener('click', () => {
+      inp.value = chip.value;
+      if(isSecret) inp.type = 'text';
+      inp.dispatchEvent(new Event('input'));
+      row.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    row.appendChild(btn);
+  });
+  return row;
+}
+
+function buildFieldHint(hint){
+  if(!hint) return null;
+  const el = document.createElement('div');
+  el.className = 'field-hint';
+  el.textContent = hint;
+  return el;
+}
+
+function renderInput(d){
+  const form = getOrCreateForm();
+  const field = document.createElement('div');
+  field.className = 'field';
+  const inp = document.createElement('input');
+  inp.type = d.secret ? 'password' : 'text';
+  inp.placeholder = d.placeholder || '';
+  inp.value = d.value || '';
+  inp.dataset.name = d.name;
+  inp.id = 'field_'+d.name;
+  const _lrow = buildFieldLabel(d, inp);
+  field.appendChild(_lrow);
+  if(_lrow._descEl) field.appendChild(_lrow._descEl);
+
+  // ── Input wrap (ip_picker / secret eye / plain) ────────────────────────────
+  const {element: inputEl} = buildFieldInputWrap(inp, d);
+  field.appendChild(inputEl);
 
   // ── Chips (clickable suggestions) ────────────────────────────────────────
-  if(d.chips && d.chips.length){
-    const row = document.createElement('div');
-    row.className = 'field-chips';
-    d.chips.forEach(chip => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'chip';
-      btn.textContent = chip.label;
-      btn.title = chip.value !== chip.label ? chip.value : '';
-      btn.addEventListener('click', () => {
-        inp.value = chip.value;
-        if(d.secret) inp.type = 'text'; // reveal password on select
-        inp.dispatchEvent(new Event('input'));
-        row.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      });
-      row.appendChild(btn);
-    });
-    field.appendChild(row);
-  }
+  const chipsEl = buildFieldChips(d.chips, inp, d.secret);
+  if(chipsEl) field.appendChild(chipsEl);
 
   // ── Hint text ─────────────────────────────────────────────────────────────
-  if(d.hint){
-    const hint = document.createElement('div');
-    hint.className = 'field-hint';
-    hint.textContent = d.hint;
-    field.appendChild(hint);
-  }
+  const hintEl = buildFieldHint(d.hint);
+  if(hintEl) field.appendChild(hintEl);
 
   form.appendChild(field);
 }

@@ -2,13 +2,13 @@
   "id": "T-0002",
   "title": "E2E test ticket",
   "description": "Created via API test",
-  "status": "review",
+  "status": "in_progress",
   "priority": "high",
   "assigned_to": "developer",
   "labels": [],
   "created_by": "manager",
   "created_at": "2026-02-20T23:32:24.342190+00:00",
-  "updated_at": "2026-02-21T00:41:56.945843+00:00",
+  "updated_at": "2026-02-21T08:05:06.915963+00:00",
   "comments": [
     {
       "author": "unknown",
@@ -69,6 +69,11 @@
       "author": "developer",
       "text": "AI pipeline zako\u0144czony. Implementacja gotowa do review.",
       "timestamp": "2026-02-21T00:41:56.945835+00:00"
+    },
+    {
+      "author": "unknown",
+      "text": "Started working on this ticket",
+      "timestamp": "2026-02-21T08:05:06.915946+00:00"
     }
   ],
   "github_issue_number": null

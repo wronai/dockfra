@@ -314,6 +314,30 @@ def api_detect(key):
         elif key == "APP_NAME":
             name = ROOT.name.lower().replace("-", "_")
             result = {"value": name, "hint": f"z nazwy katalogu: {ROOT.name}"}
+        elif key == "device_ip":
+            from .core import _detect_suggestions
+            sug = _detect_suggestions().get("DEVICE_IP", {})
+            result = {
+                "value": sug.get("value", ""),
+                "hint": sug.get("hint", ""),
+                "options": [{"value": c["value"], "label": c["label"]} for c in sug.get("chips", [])],
+            }
+        elif key == "device_user":
+            from .core import _detect_suggestions
+            sug = _detect_suggestions().get("DEVICE_USER", {})
+            result = {
+                "value": sug.get("value", ""),
+                "hint": sug.get("hint", ""),
+                "options": [{"value": c["value"], "label": c["label"]} for c in sug.get("chips", [])],
+            }
+        elif key == "device_port":
+            from .core import _detect_suggestions
+            sug = _detect_suggestions().get("DEVICE_PORT", {})
+            result = {
+                "value": sug.get("value", ""),
+                "hint": sug.get("hint", ""),
+                "options": [{"value": c["value"], "label": c["label"]} for c in sug.get("chips", [])],
+            }
     except Exception as e:
         result = {"error": str(e)}
     return json.dumps(result)

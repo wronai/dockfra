@@ -214,10 +214,24 @@ def step_setup_creds():
     clear_widgets()
     msg("## 🔑 Credentials (skrót)")
     msg("Szybka edycja najważniejszych zmiennych. Pełne ustawienia: ⚙️ Ustawienia.")
-    text_input("GIT_NAME","Git user.name","Jan Kowalski",_state.get("git_name",""))
-    text_input("GIT_EMAIL","Git user.email","jan@example.com",_state.get("git_email",""))
-    text_input("GITHUB_SSH_KEY","Ścieżka klucza SSH","~/.ssh/id_ed25519",_state.get("github_key",""))
-    text_input("OPENROUTER_API_KEY","OpenRouter API Key","sk-or-v1-...",_state.get("openrouter_key",""),sec=True)
+    sug = _detect_suggestions()
+    git_name_sug = sug.get("GIT_NAME", {})
+    text_input("GIT_NAME","Git user.name","Jan Kowalski",
+               _state.get("git_name","") or git_name_sug.get("value",""),
+               hint=git_name_sug.get("hint",""), autodetect=True)
+    git_email_sug = sug.get("GIT_EMAIL", {})
+    text_input("GIT_EMAIL","Git user.email","jan@example.com",
+               _state.get("git_email","") or git_email_sug.get("value",""),
+               hint=git_email_sug.get("hint",""), autodetect=True)
+    ssh_sug = sug.get("GITHUB_SSH_KEY", {})
+    text_input("GITHUB_SSH_KEY","Ścieżka klucza SSH","~/.ssh/id_ed25519",
+               _state.get("github_key","") or ssh_sug.get("value",""),
+               hint=ssh_sug.get("hint",""), chips=ssh_sug.get("chips",[]))
+    or_sug = sug.get("OPENROUTER_API_KEY", {})
+    text_input("OPENROUTER_API_KEY","OpenRouter API Key","sk-or-v1-...",
+               _state.get("openrouter_key","") or or_sug.get("value",""),
+               sec=True, hint=or_sug.get("hint",""),
+               help_url="https://openrouter.ai/keys")
     opts = [{"label": lbl, "value": val}
             for val,lbl in next(e["options"] for e in ENV_SCHEMA if e["key"]=="LLM_MODEL")]
     select("LLM_MODEL","Model LLM", opts, _state.get("llm_model",_schema_defaults().get("LLM_MODEL","")))
@@ -563,9 +577,26 @@ def step_deploy_device():
     _state["step"] = "deploy_device"
     clear_widgets()
     msg("## 📦 Wdrożenie na urządzenie")
-    text_input("device_ip",  "IP urządzenia","192.168.1.100",_state.get("device_ip",""))
-    text_input("device_user","Użytkownik SSH","pi",           _state.get("device_user","pi"))
-    text_input("device_port","Port SSH",      "22",           str(_state.get("device_port","22")))
+    sug = _detect_suggestions()
+    # ── IP urządzenia — with ip_picker modal, chips from ARP/Docker, autodetect ──
+    ip_sug = sug.get("DEVICE_IP", {})
+    cur_ip = _state.get("device_ip", "") or ip_sug.get("value", "")
+    text_input("device_ip", "IP urządzenia", "192.168.1.100", cur_ip,
+               hint=ip_sug.get("hint", ""), chips=ip_sug.get("chips", []),
+               modal_type="ip_picker", autodetect=True,
+               desc="Adres IP urządzenia docelowego (Raspberry Pi, serwer, VM)")
+    # ── Użytkownik SSH — with chips for common SBC users ─────────────────────
+    user_sug = sug.get("DEVICE_USER", {})
+    cur_user = _state.get("device_user", "") or user_sug.get("value", "pi")
+    text_input("device_user", "Użytkownik SSH", "pi", cur_user,
+               hint=user_sug.get("hint", ""), chips=user_sug.get("chips", []),
+               desc="Użytkownik SSH na urządzeniu docelowym")
+    # ── Port SSH — with chips for common ports ───────────────────────────────
+    port_sug = sug.get("DEVICE_PORT", {})
+    cur_port = str(_state.get("device_port", "") or port_sug.get("value", "22"))
+    text_input("device_port", "Port SSH", "22", cur_port,
+               hint=port_sug.get("hint", ""), chips=port_sug.get("chips", []),
+               desc="Port SSH na urządzeniu docelowym")
     buttons([
         {"label":"🔍 Testuj połączenie","value":"test_device"},
         {"label":"🚀 Wdróż","value":"do_deploy"},
