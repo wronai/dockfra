@@ -1,3 +1,14 @@
+## [1.0.36] - 2026-02-21
+
+### Summary
+
+docs(docs): new API capabilities
+
+### Other
+
+- update dockfra/app.py
+
+
 ## [1.0.35] - 2026-02-21
 
 ### Summary

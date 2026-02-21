@@ -842,15 +842,56 @@ def _dispatch(value: str, form: dict):
         # Chain: ticket-work → implement (auto-start LLM work on the ticket)
         if cmd_ == "ticket-work" and arg_:
             _tl_sid = getattr(_tl, 'sid', None)
+            container_ = ri_['container']
+            user_ = ri_['user']
             def _chain_work():
                 _tl.sid = _tl_sid
-                run_value_ = f"run_ssh_cmd::{role_}::{ri_['container']}::{ri_['user']}"
-                # 1) Mark ticket as in_progress
-                run_ssh_cmd(run_value_, {"ssh_cmd": "ticket-work", "ssh_arg": arg_})
-                import time; time.sleep(1)
-                # 2) Auto-run implement via LLM
-                msg(f"🤖 Auto-uruchamiam implementację: `implement {arg_}`")
-                run_ssh_cmd(run_value_, {"ssh_cmd": "implement", "ssh_arg": arg_})
+                try:
+                    # 1) Mark ticket as in_progress
+                    msg(f"▶️ Uruchamiam: `ticket-work {arg_}`")
+                    script1 = f"/home/{user_}/scripts/ticket-work.sh"
+                    shell1 = f"if [ -x '{script1}' ]; then '{script1}' {arg_}; else source ~/.bashrc 2>/dev/null; ticket-work {arg_}; fi"
+                    rc1, out1 = run_cmd(["docker", "exec", "-u", user_, container_, "bash", "-lc", shell1])
+                    out1 = (out1 or "").strip()
+                    if rc1 == 0:
+                        msg(f"✅ `ticket-work {arg_}`\n```\n{out1[:1000]}\n```" if out1 else f"✅ `ticket-work {arg_}`")
+                    else:
+                        msg(f"⚠️ `ticket-work {arg_}` (kod {rc1}):\n```\n{out1[:1000]}\n```" if out1 else f"⚠️ `ticket-work {arg_}` (kod {rc1})")
+
+                    # 2) Auto-run implement via LLM
+                    msg(f"🤖 Rozpoczynam AI implementację: `implement {arg_}`\nŚledzenie postępu w panelu logów →")
+                    script2 = f"/home/{user_}/scripts/implement.sh"
+                    shell2 = f"if [ -x '{script2}' ]; then '{script2}' {arg_}; else source ~/.bashrc 2>/dev/null; implement {arg_}; fi"
+                    llm_key = (_state.get("openrouter_key", "") or _state.get("openrouter_api_key", "")
+                               or _state.get("developer_llm_api_key", "") or _os.environ.get("OPENROUTER_API_KEY", ""))
+                    llm_model = _state.get("llm_model", "") or "google/gemini-flash-1.5"
+                    extra_env = []
+                    if llm_key:
+                        extra_env = ["-e", f"OPENROUTER_API_KEY={llm_key}",
+                                     "-e", f"DEVELOPER_LLM_API_KEY={llm_key}",
+                                     "-e", f"LLM_MODEL={llm_model}"]
+                    rc2, out2 = run_cmd(["docker", "exec"] + extra_env + ["-u", user_, container_, "bash", "-lc", shell2])
+                    out2 = (out2 or "").strip()
+                    if rc2 == 0:
+                        msg(f"✅ Implementacja `{arg_}` zakończona\n```\n{out2[:3000]}\n```" if out2 else f"✅ Implementacja `{arg_}` zakończona")
+                    else:
+                        msg(f"⚠️ `implement {arg_}` (kod {rc2}):\n```\n{out2[:2000]}\n```" if out2 else f"⚠️ `implement {arg_}` (kod {rc2})")
+                except Exception as e:
+                    msg(f"❌ Błąd: {e}")
+                finally:
+                    try:
+                        ri2 = _get_role(role_)
+                        port = _state.get(f"SSH_{role_.upper()}_PORT", ri2["port"])
+                        buttons([
+                            {"label": f"{ri2['icon']} Wróć do akcji", "value": f"ssh_info::{role_}::{port}"},
+                            {"label": "🏠 Menu", "value": "back"},
+                        ])
+                    except Exception:
+                        buttons([
+                            {"label": "🔧 Wróć do akcji", "value": f"ssh_info::{role_}::2200"},
+                            {"label": "🏠 Menu", "value": "back"},
+                        ])
+                    _tl.sid = None
             threading.Thread(target=_chain_work, daemon=True).start()
         else:
             synth_form = {"ssh_cmd": cmd_, "ssh_arg": arg_}
